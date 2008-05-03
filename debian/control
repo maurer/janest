@@ -18,6 +18,7 @@ Package: libcore-ocaml-dev
 Section: libdevel
 Architecture: any
 Depends: ocaml-nox-${F:OCamlABI}, ocaml-findlib,
+ libcore-ocaml (= ${binary:Version}),
  libtype-conv-camlp4-dev,
  libbin-prot-camlp4-dev,
  libsexplib-camlp4-dev,
@@ -43,7 +44,6 @@ Package: libcore-ocaml
 Section: libs
 Architecture: any
 Depends: ocaml-nox-${F:OCamlABI}, ocaml-findlib,
- libcore-ocaml (= ${binary:Version}),
  ${shlibs:Depends}, ${misc:Depends}
 Description: Jane Street Capital's alternative standard library for OCaml
  Core is Jane Street Capital's alternative standard library for OCaml.
