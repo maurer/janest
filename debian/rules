@@ -7,7 +7,19 @@ include /usr/share/cdbs/1/class/ocaml.mk
 LIB_NAME = core
 DLL_PKG_NAME = lib$(LIB_NAME)-ocaml
 DEV_PKG_NAME = lib$(LIB_NAME)-ocaml-dev
+DEST_DIR = $(CURDIR)/debian/$(DEV_PKG_NAME)$(OCAML_STDLIB_DIR)
+DEST_DLL_DIR = $(CURDIR)/debian/$(DLL_PKG_NAME)$(OCAML_DLL_DIR)
 
+ifeq ($(OCAML_HAVE_OCAMLOPT),yes)
 DEB_MAKE_BUILD_TARGET = all
-DEB_MAKE_INSTALL_TARGET = install OCAMLFIND_INSTFLAGS="-destdir $(CURDIR)/debian/$(DEV_PKG_NAME)$(OCAML_STDLIB_DIR)"
+DEB_MAKE_INSTALL_TARGET = install OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
+else
+DEB_MAKE_BUILD_TARGET = byte
+DEB_MAKE_INSTALL_TARGET = libinstall-byte-code OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
+endif
+
+build/$(DEV_PKG_NAME)::
+	mkdir -p $(DEST_DIR) $(DEST_DLL_DIR)
+install/$(DEV_PKG_NAME)::
+	mv $(DEST_DIR)/core/*.so $(DEST_DLL_DIR)
 
