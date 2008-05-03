@@ -1,0 +1,10 @@
+module type Binable = Binable.S
+module type Comparable = Comparable.S
+module type Floatable = Floatable.S
+module type Hashable = Hashable.S
+module type Infix_comparators = Comparable.Infix
+module type Monad = Monad.S
+module type Robustly_comparable = Robustly_comparable.S
+module type Setable = Setable.S
+module type Sexpable = Sexpable.S
+module type Stringable = Stringable.S

@@ -1,0 +1,7 @@
+OCAMLPACKS += pcre
+
+OCAML_LIBRARIES = sexplib bin_prot res
+
+Subdirs()
+
+InstantiateOCamlEnv()

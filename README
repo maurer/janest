@@ -1,0 +1,74 @@
+Core README
+===========
+
+Copyright   (C)   2008  Jane Street Holding, LLC
+(http://www.janestcapital.com)
+
+Directory contents
+------------------
+
+    CHANGES           History of code changes             
+    COPYRIGHT         Notes on copyright               
+    INSTALL           Short notes on compiling and          
+    LICENSE           "GNU LESSER GENERAL PUBLIC LICENSE"       
+    Makefile          Top Makefile                  
+    OCamlMakefile     Generic Makefile for OCaml-projects       
+    OMakefile         Ignore this file                
+    README            This file                    
+    VERSION           Current version                 
+    lib/              The Core library                
+    lib_test/         Test applications for Core           
+ 
+What is "Core"?
+---------------
+
+Core is Jane Street Capital's alternative standard library for OCaml.
+Beware: Core extends some functionality from OCaml's standard library,
+and outright changes or replaces other.  The goal is not to preserve
+complete compatibility with the standard. Core does a number of
+things: it provides tail recursive versions of non tail recursive
+functions in the standard library; changes the signature of many of
+the standard modules; includes generic serialization for most types,
+and adds some entirely new modules and new functionality within
+existing modules.
+
+Conventions
+-----------
+  
+* In order to use core, you should type `open Core.Std`.  Don't open
+  `Core` directly.
+
+* For modules that overwrite the name of standard library modules, the
+  standard library version is available as "Caml.<module>".  For
+  example, `Caml.List` is the standard libary version of list.
+
+* Functions that throw exceptions in non-exceptional cases have been
+  (mostly) replaced with optional return values.  The exception
+  throwing version is available with the `_exn` suffix.
+
+* In cases when a function takes two arguments of the same type, labeled
+  arguments are typically used to make it clear which argument is which.
+
+* For most modules with type t, t is the first argument to functions
+  in that module.  We also use standardized interfaces like `Sexpable`
+  and `Comparable` in module signatures to ensure uniformity.
+
+* Types are almost always sexpabable, and often binprotable as well.
+
+Contact information
+-------------------
+  
+In the case of bugs, feature requests and similar, you can contact
+us here:
+
+   opensource@janestcapital.com
+
+Up-to-date information concerning this library should be available
+here:
+
+   http://www.janestcapital.com/ocaml
+
+
+
+-- Yaron Minsky <yminsky@janestcapital.com> 
+

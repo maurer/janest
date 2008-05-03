@@ -1,0 +1,29 @@
+OCAML_LIBRARIES = core core_extended oUnit
+
+TARGETS = test_runner.exe
+FOO =
+
+switch $(PROCESSOR)
+case x86_64
+  ARCH_FLAGS = -DARCH_SIXTYFOUR
+  export ARCH_FLAGS
+default
+  ARCH_FLAGS =
+  export ARCH_FLAGS
+
+OCamlPreprocess(cpp $(ARCH_FLAGS), test bigstring_test)
+
+OCamlMakeProjDefaults($(TARGETS))
+OCamlTop(mycaml,$(FOO))
+
+local_runtest: $(TARGETS)
+	./test_runner.exe
+
+.PHONY: test_mycaml
+test_mycaml: mycaml
+  $(BIN)/test-mycaml.sh
+
+runtest: $(TARGETS) test_mycaml
+	./test_runner.exe
+
+InstantiateOCamlEnv()
