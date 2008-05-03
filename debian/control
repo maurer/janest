@@ -19,7 +19,6 @@ Section: libdevel
 Architecture: any
 Depends: ocaml-nox-${F:OCamlABI}, ocaml-findlib,
  libcore-ocaml (= ${binary:Version}),
- libtype-conv-camlp4-dev,
  libbin-prot-camlp4-dev,
  libsexplib-camlp4-dev,
  libres-ocaml-dev,
