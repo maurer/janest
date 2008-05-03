@@ -1,8 +1,5 @@
-core for Debian
-===============
-
-Summary of core functionalities
--------------------------------
+Summary of "core" functionalities
+=================================
 
 - Bag (set type with duplicates)
 - Bigbuffer (unlimited Buffer type)
