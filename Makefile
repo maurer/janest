@@ -3,8 +3,17 @@ all:
 	@cd lib && $(MAKE)
 	@cd lib_test && make
 
+.PHONY: byte
+byte:
+	@cd lib && $(MAKE) byte
+	@cd lib_test && make
+
 .PHONY:	install
 install:
+	@cd lib && $(MAKE) $@
+
+.PHONY:	libinstall-byte-code
+libinstall-byte-code:
 	@cd lib && $(MAKE) $@
 
 .PHONY:	uninstall

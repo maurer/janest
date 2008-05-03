@@ -161,6 +161,7 @@ THREADS = yes
 ANNOTATE = true
 
 all: byte-code-library native-code-library
+byte: byte-code-library
 
 LIBINSTALL_FILES = \
   core.cmi core.cma core.cmxa core.a libcore_stubs.a dllcore_stubs.so
