@@ -1,24 +1,36 @@
 This package was debianized by Stefano Zacchiroli <zack@debian.org> on
 Sat, 03 May 2008 10:55:27 +0200.
 
-It was downloaded from <url://example.com>
+It was downloaded from <http://janestcapital.com/ocaml/>
 
-Upstream Author(s): 
+Files: *
+Copyright: 2008 Jane Street Holding, LLC <opensource@janestcapital.com>
+License: LGPL-2.1 | other
 
-    <put author's name and email here>
-    <likewise for another author>
+ The Library is distributed under the terms of the GNU Lesser General
+ Public License version 2.1.
 
-Copyright: 
+ As a special exception to the GNU Lesser General Public License, you
+ may link, statically or dynamically, a "work that uses the Library"
+ with a publicly distributed version of the Library to produce an
+ executable file containing portions of the Library, and distribute that
+ executable file under terms of your choice, without any of the additional
+ requirements listed in clause 6 of the GNU Lesser General Public License.
+ By "a publicly distributed version of the Library", we mean either the
+ unmodified Library as distributed by the authors, or a modified version
+ of the Library that is distributed under the conditions defined in clause
+ 3 of the GNU Lesser General Public License.  This exception does not
+ however invalidate any other reasons why the executable file might be
+ covered by the GNU Lesser General Public License.
 
-    <Copyright (C) YYYY Name OfAuthor>
-    <likewise for another author>
+ On Debian systems, the complete text of the GNU Lessere General Public
+ License version 2.1 can be found in `/usr/share/common-licenses/LGPL-2.1'.
 
-License:
+Files: debian/*
+Copyright: © 2008 Stefano Zacchiroli <zack@debian.org>
+License: GPL-3+
 
-    <Put the license of the package here indented by 4 spaces>
+  The Debian packaging is copyright Stefano Zacchiroli, and licensed under the
+  GNU General Public License, see `/usr/share/common-licenses/GPL' for the full
+  text.
 
-The Debian packaging is (C) 2008, Stefano Zacchiroli <zack@debian.org> and
-is licensed under the GPL, see `/usr/share/common-licenses/GPL'.
-
-# Please also look if there are files or directories which have a
-# different copyright/license attached and list them here.
