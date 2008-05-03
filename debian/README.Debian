@@ -1,6 +1,45 @@
 core for Debian
----------------
+===============
 
-<possible notes regarding this package - if none, delete this file>
+Summary of core functionalities
+-------------------------------
+
+- Bag (set type with duplicates)
+- Bigbuffer (unlimited Buffer type)
+- Bigstring (unlimited String type)
+- 8/16/32/64-bit signed/unsigned binary packing functions
+- Bool type
+- Safe finalization for reading/writing files
+- Function composition operators
+- Enhanced versions of stdlib modules such as Arg, Array, Printf, etc.
+- Mutexes
+- CRC functions
+- Dequeue type
+- Doubly-linked list type
+- Enhanced exception module
+- Fast hash table
+- Force once (thunk that can be forced only once)
+- Functional queue type
+- Min-heap type
+- Enhanced input/output channels
+- Closed interval type
+- Interval set type
+- Read files as lines
+- Linux-specific syscalls such as sendfile, get/set TCP options, epoll, splice
+- Memoization
+- Piece-wise linear interpolation of floats
+- Polymorphic map and set
+- Find size of OCaml structures
+- Space-efficient tuples
+- Synchronized queues
+- Thread-safe queues
+- Convenience functions for Unix times
+- Timed events
+- Tuple convenience functions
+- Extended Unix module filling in some missing syscalls such as sync,
+  getrusage, inigroups, etc.
+
+[ list courtesy of Richard Jones, see
+  http://groups.google.com/group/fa.caml/msg/2e324f40ecd309bb ]
 
  -- Stefano Zacchiroli <zack@debian.org>  Sat, 03 May 2008 10:55:27 +0200
