@@ -1,6 +1,6 @@
 core (0.5.0-1) experimental; urgency=low
 
-  * Initial release (Closes: #nnnn)
+  * Initial release (Closes: #479152)
 
  -- Stefano Zacchiroli <zack@debian.org>  Sat, 03 May 2008 10:55:27 +0200
 
