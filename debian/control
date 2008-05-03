@@ -8,7 +8,8 @@ Build-Depends: cdbs, debhelper (>= 7), dpatch,
  libtype-conv-camlp4-dev,
  libbin-prot-camlp4-dev,
  libsexplib-camlp4-dev,
- libres-ocaml-dev
+ libres-ocaml-dev,
+ libounit-ocaml-dev
 Standards-Version: 3.7.3
 Vcs-Browser: http://git.debian.org/?p=pkg-ocaml-maint/packages/core.git
 Vcs-Git: git://git.debian.org/git/pkg-ocaml-maint/packages/core.git
