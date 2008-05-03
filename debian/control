@@ -3,12 +3,14 @@ Section: libdevel
 Priority: optional
 Maintainer: Debian OCaml Maintainers <debian-ocaml-maint@lists.debian.org>
 Uploaders: Stefano Zacchiroli <zack@debian.org>
-Build-Depends: ocaml-nox, ocaml-findlib, cdbs, debhelper (>= 7), dpatch
+Build-Depends: cdbs, debhelper (>= 7), dpatch,
+ ocaml-nox, camlp4, ocaml-findlib
 Standards-Version: 3.7.3
 
 Package: libcore-ocaml-dev
 Architecture: any
-Depends: ocaml-nox-${F:OCamlABI}, ocaml-findlib, ${shlibs:Depends}, ${misc:Depends}
+Depends: ocaml-nox-${F:OCamlABI}, ocaml-findlib,
+ ${shlibs:Depends}, ${misc:Depends}
 Description: Jane Street Capital's alternative standard library for OCaml
  Core is Jane Street Capital's alternative standard library for OCaml.
  .
@@ -21,4 +23,27 @@ Description: Jane Street Capital's alternative standard library for OCaml
  Beware: Core extends some functionality from OCaml's standard
  library, and outright changes or replaces other. The goal is not to
  preserve complete compatibility with the standard.
+ .
+ This package contains the development stuff you need to use Core in
+ your programs.
 
+Package: libcore-ocaml
+Architecture: any
+Depends: ocaml-nox-${F:OCamlABI}, ocaml-findlib,
+ libcore-ocaml (= ${binary:Version}),
+ ${shlibs:Depends}, ${misc:Depends}
+Description: Jane Street Capital's alternative standard library for OCaml
+ Core is Jane Street Capital's alternative standard library for OCaml.
+ .
+ Core does a number of things: it provides tail recursive versions of
+ non tail recursive functions in the standard library; changes the
+ signature of many of the standard modules; includes generic
+ serialization for most types, and adds some entirely new modules and
+ new functionality within existing modules.
+ .
+ Beware: Core extends some functionality from OCaml's standard
+ library, and outright changes or replaces other. The goal is not to
+ preserve complete compatibility with the standard.
+ .
+ This package contains the runtime stuff you need to run programs using
+ Core.
