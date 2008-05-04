@@ -3,7 +3,7 @@ Section: devel
 Priority: optional
 Maintainer: Debian OCaml Maintainers <debian-ocaml-maint@lists.debian.org>
 Uploaders: Stefano Zacchiroli <zack@debian.org>
-Build-Depends: cdbs, debhelper (>= 7), dpatch,
+Build-Depends: cdbs, debhelper (>= 7),
  ocaml-nox, camlp4, ocaml-findlib,
  libtype-conv-camlp4-dev,
  libbin-prot-camlp4-dev [i386 amd64],
