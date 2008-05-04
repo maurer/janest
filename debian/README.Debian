@@ -34,7 +34,7 @@ Summary of "core" functionalities
 - Timed events
 - Tuple convenience functions
 - Extended Unix module filling in some missing syscalls such as sync,
-  getrusage, inigroups, etc.
+  getrusage, initgroups, etc.
 
 [ list courtesy of Richard Jones, see
   http://groups.google.com/group/fa.caml/msg/2e324f40ecd309bb ]
