@@ -1,0 +1,541 @@
+diff --git a/lib/META b/lib/META
+index 22fd4d0..4e42ef4 100644
+--- a/lib/META
++++ b/lib/META
+@@ -1,6 +1,6 @@
+ name = "core"
+ version = "0.5.0"
+ description = "Core - Jane Street Capital's standard library overlay"
+-requires = "bigarray, res, sexplib, bin_prot, unix"
++requires = "bigarray, res, sexplib, unix"
+ archive(byte) = "core.cma"
+ archive(native) = "core.cmxa"
+diff --git a/lib/Makefile b/lib/Makefile
+index d9ad8fe..8f85540 100644
+--- a/lib/Makefile
++++ b/lib/Makefile
+@@ -155,7 +155,7 @@ OCAMLFLAGS = -for-pack Core -dtypes
+ CFLAGS = \
+   -pipe -g -fPIC -O2 -fomit-frame-pointer \
+   -Wall -pedantic -Wextra -Wunused -Wno-long-long
+-PACKS = res sexplib bin_prot
++PACKS = res sexplib
+ RESULT = core
+ THREADS = yes
+ ANNOTATE = true
+diff --git a/lib/binable.ml b/lib/binable.ml
+index 81fecfa..a985efe 100644
+--- a/lib/binable.ml
++++ b/lib/binable.ml
+@@ -1,8 +1,8 @@
+-open Bin_prot
+ 
+ module type S = sig
+   type binable
+ 
++  (*
+   val bin_size_t : binable Size.sizer
+   val bin_write_t : binable Map_to_safe.writer
+   val bin_write_t_ : binable Unsafe_write_c.writer
+@@ -10,11 +10,13 @@ module type S = sig
+   val bin_read_t_ : binable Unsafe_read_c.reader
+   val bin_read_t__ : (int -> binable) Unsafe_read_c.reader
+   val bin_sw_arg_t : binable Map_to_safe.sw_arg
++  *)
+ end
+ 
+ module type S1 = sig
+   type 'a binable
+ 
++  (*
+   val bin_size_t : ('a, 'a binable) Size.sizer1
+   val bin_write_t :('a, 'a binable) Map_to_safe.writer1
+   val bin_write_t_ :('a, 'a binable) Unsafe_write_c.writer1
+@@ -22,11 +24,13 @@ module type S1 = sig
+   val bin_read_t_ : ('a, 'a binable) Unsafe_read_c.reader1
+   val bin_read_t__ : ('a, int -> 'a binable) Unsafe_read_c.reader1
+   val bin_sw_arg_t : ('a, 'a binable) Map_to_safe.sw_arg1
++  *)
+ end
+ 
+ module type S2 = sig
+   type ('a, 'b) binable
+ 
++  (*
+   val bin_size_t : ('a, 'b, ('a, 'b) binable) Size.sizer2
+   val bin_write_t :('a, 'b, ('a, 'b) binable) Map_to_safe.writer2
+   val bin_write_t_ :('a, 'b, ('a, 'b) binable) Unsafe_write_c.writer2
+@@ -34,4 +38,5 @@ module type S2 = sig
+   val bin_read_t_ : ('a, 'b, ('a, 'b) binable) Unsafe_read_c.reader2
+   val bin_read_t__ : ('a, 'b, int -> ('a, 'b) binable) Unsafe_read_c.reader2
+   val bin_sw_arg_t : ('a, 'b, ('a, 'b) binable) Map_to_safe.sw_arg2
++  *)
+ end
+diff --git a/lib/bucket.ml b/lib/bucket.ml
+index 1f05af6..1de11f4 100644
+--- a/lib/bucket.ml
++++ b/lib/bucket.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Bucket"
+ 
+ open Std_internal
+@@ -52,10 +52,10 @@ module type S =
+ module Make(C: ContentsType): (S with type contents = C.t) =
+   struct
+     type contents = C.t
+-    with sexp, bin_io
++    with sexp
+ 
+     type t = { mutable level : contents; size : contents }
+-    with sexp, bin_io
++    with sexp
+ 
+     type sexpable = t
+     type binable = t
+diff --git a/lib/common.ml b/lib/common.ml
+index 76f0e9c..388f8cf 100644
+--- a/lib/common.ml
++++ b/lib/common.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ (** Basic types and definitions required throughout the system. *)
+ 
+ TYPE_CONV_PATH "Core.Common"
+@@ -7,13 +7,12 @@ open StdLabels
+ open MoreLabels
+ open Printf
+ open Sexplib.Conv
+-open Bin_prot
+ 
+ (** handy types for marking things read-only and read-write *)
+-type immutable with bin_io, sexp
+-type read_only with bin_io, sexp
+-type read_write with bin_io, sexp
+-type write_only with bin_io, sexp
++type immutable with sexp
++type read_only with sexp
++type read_write with sexp
++type write_only with sexp
+ 
+ let sexp_of_immutable _ = failwith "attempt to convert abstract type immutable"
+ let sexp_of_read_only _ = failwith "attempt to convert abstract type read_only"
+@@ -147,7 +146,7 @@ let (<||) f g = fun x -> f (g x)
+ (** float division of integers *)
+ let (//) x y = float x /. float y
+ 
+-type decimal = float with sexp, bin_io
++type decimal = float with sexp
+ let sexp_of_decimal x = Sexplib.Sexp.Atom (sprintf "%.12G" x)
+ let decimal_of_sexp = function
+     Sexplib.Sexp.Atom s -> float_of_string s
+diff --git a/lib/common.mli b/lib/common.mli
+index 352336a..ad0e59d 100644
+--- a/lib/common.mli
++++ b/lib/common.mli
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ (** Basic types and definitions required throughout the system. *)
+ 
+ exception Bug of string
+@@ -9,7 +9,7 @@ exception Finally of exn * exn
+ exception Validation_error of string list
+ exception Unimplemented of string
+ 
+-type decimal = float with bin_io, sexp
++type decimal = float with sexp
+ type 'a set = 'a PSet.t
+ type ('a,'b) map = ('a,'b) PMap.t
+ 
+@@ -19,10 +19,10 @@ type passfail = Pass | Fail of string
+ 
+ (** handy types for marking things read-only and read-write *)
+ 
+-type immutable with sexp, bin_io
+-type read_only with sexp, bin_io
+-type read_write with sexp, bin_io
+-type write_only with sexp, bin_io
++type immutable with sexp
++type read_only with sexp
++type read_write with sexp
++type write_only with sexp
+ 
+ (** {6 Integer mod and div} *)
+ 
+diff --git a/lib/core_array.ml b/lib/core_array.ml
+index ecdadb8..d21f812 100644
+--- a/lib/core_array.ml
++++ b/lib/core_array.ml
+@@ -1,9 +1,9 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Core_array"
+ 
+ module Array = StdLabels.Array
+ 
+-type 'a t = 'a array with sexp, bin_io
++type 'a t = 'a array with sexp
+ 
+ type 'a binable = 'a t
+ type 'a container = 'a t
+diff --git a/lib/core_int.ml b/lib/core_int.ml
+index bc613a0..2d8b474 100644
+--- a/lib/core_int.ml
++++ b/lib/core_int.ml
+@@ -1,7 +1,7 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Int"
+ 
+-type t = int with bin_io
++type t = int
+ 
+ type sexpable = t
+ let sexp_of_t = Sexplib.Conv.sexp_of_int
+diff --git a/lib/core_int32.ml b/lib/core_int32.ml
+index 8f75fe1..bb2e964 100644
+--- a/lib/core_int32.ml
++++ b/lib/core_int32.ml
+@@ -1,9 +1,9 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Core_int32"
+ 
+ open Int32
+ 
+-type t = int32 with sexp, bin_io
++type t = int32 with sexp
+ type t_ = t
+ 
+ type floatable = t
+diff --git a/lib/core_int64.ml b/lib/core_int64.ml
+index 1ca142b..2ca933f 100644
+--- a/lib/core_int64.ml
++++ b/lib/core_int64.ml
+@@ -1,9 +1,9 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Core_int64"
+ 
+ open Int64
+ 
+-type t = int64 with sexp, bin_io
++type t = int64 with sexp
+ type t_ = t
+ 
+ type floatable = t
+diff --git a/lib/core_list.ml b/lib/core_list.ml
+index cb80e04..c47bcb0 100644
+--- a/lib/core_list.ml
++++ b/lib/core_list.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ (** Tail recursive version of list functions, plus a few additional
+  * operations on lists.
+  *)
+@@ -10,7 +10,7 @@ module Set = PSet
+ 
+ let invalid_argf = Core_printf.invalid_argf
+ 
+-type 'a t = 'a list with sexp, bin_io
++type 'a t = 'a list with sexp
+ 
+ type 'a binable = 'a t
+ type 'a container = 'a t
+diff --git a/lib/core_nativeint.ml b/lib/core_nativeint.ml
+index 804b7e9..1e99235 100644
+--- a/lib/core_nativeint.ml
++++ b/lib/core_nativeint.ml
+@@ -1,9 +1,9 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Core_nativeint"
+ 
+ open Nativeint
+ 
+-type t = nativeint with sexp, bin_io
++type t = nativeint with sexp
+ type t_ = t
+ 
+ type floatable = t
+diff --git a/lib/core_sexp.ml b/lib/core_sexp.ml
+index 65c8c3e..1158c05 100644
+--- a/lib/core_sexp.ml
++++ b/lib/core_sexp.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query type-conv` -I `ocamlfind query sexplib` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query type-conv` -I `ocamlfind query sexplib` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Core_sexp"
+ 
+ module Sexp = Sexplib.Sexp
+@@ -8,7 +8,7 @@ include Sexp
+ type sexpable = t
+   
+ include (struct
+-  type t = Sexp.t = Atom of string | List of t list with sexp, bin_io
++  type t = Sexp.t = Atom of string | List of t list with sexp
+   type binable = t
+   type sexpable = t
+ end : Interfaces.Binable with type binable = t)
+diff --git a/lib/core_stack.ml b/lib/core_stack.ml
+index 89981d8..df07ac9 100644
+--- a/lib/core_stack.ml
++++ b/lib/core_stack.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query type-conv` pa_type_conv.cmo *)
+ TYPE_CONV_PATH "Core_stack"
+ 
+ module List = Core_list
+@@ -8,7 +8,7 @@ exception Empty
+ type 'a t = {
+   mutable elts : 'a list;
+   mutable length : int;
+-} with bin_io
++}
+ 
+ type 'a binable = 'a t
+ type 'a container = 'a t
+diff --git a/lib/core_string.ml b/lib/core_string.ml
+index 6a73d45..496daf9 100644
+--- a/lib/core_string.ml
++++ b/lib/core_string.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Core_string"
+ 
+ module Array = Caml.ArrayLabels
+@@ -7,7 +7,7 @@ module String = Caml.StringLabels
+ 
+ let invalid_argf = Core_printf.invalid_argf
+ 
+-type t = string with sexp, bin_io
++type t = string with sexp
+ 
+ type elt = char
+   
+diff --git a/lib/dequeue.ml b/lib/dequeue.ml
+index 92f7cc9..ab75d94 100644
+--- a/lib/dequeue.ml
++++ b/lib/dequeue.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ 
+ (* Double-ended index-able queue *)
+ 
+diff --git a/lib/exn.ml b/lib/exn.ml
+index 5eb48dd..b5ae220 100644
+--- a/lib/exn.ml
++++ b/lib/exn.ml
+@@ -68,6 +68,7 @@ let () =
+           Some (
+             sprintf "Of_sexp_error (\"%s\", %s)"
+               reason (Sexplib.Sexp.to_string_hum sexp))
++      (*
+       | Bin_prot.Common.Read_error (err, pos) ->
+           let str_err = Bin_prot.Common.ReadError.to_string err in
+           let str = sprintf "Bin_prot.Common.ReadError: (%s, %d)" str_err pos in
+@@ -76,5 +77,6 @@ let () =
+           let str_err = Bin_prot.Common.ReadError.to_string err in
+           let str = sprintf "Bin_prot.Unsafe_read_c.Error: %s" str_err in
+           Some str
++      *)
+       | _ -> None)
+ ;;
+diff --git a/lib/fast_hashtbl.ml b/lib/fast_hashtbl.ml
+index 206294c..620fe7c 100644
+--- a/lib/fast_hashtbl.ml
++++ b/lib/fast_hashtbl.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Fast_hashtbl"
+ 
+ module Hashtbl = MoreLabels.Hashtbl
+diff --git a/lib/float.ml b/lib/float.ml
+index 60c2340..98804bf 100644
+--- a/lib/float.ml
++++ b/lib/float.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ 
+ TYPE_CONV_PATH "Float"
+ 
+@@ -6,7 +6,7 @@ module Sexp = Sexplib.Sexp
+ module String = Core_string
+ open Core_printf
+ 
+-type t = float with sexp, bin_io
++type t = float with sexp
+ 
+ type sexpable = t
+ type binable = t
+@@ -130,7 +130,7 @@ module Class = struct
+   | Normal
+   | Subnormal
+   | Zero
+-  with sexp, bin_io
++  with sexp
+ 
+   type binable = t
+   type sexpable = t
+diff --git a/lib/interval.ml b/lib/interval.ml
+index 60b992b..beda38a 100644
+--- a/lib/interval.ml
++++ b/lib/interval.ml
+@@ -1,9 +1,9 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Core.Interval"
+ 
+ module List = Core_list
+ 
+-type 'a t = Interval of 'a * 'a | Empty with bin_io, sexp
++type 'a t = Interval of 'a * 'a | Empty with sexp
+ (* CRv2 YM: The s-xpression converters should enforce the invariant that the interval's
+    bounds can't be crossed, and should throw an exception on a crossed interval or
+    auto-convert it to empty.  Not clear which approach is better. *)
+diff --git a/lib/interval.mli b/lib/interval.mli
+index 233cd82..2ac9c5d 100644
+--- a/lib/interval.mli
++++ b/lib/interval.mli
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ open Std_internal
+ 
+ (** Module for simple closed intervals over arbitrary types that are ordered
+@@ -6,7 +6,7 @@ open Std_internal
+ (* CRv2 sweeks: It would be nice to make this a functor that takes a Comparable.
+ *)
+ 
+-type 'a t with bin_io, sexp
++type 'a t with sexp
+ val make : 'a -> 'a -> 'a t
+ val empty : 'a t
+ 
+diff --git a/lib/interval_set.ml b/lib/interval_set.ml
+index 84c4a16..a46ba36 100644
+--- a/lib/interval_set.ml
++++ b/lib/interval_set.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Interval_set"
+ 
+ open Std_internal
+diff --git a/lib/month.ml b/lib/month.ml
+index daf62a5..5c5980d 100644
+--- a/lib/month.ml
++++ b/lib/month.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Month"
+ 
+ module Array = Core_array
+diff --git a/lib/pMap.ml b/lib/pMap.ml
+index 9695d6f..40221c1 100644
+--- a/lib/pMap.ml
++++ b/lib/pMap.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Core.pMap"
+ 
+ (* CR sweeks: Should this file be renamed as core_map.ml? *)
+@@ -22,7 +22,6 @@ open StdLabels
+ type ('key,'a) t =
+     Empty
+   | Node of ('key,'a) t * 'key * 'a * ('key,'a) t * int
+-with bin_io
+ 
+ let height = function
+     Empty -> 0
+diff --git a/lib/pMap.mli b/lib/pMap.mli
+index f655b33..36475e2 100644
+--- a/lib/pMap.mli
++++ b/lib/pMap.mli
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query bin_prot` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query type-conv` pa_type_conv.cmo *)
+ 
+ (** Polymorphic map module.  Just like the standard Map module, but with the
+     order of the two type parameters inverted (we think [key,value] makes a lot
+@@ -9,7 +9,7 @@
+ 
+ open Sexplib
+ 
+-type ('key,'a) t with bin_io
++type ('key,'a) t
+ 
+ val t_of_sexp: (Sexp.t -> 'key) -> (Sexp.t -> 'a) -> Sexp.t -> ('key,'a) t
+ val sexp_of_t: ('key -> Sexp.t) -> ('a -> Sexp.t) -> ('key,'a) t -> Sexp.t
+diff --git a/lib/std_internal.ml b/lib/std_internal.ml
+index 3c7ec19..c6175ce 100644
+--- a/lib/std_internal.ml
++++ b/lib/std_internal.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Core.Std_internal"
+ 
+ (* labeled versions *)
+diff --git a/lib/time.ml b/lib/time.ml
+index 39c4175..582f995 100644
+--- a/lib/time.ml
++++ b/lib/time.ml
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ TYPE_CONV_PATH "Time"
+ 
+ open Std_internal
+@@ -355,7 +355,7 @@ module Date = struct
+     val min_value : t
+     val max_value : t
+   end = struct
+-    type t = { y: int; m: Month.t; d: int; } with bin_io
++    type t = { y: int; m: Month.t; d: int; }
+     type binable = t
+ 
+     let min_value = { y =     0; m = Month.jan; d = 1; }
+diff --git a/lib/time.mli b/lib/time.mli
+index 85ed7c3..518fc26 100644
+--- a/lib/time.mli
++++ b/lib/time.mli
+@@ -1,4 +1,4 @@
+-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
++(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+ (** Our time module.  This module wraps up unix times, including various
+     convenience functions for accessing them.
+ *)
+@@ -121,7 +121,7 @@ end
+ (** {6 String conversions} *)
+ 
+ module Date : sig
+-  type t = private { y: int; m: Month.t; d: int } with sexp, bin_io
++  type t = private { y: int; m: Month.t; d: int } with sexp
+ 
+   include Sexpable with type sexpable = t
+   include Binable with type binable = t
+diff --git a/lib_test/Makefile b/lib_test/Makefile
+index 4f36640..12b865a 100644
+--- a/lib_test/Makefile
++++ b/lib_test/Makefile
+@@ -3,7 +3,7 @@ export OCAMLMAKEFILE = ../OCamlMakefile
+ export INCDIRS = ../lib
+ export LIBDIRS = ../lib
+ export LIBS = core
+-export PACKS = bigarray oUnit type-conv sexplib bin_prot res
++export PACKS = bigarray oUnit type-conv sexplib res
+ export THREADS = yes
+ ANNOTATE = true
+ 

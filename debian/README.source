@@ -1,0 +1,25 @@
+
+debian/patches/no-bin-prot
+==========================
+
+Let's make it clear:
+
+  THIS PACKAGE IS NOT USING QUILT as a general purpose patching tool
+
+The only purpose of quilt is conditionally patching the code on the
+architectures on which libbin-prot-camlp4-dev is not available, in order to
+remove the dependency from the source code. Hopefully this hackish solution
+will be temporary and bin_prot will soon become Architecture: any. In the
+meantime ...
+
+The only relevant patch is debian/patches/no-bin-prot. It is applied via CDBS +
+make conditionals only on $(BIN_PROT_ARCHS) (see debian/rules).
+
+THE PATCH IS NOT MAINTAINED BY HAND. It is rather generated from git, which is
+used to maintain the "no-bin-prot" branch containing upstream + the needed
+changes. In order to refresh the patch after changes you can use the
+"no-bin-prot-patch" target of debian/rules:
+
+  fakeroot debian/rules no-bin-prot-patch
+
+ -- Stefano Zacchiroli <zack@debian.org>  Sun, 04 May 2008 21:25:34 +0200

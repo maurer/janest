@@ -3,6 +3,17 @@ janest-core (0.5.0-2) UNRELEASED; urgency=low
   * rename debian/TODO.Debian to debian/TODO so that it is installed by
     dh_installdocs
   * add TODO item about non shipped .ml files
+  * make the package Architecture: any
+    - add debian/patches/no-bin-prot ; this patch is conditionally applied on
+      architectures with no bin_prot support to relax the dependency on it
+    - debian/control: set Arch:any, add build-dep on quilt
+    - debian/rules: add conditional patch application
+    - debian/rules: add a target to generate the no-bin-prot patch
+      automatically from git branches
+    - debian/README.source: explain how to refresh no-bin-prot patch
+    - debian/README.Debian: explain to users that on some arch they won't get
+      the legacy library
+    - debian/TODO close the todo item about bin_prot dependency
 
  -- Stefano Zacchiroli <zack@debian.org>  Sun, 04 May 2008 17:27:30 +0200
 

@@ -1,17 +1,4 @@
 
-- Make core independent on the availability of bin-prot (in case the
-  unavailability of bin-prot on big endian archs won't be solved anytime soon).
-
-  The only part of core using bin-prot is the Binable module, which is
-  basically an interface.  A viable path is then probably to make it a
-  compile-time conditional module which contains the various function
-  declaration if bin-prot is available. If this is not the case Binable will
-  become basically a set of empty interfaces.
-
-  In such a scenario applications using core will be portable to different
-  architectures as long as they did not use stuff inherited from the Binable
-  interface.
-
 - install the .ml corresponding to "interface" modules (e.g. Binable, Sexpable,
   Comparable, ...) for documentation purposes
 

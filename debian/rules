@@ -9,8 +9,16 @@ DEV_PKG_NAME = lib$(LIB_NAME)-ocaml-dev
 DEST_DIR = $(CURDIR)/debian/$(DEV_PKG_NAME)$(OCAML_STDLIB_DIR)
 DEST_DLL_DIR = $(CURDIR)/debian/$(DLL_PKG_NAME)$(OCAML_DLL_DIR)
 
-# dependency on bin_prot is there only on archs supported by it
-ifneq (,$(findstring $(DEB_HOST_ARCH),i386 amd64))
+# If bin_prot is available we compile legacy library and depend on it, if it is
+# not we patch the code to avoid requiring bin_prot. The list of archs below
+# must match the archs on which libbin-prot-camlp4-dev package is available.
+# When changing this list please remember to change README.Debian accordingly.
+BIN_PROT_ARCHS = i386 amd64
+
+ifeq (,$(findstring $(DEB_HOST_ARCH),$(BIN_PROT_ARCHS)))
+# bin_prot is not available, we need to patch the code ...
+include /usr/share/cdbs/1/rules/patchsys-quilt.mk
+else # bin_prot is available, add its dependency to control
 DEB_DH_GENCONTROL_ARGS += -VF:OCamlArchDeps="libbin-prot-camlp4-dev"
 endif
 
@@ -26,4 +34,10 @@ build/$(DEV_PKG_NAME)::
 	mkdir -p $(DEST_DIR) $(DEST_DLL_DIR)
 install/$(DEV_PKG_NAME)::
 	mv $(DEST_DIR)/core/*.so $(DEST_DLL_DIR)
+
+no-bin-prot-patch:
+	rm -f debian/patches/no-bin-prot debian/patches/series
+	git diff master no-bin-prot lib/ lib_test/	\
+		| QUILT_PATCHES=debian/patches/		\
+		  quilt import -P no-bin-prot /dev/stdin
 
