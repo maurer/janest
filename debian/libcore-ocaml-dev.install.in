@@ -1,1 +1,2 @@
 lib/*.mli	@OCamlStdlibDir@/core/
+lib/*able.ml	@OCamlStdlibDir@/core/
