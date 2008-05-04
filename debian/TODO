@@ -12,3 +12,6 @@
   architectures as long as they did not use stuff inherited from the Binable
   interface.
 
+- install the .ml corresponding to "interface" modules (e.g. Binable, Sexpable,
+  Comparable, ...) for documentation purposes
+
