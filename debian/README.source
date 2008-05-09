@@ -23,3 +23,8 @@ changes. In order to refresh the patch after changes you can use the
   fakeroot debian/rules no-bin-prot-patch
 
  -- Stefano Zacchiroli <zack@debian.org>  Sun, 04 May 2008 21:25:34 +0200
+
+UPDATE: the patch machinery has been disabled, we now try to build legacy
+        bin-prot everywhere
+
+ -- Stefano Zacchiroli <zack@debian.org>  Fri, 09 May 2008 14:04:05 +0200

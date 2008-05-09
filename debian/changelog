@@ -1,3 +1,12 @@
+janest-core (0.5.0-3) unstable; urgency=low
+
+  * uploading to unstable
+  * disabling the arch-specific patch machinery to give a try to bin-proc
+    Arch:any. In that package it has been documented what works properly on
+    all archs and what does not.
+
+ -- Stefano Zacchiroli <zack@debian.org>  Fri, 09 May 2008 14:04:57 +0200
+
 janest-core (0.5.0-2) experimental; urgency=low
 
   * make the package Architecture: any
