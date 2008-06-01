@@ -1,6 +1,6 @@
 janest-core (0.5.0-4) unstable; urgency=low
 
-  * change build-dep on bin-prot to non arch specific, as now bin-prot is uses
+  * change build-dep on bin-prot to non arch specific, as now bin-prot is used
     on all archs; fix FTBFS on archs other than i386, amd64
 
  -- Stefano Zacchiroli <zack@debian.org>  Sun, 01 Jun 2008 11:34:16 +0200
