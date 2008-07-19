@@ -1,24 +1,24 @@
 
-bin_opt support missing on some architectures
-=============================================
+bin_opt support not fully functional on all architectures
+=========================================================
 
 One of the dependencies of the core library is bin_opt (Debian package:
-libbin-opt-camlp4-dev). At the time of writing bin_opt is not available on all
-architectures supported by Debian, but rather only on:
+libbin-opt-camlp4-dev). It is known, also according to upstream, to be working
+properly only on:
 
   i386  amd64
 
-Instead of not offering the core library at all on other architectures, the
-library has been modified on architecture not supported by bin_opt in order to
-relax the dependency on it. This means that you will get the core library also
-on other architecture, but you will not have support for features depending on
-bin_opt; most notably you will be lacking type-safe serialization of most of
-the types defined in the core library.
+On other architectures you do get proper marshalling and umarshalling, but you
+loose architecture independence in the resulting binary format. As such, you
+might get segfault when transferring data among machines having different
+architectures.
 
-On the contrary, if you are using one of the architectures listed above you
-will be getting the legacy, complete core library.
+Some more details on this issue are available at
+http://caml.inria.fr/pub/ml-archives/caml-list/2008/05/56cf55b101f21b608feb64c75b92c679.en.html
+and, more generally, in the thread starting at
+http://caml.inria.fr/pub/ml-archives/caml-list/2008/05/296bd8cda27c408a793b3ec1669f2f76.en.html
 
- -- Stefano Zacchiroli <zack@debian.org>  Sun, 04 May 2008 21:09:24 +0200
+ -- Stefano Zacchiroli <zack@debian.org>  Sat, 19 Jul 2008 19:24:56 +0200
 
 
 Summary of "core" functionalities

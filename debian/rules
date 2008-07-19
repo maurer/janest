@@ -39,9 +39,3 @@ build/$(DEV_PKG_NAME)::
 install/$(DEV_PKG_NAME)::
 	mv $(DEST_DIR)/core/*.so $(DEST_DLL_DIR)
 
-no-bin-prot-patch:
-	rm -f debian/patches/no-bin-prot debian/patches/series
-	git diff master no-bin-prot lib/ lib_test/	\
-		| QUILT_PATCHES=debian/patches/		\
-		  quilt import -P no-bin-prot /dev/stdin
-
