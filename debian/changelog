@@ -1,3 +1,9 @@
+janest-core (0.5.0-6) UNRELEASED; urgency=low
+
+  * Fix watch file.
+
+ -- Mehdi Dogguy <dogguy@pps.jussieu.fr>  Thu, 19 Feb 2009 15:26:29 +0100
+
 janest-core (0.5.0-5) unstable; urgency=medium
 
   * debian/README.Debian: clarify the bin-prot issue on some arch
