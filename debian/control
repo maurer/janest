@@ -3,8 +3,12 @@ Section: devel
 Priority: optional
 Maintainer: Debian OCaml Maintainers <debian-ocaml-maint@lists.debian.org>
 Uploaders: Stefano Zacchiroli <zack@debian.org>
-Build-Depends: cdbs, debhelper (>= 7),
- ocaml-nox, camlp4, ocaml-findlib,
+Build-Depends:
+ cdbs,
+ debhelper (>= 7),
+ ocaml-nox,
+ camlp4,
+ ocaml-findlib,
  libtype-conv-camlp4-dev,
  libbin-prot-camlp4-dev,
  libsexplib-camlp4-dev,
@@ -18,12 +22,15 @@ Homepage: http://www.janestcapital.com/ocaml/
 Package: libcore-ocaml-dev
 Section: libdevel
 Architecture: any
-Depends: ocaml-nox-${F:OCamlABI}, ocaml-findlib,
+Depends:
+ ocaml-nox-${F:OCamlABI},
+ ocaml-findlib,
  libcore-ocaml (= ${binary:Version}),
  ${F:OCamlArchDeps},
  libsexplib-camlp4-dev,
  libres-ocaml-dev,
- ${shlibs:Depends}, ${misc:Depends}
+ ${shlibs:Depends},
+ ${misc:Depends}
 Description: Jane Street Capital's alternative standard library for OCaml
  Core is Jane Street Capital's alternative standard library for OCaml.
  .
@@ -43,8 +50,11 @@ Description: Jane Street Capital's alternative standard library for OCaml
 Package: libcore-ocaml
 Section: libs
 Architecture: any
-Depends: ocaml-nox-${F:OCamlABI}, ocaml-findlib,
- ${shlibs:Depends}, ${misc:Depends}
+Depends:
+ ocaml-nox-${F:OCamlABI},
+ ocaml-findlib,
+ ${shlibs:Depends},
+ ${misc:Depends}
 Description: Jane Street Capital's alternative standard library for OCaml
  Core is Jane Street Capital's alternative standard library for OCaml.
  .
