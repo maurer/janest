@@ -8,22 +8,6 @@ DLL_PKG_NAME = lib$(LIB_NAME)-ocaml
 DEV_PKG_NAME = lib$(LIB_NAME)-ocaml-dev
 DEST_DIR = $(CURDIR)/debian/$(DEV_PKG_NAME)$(OCAML_STDLIB_DIR)
 DEST_DLL_DIR = $(CURDIR)/debian/$(DLL_PKG_NAME)$(OCAML_DLL_DIR)
-
-# XXX currently disabled, we will give a try at compiling bin-prot everywhere,
-# XXX mentioning what doesn't work in its README.Debian
-## If bin_prot is available we compile legacy library and depend on it, if it is
-## not we patch the code to avoid requiring bin_prot. The list of archs below
-## must match the archs on which libbin-prot-camlp4-dev package is available.
-## When changing this list please remember to change README.Debian accordingly.
-#BIN_PROT_ARCHS = i386 amd64
-
-#ifeq (,$(findstring $(DEB_HOST_ARCH),$(BIN_PROT_ARCHS)))
-## bin_prot is not available, we need to patch the code ...
-#include /usr/share/cdbs/1/rules/patchsys-quilt.mk
-#else # bin_prot is available, add its dependency to control
-#DEB_DH_GENCONTROL_ARGS += -VF:OCamlArchDeps="libbin-prot-camlp4-dev"
-#endif
-
 DEB_DH_GENCONTROL_ARGS += -VF:OCamlArchDeps="libbin-prot-camlp4-dev"
 
 ifeq ($(OCAML_HAVE_OCAMLOPT),yes)
