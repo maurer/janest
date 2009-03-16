@@ -10,9 +10,9 @@ Build-Depends:
  camlp4,
  ocaml-findlib,
  libtype-conv-camlp4-dev,
- libbin-prot-camlp4-dev,
- libsexplib-camlp4-dev,
- libres-ocaml-dev,
+ libbin-prot-camlp4-dev (>= 1.0.5-5),
+ libsexplib-camlp4-dev (>= 4.2.6-3),
+ libres-ocaml-dev (>= 3.1.1),
  libounit-ocaml-dev
 Standards-Version: 3.8.1
 Vcs-Browser: http://git.debian.org/?p=pkg-ocaml-maint/packages/janest-core.git

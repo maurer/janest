@@ -2,6 +2,7 @@ janest-core (0.5.2-1) UNRELEASED; urgency=low
 
   [ Stefano Zacchiroli ]
   * New upstream release
+  * rebuild with OCaml 3.11, bump needed build-deps
   * debian/control
     - bump Standards-Version to 3.8.1 (no change)
   * debian/rules: use ocaml.mk as a CDBS "rules" snippet file
