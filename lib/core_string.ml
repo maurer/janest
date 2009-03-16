@@ -233,7 +233,7 @@ let split_on_chars str chars =
       | Some s -> (String.sub str ~pos:s ~len:(pos - s)) :: acc      
     in
     if pos = len then List.rev (update_acc ())
-    else if PSet.mem str.[pos] chars then loop (update_acc ()) None (pos + 1)
+    else if PSet.mem chars str.[pos] then loop (update_acc ()) None (pos + 1)
     else
       match current_start with
       | None -> loop acc (Some pos) (pos + 1)

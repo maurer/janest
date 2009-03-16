@@ -1,5 +1,9 @@
-(*pp cpp *)
-
+(*pp $(pwd)/pp.sh *)
+(*
+#include <unistd.h>
+#include <netinet/in.h>
+#undef SEEK_SET
+end-pp-include*)
 open Unix
 open Bigarray
 
@@ -213,7 +217,7 @@ val really_write : file_descr -> ?pos : int -> ?len : int -> t -> unit
     @param len default = [length bstr - pos]
 *)
 
-#if defined(MSG_NOSIGNAL) || defined(__linux__)
+#if defined(MSG_NOSIGNAL)
 val really_send_no_sigpipe : file_descr -> ?pos : int -> ?len : int -> t -> unit
 (** [really_send_no_sigpipe sock ?pos ?len bstr] sends [len] bytes in
     bigstring [bstr] starting at position [pos] to socket [sock] without
@@ -232,7 +236,7 @@ val really_send_no_sigpipe : file_descr -> ?pos : int -> ?len : int -> t -> unit
 #warning "Try compiling on Linux?"
 #endif
 
-#if defined(MSG_NOSIGNAL) || defined(__linux__)
+#if defined(MSG_NOSIGNAL)
 (* CRv2 sweeks for MM: It would be clearer to return a variant rather than using [-1] to
    indicate blocking.
 *)
@@ -464,7 +468,7 @@ external unsafe_really_write :
     {!Bigstring.write}, but does not perform any bounds checks.
     Will crash on bounds errors! *)
 
-#if defined(MSG_NOSIGNAL) || defined(__linux__)
+#if defined(MSG_NOSIGNAL)
 external unsafe_really_send_no_sigpipe :
   file_descr -> pos : int -> len : int -> t -> unit
   = "bigstring_really_send_no_sigpipe_stub"
@@ -499,7 +503,7 @@ external unsafe_writev :
     {!Bigstring.writev}, but does not perform any bounds checks.
     Will crash on bounds errors! *)
 
-#if defined(MSG_NOSIGNAL) || defined(__linux__)
+#if defined(MSG_NOSIGNAL)
 external unsafe_sendmsg_nonblocking_no_sigpipe :
   file_descr -> t Unix_ext.IOVec.t array -> int -> int
   = "bigstring_sendmsg_nonblocking_no_sigpipe_stub"

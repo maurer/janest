@@ -264,7 +264,7 @@ CAMLprim value unix_pselect_stub(
 
 
 /* Clock functions */
-#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > 0)
+#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK >= 0)
 #define clockid_t_val(v_cl) ((clockid_t) Nativeint_val(v_cl))
 
 CAMLprim value unix_clock_gettime(value v_cl)
@@ -444,9 +444,15 @@ CAMLprim value unix_sysconf(value v_name)
     case 10 : name = _SC_TZNAME_MAX; break;
     case 11 : name = _SC_VERSION; break;
     /*these should work in solaris too*/
-#if defined(__linux__)
+#if defined(_SC_PHYS_PAGES)
     case 12 : name = _SC_PHYS_PAGES; break;
+#else
+#warning "_SC_PHYS_PAGES not defined"
+#endif
+#if defined(_SC_AVPHYS_PAGES)
     case 13 : name = _SC_AVPHYS_PAGES; break;
+#else
+#warning "_SC_AVPHYS_PAGES not defined"
 #endif
     case 14 : name = _SC_IOV_MAX; break;
     default : name = 0; break; /* impossible */

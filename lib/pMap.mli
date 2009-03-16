@@ -17,6 +17,8 @@ val sexp_of_t: ('key -> Sexp.t) -> ('a -> Sexp.t) -> ('key,'a) t -> Sexp.t
   (** the empty map *)
 val empty: ('key,'a) t
 
+val singleton: 'key -> 'a -> ('key, 'a) t
+
 val is_empty: ('key, 'a) t -> bool
   (** Test whether a map is empty or not. *)
 

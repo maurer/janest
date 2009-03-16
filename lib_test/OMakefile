@@ -1,4 +1,4 @@
-OCAML_LIBRARIES = core core_extended oUnit
+OCAML_LIBRARIES = core oUnit
 
 TARGETS = test_runner.exe
 FOO =
@@ -19,11 +19,7 @@ OCamlTop(mycaml,$(FOO))
 local_runtest: $(TARGETS)
 	./test_runner.exe
 
-.PHONY: test_mycaml
-test_mycaml: mycaml
-  $(BIN)/test-mycaml.sh
-
-runtest: $(TARGETS) test_mycaml
+runtest: $(TARGETS)
 	./test_runner.exe
 
 InstantiateOCamlEnv()

@@ -32,6 +32,8 @@ let create l x d r =
   let hl = height l and hr = height r in
   Node(l, x, d, r, (if hl >= hr then hl + 1 else hr + 1))
 
+let singleton key data = create Empty key data Empty;;
+
 let bal l x d r =
   let hl = match l with Empty -> 0 | Node(_,_,_,_,h) -> h in
   let hr = match r with Empty -> 0 | Node(_,_,_,_,h) -> h in
@@ -77,6 +79,7 @@ let rec add ~key:x ~data = function
         bal (add ~key:x ~data l) v d r
       else
         bal l v d (add ~key:x ~data r)
+;;
 
 let rec find t x =
   match t with

@@ -3,6 +3,7 @@ OCAMLMAKEFILE = ../OCamlMakefile
 ifeq ($(shell uname -s), Linux)
   LINUX_EXT_STUBS_C = linux_ext_stubs.c
   LINUX_EXT_ML = linux_ext.ml
+	CLIBS = rt
 endif
 
 SOURCES = \
@@ -149,9 +150,15 @@ SOURCES = \
   ocaml_utils_stubs.c \
   unix_ext_stubs.c
 
+ifeq ($(shell uname -s), Darwin)
+	export SEXPLIB_CPP = cc -E -no-cpp-precomp -x c
+else
+	export SEXPLIB_CPP = cpp
+endif
+
 LIB_PACK_NAME = core
 INCDIRS = +camlp4 .
-OCAMLFLAGS = -for-pack Core -dtypes
+OCAMLFLAGS = -for-pack Core -dtypes -annot
 CFLAGS = \
   -pipe -g -fPIC -O2 -fomit-frame-pointer \
   -Wall -pedantic -Wextra -Wunused -Wno-long-long

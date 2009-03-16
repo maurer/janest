@@ -49,7 +49,7 @@ let () =
       | Invalid_argument s -> Some (sprintf "Invalid_argument (%s)" s)
       | Unix.Unix_error (err,s,t) ->
           Some (sprintf "Unix_error(%s, %s, %s)" (Unix.error_message err) s t)
-      | Sexplib.Sexp.ParseError pe ->
+      | Sexplib.Sexp.Parse_error pe ->
           let ppos = pe.parse_state.parse_pos in
           Some (
             sprintf "\

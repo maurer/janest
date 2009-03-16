@@ -1,5 +1,9 @@
-(*pp cpp *)
-
+(*pp $(pwd)/pp.sh *)
+(*
+#include <unistd.h>
+#include <netinet/in.h>
+#undef SEEK_SET
+end-pp-include*)
 open Printf
 open Unix
 open Bigarray
@@ -218,7 +222,7 @@ let really_write fd ?(pos = 0) ?len bstr =
   check_args ~loc:"really_write" bstr ~pos ~len;
   unsafe_really_write fd ~pos ~len bstr
 
-#if defined(MSG_NOSIGNAL) || defined(__linux__)
+#if defined(MSG_NOSIGNAL)
 external unsafe_really_send_no_sigpipe :
   file_descr -> pos : int -> len : int -> t -> unit
   = "bigstring_really_send_no_sigpipe_stub"
@@ -233,7 +237,7 @@ let really_send_no_sigpipe fd ?(pos = 0) ?len bstr =
 #warning "Try compiling on Linux?"
 #endif
 
-#if defined(MSG_NOSIGNAL) || defined(__linux__)
+#if defined(MSG_NOSIGNAL)
 (* CRv2 SW: It seems complex to have the underyling C code return the option.
    Why not leave the C code simple (returning an int) and translate to an
    option on the ML side?
@@ -346,7 +350,7 @@ let store_file
 
 
 (* input and output, linux only *)
-#if defined(MSG_NOSIGNAL) || defined(__linux__)
+#if defined(MSG_NOSIGNAL)
 
 external unsafe_sendmsg_nonblocking_no_sigpipe :
   file_descr -> t Unix_ext.IOVec.t array -> int -> int

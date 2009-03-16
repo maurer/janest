@@ -1,4 +1,7 @@
-(*pp cpp *)
+(*pp $(pwd)/pp.sh *)
+(*
+#include <unistd.h>
+end-pp-include*)
 open Printf
 open Unix
 
@@ -61,7 +64,7 @@ let mknod
   mknod pathname file_kind perm major minor
 
 
-#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > 0)
+#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > -1)
 (* Clock functions *)
 type clock
 

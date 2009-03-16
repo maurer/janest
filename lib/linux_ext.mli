@@ -1,4 +1,7 @@
-(*pp cpp *)
+(*pp $(pwd)/pp.sh *)
+(*
+#include <unistd.h>
+end-pp-include*)
 (** Interface to Linux-specific system calls *)
 
 open Unix
@@ -108,7 +111,7 @@ val recv_fd : sock : file_descr -> file_descr
 
 
 (** {2 Clock functions} *)
-#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > 0)
+#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > -1)
 val clock_process_cputime_id : clock
 (** [clock_process_cputime_id] the clock measuring the CPU-time of a process. *)
 

@@ -1,0 +1,13 @@
+.annot
+.cmi
+.cmo
+.cma
+.cmx
+.cmxa
+.o
+._d
+.exe
+app
+.DS_Store
+._bcdi/
+._ncdi/

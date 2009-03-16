@@ -671,6 +671,8 @@ Unix.socket_bool_option =
 | SO_DONTROUTE
 | SO_OOBINLINE
 | SO_ACCEPTCONN
+| TCP_NODELAY
+| IPV6_ONLY
 with sexp_of
 
 type socket_int_option =
