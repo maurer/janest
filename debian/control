@@ -11,7 +11,7 @@ Build-Depends:
  camlp4,
  ocaml-findlib,
  libtype-conv-camlp4-dev,
- libbin-prot-camlp4-dev (>= 1.0.5-5),
+ libbin-prot-camlp4-dev (>= 1.2.10),
  libsexplib-camlp4-dev (>= 4.2.6-3),
  libres-ocaml-dev (>= 3.1.1),
  libounit-ocaml-dev
