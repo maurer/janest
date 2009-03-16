@@ -14,7 +14,7 @@ Build-Depends:
  libsexplib-camlp4-dev,
  libres-ocaml-dev,
  libounit-ocaml-dev
-Standards-Version: 3.7.3
+Standards-Version: 3.8.1
 Vcs-Browser: http://git.debian.org/?p=pkg-ocaml-maint/packages/janest-core.git
 Vcs-Git: git://git.debian.org/git/pkg-ocaml-maint/packages/janest-core.git
 Homepage: http://www.janestcapital.com/ocaml/
