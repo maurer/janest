@@ -216,9 +216,9 @@ let stable_dedup lst =
     match lst with
     | [] -> List.rev left
     | hd::tl ->
-        if Set.mem hd set
+        if Set.mem set hd
         then dedup_order tl left set
-        else dedup_order tl (hd::left) (Set.add hd set)
+        else dedup_order tl (hd::left) (Set.add set hd)
   in
   dedup_order lst [] Set.empty
 
@@ -336,18 +336,18 @@ let slice start stop a =
 
 (** [split_n n l] returns two lists, the first containing the first n elements of the
     list, the second containing the rest of the list *)
-let split_n n list = 
+let split_n t n = 
   let rec loop n list accum = 
     if n <= 0 then (accum,list)
     else match list with
       [] -> (accum,list)
     | hd::tl -> loop (n-1) tl (hd::accum)
   in
-  let (rev_first,second) = (loop n list []) in
+  let (rev_first,second) = (loop n t []) in
   (List.rev rev_first,second)
 
 (** [first_n n l] Returns the first [n] elements of list [l] *)
-let first_n n list = fst (split_n n list)
+let first_n t n = fst (split_n t n)
 
 let assoc_opt key list =
   try
@@ -406,3 +406,15 @@ let remove_assoc' t f =
 
   let remove_assoc
 *)
+
+let shuffle lst =
+  let arr = Array.of_list lst in
+  let len = Array.length arr in
+  Array.iteri (fun i tile ->
+    let ran = Random.int (len - i) in
+    arr.(i) <- arr.(ran + i);
+    arr.(ran + i) <- tile
+  ) arr;
+  Array.to_list arr
+;;
+

@@ -250,7 +250,7 @@ val reverse_pairs : ('a * 'b) list -> ('b * 'a) list
 (** [split_n n \[e1; ...; em\]] is [(\[e1; ...; en\], \[en+1; ...; em\])].
     If [n > m], [(\[e1; ...; em\], \[\])] is returned.  If [n <= 0],
     [(\[\], (\[e1; ...; em\])] is returned. *)
-val split_n : int -> 'a list -> ('a list * 'a list)
+val split_n : 'a list -> int -> ('a list * 'a list)
 
 (** [sub pos len l] is the [len]-element sublist of [l], starting at [pos]. *)
 val sub : 'a list -> pos:int -> len:int -> 'a list
@@ -260,7 +260,7 @@ val sub : 'a list -> pos:int -> len:int -> 'a list
 val slice : 'a list -> int -> int -> 'a list
 
 (** [first_n n l] is [fst (split_n n l)]. *)
-val first_n : int -> 'a list -> 'a list
+val first_n : 'a list -> int -> 'a list
 
 val concat : 'a list list -> 'a list
 (** Concatenate a list of lists.  The elements of the argument are all
@@ -286,6 +286,9 @@ val cartesian_product : 'a list -> 'b list -> ('a * 'b) list
 
 (* CR sweeks: I'm not sure about the argument order here. *)
 val to_string : ('a -> string) -> 'a t -> string
+
+(** [shuffle l] shuffles [l], using [Random.int] *)
+val shuffle : 'a t -> 'a t
 
 module Infix : sig
   val ( @ ) : 'a list -> 'a list -> 'a list

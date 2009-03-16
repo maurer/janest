@@ -354,10 +354,12 @@ module Date = struct
     val create : y:int -> m:Month.t -> d:int -> t
     val min_value : t
     val max_value : t
+    val bin_t : t Bin_prot.Type_class.t
+    val bin_reader_t : t Bin_prot.Type_class.reader
+    val bin_writer_t : t Bin_prot.Type_class.writer
   end = struct
     type t = { y: int; m: Month.t; d: int; } with bin_io
     type binable = t
-
     let min_value = { y =     0; m = Month.jan; d = 1; }
     let max_value = { y = 3_000; m = Month.jan; d = 1; }
 

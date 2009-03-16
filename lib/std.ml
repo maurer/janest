@@ -1,4 +1,4 @@
-(*pp cpp *)
+(*pp $SEXPLIB_CPP $ARCH_FLAGS *)
 
 include Std_internal
 

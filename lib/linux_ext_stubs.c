@@ -40,16 +40,40 @@ linux_sendfile_stub(value v_sock, value v_fd, value v_pos, value v_len)
 
 /**/
 
+enum option_type {
+  TYPE_BOOL = 0,
+  TYPE_INT = 1,
+  TYPE_LINGER = 2,
+  TYPE_TIMEVAL = 3,
+  TYPE_UNIX_ERROR = 4
+};
+
+extern value unix_getsockopt_aux(
+  char *name,
+  enum option_type ty, int level, int option,
+  value v_socket);
+extern value unix_setsockopt_aux(
+  char *name,
+  enum option_type ty, int level, int option,
+  value v_socket, value v_status);
+
+
 static int linux_tcpopt_bool[] = { TCP_CORK, TCP_NODELAY };
 
-CAMLprim value linux_gettcpopt_bool_stub(value sock, value option)
+CAMLprim value linux_gettcpopt_bool_stub(value v_socket, value v_option)
 {
-  return getsockopt_int(linux_tcpopt_bool, sock, SOL_TCP, option);
+  int option = linux_tcpopt_bool[Int_val(v_option)];
+  return
+    unix_getsockopt_aux("getsockopt", TYPE_BOOL, SOL_TCP, option, v_socket);
 }
 
-CAMLprim value linux_settcpopt_bool_stub(value sock, value option, value status)
+CAMLprim value linux_settcpopt_bool_stub(
+  value v_socket, value v_option, value v_status)
 {
-  return setsockopt_int(linux_tcpopt_bool, sock, SOL_TCP, option, status);
+  int option = linux_tcpopt_bool[Int_val(v_option)];
+  return
+    unix_setsockopt_aux(
+      "setsockopt", TYPE_BOOL, SOL_TCP, option, v_socket, v_status);
 }
 
 /**/
@@ -189,7 +213,7 @@ CAMLprim value linux_recv_fd_stub(value v_socket)
 }
 
 /**/
-#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > 0)
+#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > -1)
 CAMLprim value linux_clock_process_cputime_id_stub(value __unused v_unit)
 {
   return caml_copy_nativeint(CLOCK_PROCESS_CPUTIME_ID);

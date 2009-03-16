@@ -9,7 +9,6 @@ module type S = sig
   val bin_read_t : binable Read_ml.reader
   val bin_read_t_ : binable Unsafe_read_c.reader
   val bin_read_t__ : (int -> binable) Unsafe_read_c.reader
-  val bin_sw_arg_t : binable Map_to_safe.sw_arg
 end
 
 module type S1 = sig
@@ -21,7 +20,6 @@ module type S1 = sig
   val bin_read_t : ('a, 'a binable) Map_to_safe.reader1
   val bin_read_t_ : ('a, 'a binable) Unsafe_read_c.reader1
   val bin_read_t__ : ('a, int -> 'a binable) Unsafe_read_c.reader1
-  val bin_sw_arg_t : ('a, 'a binable) Map_to_safe.sw_arg1
 end
 
 module type S2 = sig
@@ -33,5 +31,4 @@ module type S2 = sig
   val bin_read_t : ('a, 'b, ('a, 'b) binable) Map_to_safe.reader2
   val bin_read_t_ : ('a, 'b, ('a, 'b) binable) Unsafe_read_c.reader2
   val bin_read_t__ : ('a, 'b, int -> ('a, 'b) binable) Unsafe_read_c.reader2
-  val bin_sw_arg_t : ('a, 'b, ('a, 'b) binable) Map_to_safe.sw_arg2
 end

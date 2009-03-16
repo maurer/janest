@@ -75,20 +75,21 @@ let bal l v r =
 
     (* Insertion of one element *)
 
-let rec add x = function
-    Empty -> Node(Empty, x, Empty, 1)
-  | Node(l, v, r, _) as t ->
+let rec add t x =
+  match t with
+  | Empty -> Node(Empty, x, Empty, 1)
+  | Node(l, v, r, _) ->
       let c = Pervasives.compare x v in
       if c = 0 then t else
-        if c < 0 then bal (add x l) v r else bal l v (add x r)
+        if c < 0 then bal (add l x) v r else bal l v (add r x)
 
     (* Same as create and bal, but no assumptions are made on the
        relative heights of l and r. *)
 
 let rec join l v r =
   match (l, r) with
-    (Empty, _) -> add v r
-  | (_, Empty) -> add v l
+    (Empty, _) -> add r v
+  | (_, Empty) -> add l v
   | (Node(ll, lv, lr, lh), Node(rl, rv, rr, rh)) ->
       if lh > rh + 2 then bal ll lv (join lr v r) else
         if rh > lh + 2 then bal (join l v rl) rv rr else
@@ -148,16 +149,17 @@ let concat t1 t2 =
        - present is false if s contains no element equal to x,
        or true if s contains an element equal to x. *)
 
-let rec split x = function
-    Empty ->
+let rec split t x =
+  match t with
+  | Empty ->
       (Empty, false, Empty)
   | Node(l, v, r, _) ->
       let c = Pervasives.compare x v in
       if c = 0 then (l, true, r)
       else if c < 0 then
-        let (ll, pres, rl) = split x l in (ll, pres, join rl v r)
+        let (ll, pres, rl) = split l x in (ll, pres, join rl v r)
       else
-        let (lr, pres, rr) = split x r in (join l v lr, pres, rr)
+        let (lr, pres, rr) = split r x in (join l v lr, pres, rr)
 
     (* Implementation of the set operations *)
 
@@ -165,33 +167,35 @@ let empty = Empty
 
 let is_empty = function Empty -> true | _ -> false
 
-let rec mem x = function
-    Empty -> false
+let rec mem t x =
+  match t with
+  | Empty -> false
   | Node(l, v, r, _) ->
       let c = Pervasives.compare x v in
-      c = 0 || mem x (if c < 0 then l else r)
+      c = 0 || mem (if c < 0 then l else r) x
 
 let singleton x = Node(Empty, x, Empty, 1)
 
-let rec remove x = function
+let rec remove t x =
+  match t with
     Empty -> Empty
   | Node(l, v, r, _) ->
       let c = Pervasives.compare x v in
       if c = 0 then merge l r else
-        if c < 0 then bal (remove x l) v r else bal l v (remove x r)
+        if c < 0 then bal (remove l x) v r else bal l v (remove r x)
 
 let rec union s1 s2 =
   match (s1, s2) with
   | Empty, t | t, Empty -> t
   | (Node(l1, v1, r1, h1), Node(l2, v2, r2, h2)) ->
       if h1 >= h2 then
-        if h2 = 1 then add v2 s1 else begin
-          let (l2, _, r2) = split v1 s2 in
+        if h2 = 1 then add s1 v2 else begin
+          let (l2, _, r2) = split s2 v1 in
           join (union l1 l2) v1 (union r1 r2)
         end
       else
-        if h1 = 1 then add v1 s2 else begin
-          let (l1, _, r1) = split v2 s1 in
+        if h1 = 1 then add s2 v1 else begin
+          let (l1, _, r1) = split s1 v2 in
           join (union l1 l2) v2 (union r1 r2)
         end
 
@@ -199,7 +203,7 @@ let rec inter s1 s2 =
   match (s1, s2) with
   | Empty, _ | _, Empty -> Empty
   | (Node(l1, v1, r1, _), t2) ->
-      match split v1 t2 with
+      match split t2 v1 with
         (l2, false, r2) ->
           concat (inter l1 l2) (inter r1 r2)
       | (l2, true, r2) ->
@@ -210,7 +214,7 @@ let rec diff s1 s2 =
     (Empty, _) -> Empty
   | (t1, Empty) -> t1
   | (Node(l1, v1, r1, _), t2) ->
-      match split v1 t2 with
+      match split t2 v1 with
         (l2, false, r2) ->
           join (diff l1 l2) v1 (diff r1 r2)
       | (l2, true, r2) ->
@@ -276,7 +280,7 @@ let filter ~f:p s =
   let rec filt accu = function
     | Empty -> accu
     | Node(l, v, r, _) ->
-        filt (filt (if p v then add v accu else accu) l) r in
+        filt (filt (if p v then add accu v else accu) l) r in
   filt Empty s
 
 let filter_map ~f:p s =
@@ -285,15 +289,19 @@ let filter_map ~f:p s =
     | Node(l, v, r, _) ->
         filt (filt (match p v with
 		      None -> accu 
-		    | Some v -> add v accu) l) r 
+		    | Some v -> add accu v) l) r 
   in
   filt Empty s
+
+let filter_opt t =
+  filter_map ~f:(fun x -> x) t
+;;
 
 let partition ~f:p s =
   let rec part (t, f as accu) = function
     | Empty -> accu
     | Node(l, v, r, _) ->
-        part (part (if p v then (add v t, f) else (t, add v f)) l) r in
+        part (part (if p v then (add t v, f) else (t, add f v)) l) r in
   part (Empty, Empty) s
 
 let rec cardinal = function
@@ -310,12 +318,10 @@ let elements s =
 let choose = min_elt
 let choose_exn = min_elt_exn
 
-let add_set_el set el = add el set
-
-let of_list lst = List.fold_left ~f:add_set_el ~init:empty lst
+let of_list lst = List.fold_left ~f:add ~init:empty lst
 let to_list s = elements s
 
-let of_array ar = Array.fold_left ~f:add_set_el ~init:empty ar
+let of_array ar = Array.fold_left ~f:add ~init:empty ar
 let to_array s = Array.of_list (elements s)
 
 (* The following implementation of to_array is faster, and as far as
@@ -340,8 +346,8 @@ let to_array = function
       res
 *)
 
-let map ~f s =
-  fold s ~init:empty ~f:(fun x s -> add (f x) s)
+let map ~f t =
+  fold t ~init:empty ~f:(fun x t -> add t (f x))
 
 let rec subsets s n =
   let size = cardinal s in
@@ -350,11 +356,11 @@ let rec subsets s n =
   else if size = n then singleton s
   else
     let elt = choose_exn s in
-    let remain = remove elt s in
+    let remain = remove s elt in
     let subsets_without_elt = subsets remain n in
     let subsets_with_elt =
       let temp = subsets remain (n-1) in
-      map temp ~f:(fun x->add elt x)
+      map temp ~f:(fun t ->add t elt)
     in
     union subsets_without_elt subsets_with_elt
 
@@ -375,9 +381,9 @@ let t_of_sexp el_of_sexp = function
   | Type.List lst ->
       let coll set el_sexp = 
         let el = el_of_sexp el_sexp in
-        if mem el set then 
+        if mem set el then 
           Conv.of_sexp_error "Set.t_of_sexp: duplicate element in set" el_sexp
-        else add el set 
+        else add set el
       in
       List.fold_left ~f:coll ~init:empty lst
   | sexp -> Conv.of_sexp_error "Set.t_of_sexp: list needed" sexp

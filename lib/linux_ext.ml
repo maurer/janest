@@ -1,4 +1,8 @@
-(*pp cpp *)
+(*pp $(pwd)/pp.sh *)
+(*
+#include <unistd.h>
+end-pp-include*)
+
 open Unix
 open Unix_ext
 
@@ -92,7 +96,7 @@ let sendmsg_nonblocking_no_sigpipe sock ?count iovecs =
 
 
 (**)
-#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > 0)
+#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > -1)
 external get_clock_process_cputime_id :
   unit -> clock = "linux_clock_process_cputime_id_stub"
 let clock_process_cputime_id = get_clock_process_cputime_id ()

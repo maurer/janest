@@ -1,6 +1,9 @@
-(*pp cpp *)
-(** Interface to additional Unix-system calls *)
+(*pp $(pwd)/pp.sh *)
+(*
+#include <unistd.h>
+end-pp-include*)
 
+(** Interface to additional Unix-system calls *)
 open Unix
 
 (** {2 Utility functions} *)
@@ -148,7 +151,7 @@ external pselect :
 
 (** {2 Clock functions} *)
 
-#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > 0)
+#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > -1)
 (** Type of Unix-clocks *)
 type clock
 
