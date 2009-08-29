@@ -1,0 +1,28 @@
+From: Stephane Glondu <steph@glondu.net>
+Date: Sun, 30 Aug 2009 01:01:48 +0200
+Subject: [PATCH] Fix build on kfreebsd
+
+Signed-off-by: Stephane Glondu <steph@glondu.net>
+---
+ lib_test/Makefile |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/lib_test/Makefile b/lib_test/Makefile
+index 4f36640..caf6df5 100644
+--- a/lib_test/Makefile
++++ b/lib_test/Makefile
+@@ -7,9 +7,11 @@ export PACKS = bigarray oUnit type-conv sexplib bin_prot res
+ export THREADS = yes
+ ANNOTATE = true
+ 
+-ifeq ($(shell uname -s), Darwin)
++KERNEL = $(shell uname -s)
++
++ifeq ($(KERNEL), Darwin)
+   export DARWIN = true
+-else
++else ifeq ($(KERNEL), Linux)
+   LINUX_EXT_TEST = linux_ext_test.ml
+   export LINUX = true
+ endif
+-- 
