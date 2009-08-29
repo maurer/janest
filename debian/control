@@ -1,5 +1,5 @@
 Source: janest-core
-Section: devel
+Section: ocaml
 Priority: optional
 Maintainer: Debian OCaml Maintainers <debian-ocaml-maint@lists.debian.org>
 Uploaders: Stefano Zacchiroli <zack@debian.org>
@@ -16,13 +16,12 @@ Build-Depends:
  libsexplib-camlp4-dev (>= 4.2.6-3),
  libres-ocaml-dev (>= 3.1.1),
  libounit-ocaml-dev
-Standards-Version: 3.8.1
+Standards-Version: 3.8.3
 Vcs-Browser: http://git.debian.org/?p=pkg-ocaml-maint/packages/janest-core.git
 Vcs-Git: git://git.debian.org/git/pkg-ocaml-maint/packages/janest-core.git
 Homepage: http://www.janestcapital.com/ocaml/
 
 Package: libcore-ocaml-dev
-Section: libdevel
 Architecture: any
 Depends:
  ocaml-nox-${F:OCamlABI},
@@ -50,14 +49,13 @@ Description: Jane Street Capital's alternative standard library for OCaml
  your programs.
 
 Package: libcore-ocaml
-Section: libs
 Architecture: any
 Depends:
  ocaml-nox-${F:OCamlABI},
  ocaml-findlib,
  ${shlibs:Depends},
  ${misc:Depends}
-Description: Jane Street Capital's alternative standard library for OCaml
+Description: Jane Street Capital's core library for OCaml (runtime)
  Core is Jane Street Capital's alternative standard library for OCaml.
  .
  Core does a number of things: it provides tail recursive versions of
