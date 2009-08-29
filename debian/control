@@ -6,6 +6,7 @@ Uploaders: Stefano Zacchiroli <zack@debian.org>
 Build-Depends:
  cdbs,
  debhelper (>= 7),
+ quilt,
  ocaml-nox,
  dh-ocaml,
  camlp4,

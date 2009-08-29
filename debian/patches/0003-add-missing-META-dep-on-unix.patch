@@ -1,0 +1,25 @@
+From: Stefano Zacchiroli <zack@upsilon.cc>
+Date: Sat, 3 May 2008 22:57:15 +0200
+Subject: [PATCH] add missing META dep on unix
+
+Signed-off-by: Stefano Zacchiroli <zack@upsilon.cc>
+Signed-off-by: Stephane Glondu <steph@glondu.net>
+---
+ lib/META |    4 +---
+ 1 files changed, 1 insertions(+), 3 deletions(-)
+
+diff --git a/lib/META b/lib/META
+index ad5c489..e086f7d 100644
+--- a/lib/META
++++ b/lib/META
+@@ -1,8 +1,6 @@
+ name = "core"
+ version = "0.5.2"
+ description = "Core - Jane Street Capital's standard library overlay"
+-
+-requires = "bigarray, res, sexplib, bin_prot, threads"
+-
++requires = "bigarray, res, sexplib, bin_prot, unix, threads"
+ archive(byte) = "core.cma"
+ archive(native) = "core.cmxa"
+-- 

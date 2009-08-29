@@ -1,0 +1,48 @@
+From: Stefano Zacchiroli <zack@upsilon.cc>
+Date: Sat, 3 May 2008 22:39:34 +0200
+Subject: [PATCH] extra targets to enable compilation of byte code only
+
+Signed-off-by: Stefano Zacchiroli <zack@upsilon.cc>
+Signed-off-by: Stephane Glondu <steph@glondu.net>
+---
+ Makefile     |    9 +++++++++
+ lib/Makefile |    1 +
+ 2 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 4c67b1a..3d0ecd8 100644
+--- a/Makefile
++++ b/Makefile
+@@ -3,10 +3,19 @@ all:
+ 	@cd lib && $(MAKE)
+ 	@cd lib_test && make
+ 
++.PHONY: byte
++byte:
++	@cd lib && $(MAKE) byte
++	@cd lib_test && make
++
+ .PHONY:	install
+ install:
+ 	@cd lib && $(MAKE) $@
+ 
++.PHONY:	libinstall-byte-code
++libinstall-byte-code:
++	@cd lib && $(MAKE) $@
++
+ .PHONY:	uninstall
+ uninstall:
+ 	@cd lib && $(MAKE) $@
+diff --git a/lib/Makefile b/lib/Makefile
+index 1edd843..b15a5ad 100644
+--- a/lib/Makefile
++++ b/lib/Makefile
+@@ -168,6 +168,7 @@ THREADS = yes
+ ANNOTATE = true
+ 
+ all: byte-code-library native-code-library
++byte: byte-code-library
+ 
+ LIBINSTALL_FILES = \
+   core.cmi core.cma core.cmxa core.a libcore_stubs.a dllcore_stubs.so
+-- 

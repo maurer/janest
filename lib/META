@@ -1,6 +1,8 @@
 name = "core"
 version = "0.5.2"
 description = "Core - Jane Street Capital's standard library overlay"
-requires = "bigarray, res, sexplib, bin_prot, unix, threads"
+
+requires = "bigarray, res, sexplib, bin_prot, threads"
+
 archive(byte) = "core.cma"
 archive(native) = "core.cmxa"
