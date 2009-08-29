@@ -1,6 +1,17 @@
 janest-core (0.5.2-2) UNRELEASED; urgency=low
 
+  [ Stefano Zacchiroli ]
   * debian/copyright: point to versionful common license file
+
+  [ Stéphane Glondu ]
+  * Use quilt to patch upstream:
+    - add README.source
+    - add quilt to Build-Depends
+    - transform existing direct changes to upstream into patches
+  * Add 0004-Fix-build-on-kfreebsd.patch
+  * debian/control:
+    - move to section ocaml
+    - update Standards-Version to 3.8.3
 
  -- Stefano Zacchiroli <zack@debian.org>  Mon, 16 Mar 2009 16:50:12 +0100
 
