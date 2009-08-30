@@ -2,7 +2,9 @@ Source: janest-core
 Section: ocaml
 Priority: optional
 Maintainer: Debian OCaml Maintainers <debian-ocaml-maint@lists.debian.org>
-Uploaders: Stefano Zacchiroli <zack@debian.org>
+Uploaders:
+ Stefano Zacchiroli <zack@debian.org>,
+ Stéphane Glondu <glondu@debian.org>
 Build-Depends:
  cdbs,
  debhelper (>= 7),

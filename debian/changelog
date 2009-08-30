@@ -1,4 +1,4 @@
-janest-core (0.5.3-1) UNRELEASED; urgency=low
+janest-core (0.5.3-1) unstable; urgency=low
 
   [ Stéphane Glondu ]
   * New Upstream Version
@@ -10,11 +10,12 @@ janest-core (0.5.3-1) UNRELEASED; urgency=low
   * debian/control:
     - move to section ocaml
     - update Standards-Version to 3.8.3
+  * Add myself to Uploaders
 
   [ Stefano Zacchiroli ]
   * debian/copyright: point to versionful common license file
 
- -- Stéphane Glondu <glondu@debian.org>  Sun, 30 Aug 2009 02:55:40 +0200
+ -- Stéphane Glondu <glondu@debian.org>  Sun, 30 Aug 2009 03:56:48 +0200
 
 janest-core (0.5.2-1) unstable; urgency=low
 
