@@ -1,5 +1,6 @@
-(*pp $SEXPLIB_CPP $ARCH_FLAGS *)
-
+(*pp $(pwd)/pp.sh *)
+(*
+end-pp-include*)
 include Std_internal
 
 type date = Time.Date.t = private { y : int; m : Month.t; d : int; }
@@ -10,7 +11,7 @@ module Bag = Bag
 module Bigbuffer = Bigbuffer
 module Bigstring = Bigstring
 module Binable = Binable
-#ifdef __linux__
+#if defined(__linux__)
 module Linux_ext = Linux_ext
 #else
 #warning "linux_ext not supported, not being included in Core.Std"

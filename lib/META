@@ -1,5 +1,5 @@
 name = "core"
-version = "0.5.2"
+version = "0.5.3"
 description = "Core - Jane Street Capital's standard library overlay"
 
 requires = "bigarray, res, sexplib, bin_prot, threads"

@@ -566,7 +566,6 @@ CAMLprim value unix_abort(value v_unit)
 }
 
 /* User id, group id management */
-#ifdef _BSD_SOURCE
 CAMLprim value unix_initgroups(value v_user, value v_group)
 {
   CAMLparam1(v_user);
@@ -586,6 +585,3 @@ CAMLprim value unix_initgroups(value v_user, value v_group)
     if (ret == -1) uerror("initgroups", Nothing);
   CAMLreturn(Val_unit);
 }
-#else
-#warning "Not BSD source; unix_initgroups undefined"
-#endif
