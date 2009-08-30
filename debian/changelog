@@ -1,9 +1,7 @@
-janest-core (0.5.2-2) UNRELEASED; urgency=low
-
-  [ Stefano Zacchiroli ]
-  * debian/copyright: point to versionful common license file
+janest-core (0.5.3-1) UNRELEASED; urgency=low
 
   [ Stéphane Glondu ]
+  * New Upstream Version
   * Use quilt to patch upstream:
     - add README.source
     - add quilt to Build-Depends
@@ -13,7 +11,10 @@ janest-core (0.5.2-2) UNRELEASED; urgency=low
     - move to section ocaml
     - update Standards-Version to 3.8.3
 
- -- Stefano Zacchiroli <zack@debian.org>  Mon, 16 Mar 2009 16:50:12 +0100
+  [ Stefano Zacchiroli ]
+  * debian/copyright: point to versionful common license file
+
+ -- Stéphane Glondu <glondu@debian.org>  Sun, 30 Aug 2009 02:55:40 +0200
 
 janest-core (0.5.2-1) unstable; urgency=low
 
