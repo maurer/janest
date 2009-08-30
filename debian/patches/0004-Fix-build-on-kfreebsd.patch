@@ -4,11 +4,31 @@ Subject: [PATCH] Fix build on kfreebsd
 
 Signed-off-by: Stephane Glondu <steph@glondu.net>
 ---
+ lib/Makefile      |    6 +++++-
  lib_test/Makefile |    6 ++++--
- 1 files changed, 4 insertions(+), 2 deletions(-)
+ 2 files changed, 9 insertions(+), 3 deletions(-)
 
+diff --git a/lib/Makefile b/lib/Makefile
+index b15a5ad..5630ea9 100644
+--- a/lib/Makefile
++++ b/lib/Makefile
+@@ -1,9 +1,13 @@
+ OCAMLMAKEFILE = ../OCamlMakefile
+ 
+-ifeq ($(shell uname -s), Linux)
++SYSTEM := $(shell uname -s)
++
++ifeq ($(SYSTEM), Linux)
+   LINUX_EXT_STUBS_C = linux_ext_stubs.c
+   LINUX_EXT_ML = linux_ext.ml
+ 	CLIBS = rt
++else if ($(SYSTEM), GNU/kFreeBSD)
++  CLIBS = rt
+ endif
+ 
+ SOURCES = \
 diff --git a/lib_test/Makefile b/lib_test/Makefile
-index 4f36640..caf6df5 100644
+index 4f36640..3191755 100644
 --- a/lib_test/Makefile
 +++ b/lib_test/Makefile
 @@ -7,9 +7,11 @@ export PACKS = bigarray oUnit type-conv sexplib bin_prot res
@@ -16,12 +36,12 @@ index 4f36640..caf6df5 100644
  ANNOTATE = true
  
 -ifeq ($(shell uname -s), Darwin)
-+KERNEL = $(shell uname -s)
++SYSTEM = $(shell uname -s)
 +
-+ifeq ($(KERNEL), Darwin)
++ifeq ($(SYSTEM), Darwin)
    export DARWIN = true
 -else
-+else ifeq ($(KERNEL), Linux)
++else ifeq ($(SYSTEM), Linux)
    LINUX_EXT_TEST = linux_ext_test.ml
    export LINUX = true
  endif
