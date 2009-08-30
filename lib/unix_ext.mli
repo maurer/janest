@@ -94,11 +94,13 @@ external sync : unit -> unit = "unix_sync"
 
 external fsync : file_descr -> unit = "unix_fsync"
 (** Synchronize the kernel buffers of a given file descriptor with disk. *)
-
+#if defined(_POSIX_SYNCHRONIZED_IO) && (_POSIX_SYNCHRONIZED_IO > -1)
 external fdatasync : file_descr -> unit = "unix_fdatasync"
 (** Synchronize the kernel buffers of a given file descriptor with disk,
     but do not necessarily write file attributes. *)
-
+#else
+#warning "POSIX_SYNCHRONIZED_IO not supported, fdatasync not available"
+#endif
 external readdir_ino : dir_handle -> string * int = "unix_readdir_ino_stub"
 (** [readdir_ino dh] return the next entry in a directory (([(filename,
     inode)]).  @raise End_of_file when the end of the directory has been
@@ -269,13 +271,16 @@ external sysconf : sysconf -> int64 = "unix_sysconf"
 
 
 (** {2 POSIX thread functions} *)
-
+#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS > 0)
 external mutex_timedlock : Mutex.t -> float -> bool = "unix_mutex_timedlock"
 (** [mutex_timedlock mtx timeout] tries to lock [mtx], but returns once
     [timeout] expires.  Note that [timeout] is an absolute Unix-time
     to prevent time-related race conditions.  @return [false] iff
     the timer expired without the lock being acquired.  See [man
     pthread_mutex_timedlock] for details. *)
+#else
+#warning "POSIX TMO not present; mutex_timedlock undefined"
+#endif
 
 external condition_timedwait :
   Condition.t -> Mutex.t -> float -> bool = "unix_condition_timedwait"

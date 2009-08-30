@@ -7,7 +7,11 @@ open Unix
 
 external sync : unit -> unit = "unix_sync"
 external fsync : file_descr -> unit = "unix_fsync"
+#if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
 external fdatasync : file_descr -> unit = "unix_fdatasync"
+#else
+#warning "_POSIX_SYNCHRONIZED_IO not net or <= 0, fdatasync not available"
+#endif
 external dirfd : dir_handle -> file_descr = "unix_dirfd"
 external readdir_ino : dir_handle -> string * int = "unix_readdir_ino_stub"
 external unix_error : int -> string -> string -> 'a = "unix_error_stub"
@@ -186,8 +190,11 @@ external sysconf : sysconf -> int64 = "unix_sysconf"
 
 
 (* POSIX thread functions *)
-
+#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS > 0)
 external mutex_timedlock : Mutex.t -> float -> bool = "unix_mutex_timedlock"
+#else
+#warning "POSIX TMO not present; mutex_timedlock undefined"
+#endif
 
 external condition_timedwait :
   Condition.t -> Mutex.t -> float -> bool = "unix_condition_timedwait"
