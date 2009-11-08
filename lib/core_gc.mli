@@ -15,8 +15,9 @@
 
 (** Memory management control and statistics; finalised values. *)
 
-type stat =
-  { minor_words : float;
+module Stat : sig
+  type t = {
+    minor_words : float;
     (** Number of words allocated in the minor heap since
        the program was started.  This number is accurate in
        byte-code programs, but only an approximation in programs
@@ -70,7 +71,13 @@ type stat =
 
     top_heap_words : int;
     (** Maximum size reached by the major heap, in words. *)
-}
+  }
+  include Binable.S with type binable = t
+  include Sexpable.S with type sexpable = t
+end
+
+type stat = Stat.t
+
 (** The memory management counters are returned in a [stat] record.
 
    The total amount of memory allocated by the program since it was started
@@ -79,8 +86,9 @@ type stat =
    the number of bytes.
 *)
 
-type control =
-  { mutable minor_heap_size : int;
+module Control : sig
+  type t = {
+    mutable minor_heap_size : int;
     (** The size (in words) of the minor heap.  Changing
        this parameter will trigger a minor collection.  Default: 32k. *)
 
@@ -125,15 +133,25 @@ type control =
     mutable stack_limit : int;
     (** The maximum size of the stack (in words).  This is only
        relevant to the byte-code runtime, as the native code runtime
-       uses the operating system's stack.  Default: 256k. *) 
-    
+       uses the operating system's stack.  Default: 256k. *)
     mutable allocation_policy : int;
-    (** TODO: updated this *)
-}
-(** The GC parameters are given as a [control] record.  Note that
-    these parameters can also be initialised by setting the
-    OCAMLRUNPARAM environment variable.  See the documentation of
-    ocamlrun. *)
+    (** The policy used for allocating in the heap.  Possible
+        values are 0 and 1.  0 is the next-fit policy, which is
+        quite fast but can result in fragmentation.  1 is the
+        first-fit policy, which can be slower in some cases but
+        can be better for programs with fragmentation problems.
+        Default: 0. *)
+  }
+  include Binable.S with type binable = t
+  include Sexpable.S with type sexpable = t
+end
+
+type control = Control.t
+
+(** The GC parameters are given as a [control] record.
+    Note that these parameters can also be initialised
+    by setting the OCAMLRUNPARAM environment variable.
+    See the documentation of ocamlrun. *)
 
 external stat : unit -> stat = "caml_gc_stat"
 (** Return the current values of the memory management counters in a
@@ -155,12 +173,13 @@ external get : unit -> control = "caml_gc_get"
 
 external set : control -> unit = "caml_gc_set"
 (** [set r] changes the GC parameters according to the [control] record [r].
-   The normal usage is: [Gc.set { (Gc.get()) with Gc.verbose = 0x00d }] *)
+    The normal usage is:
+      [Gc.set { (Gc.get()) with Gc.Control.verbose = 0x00d }] *)
 
 external minor : unit -> unit = "caml_gc_minor"
 (** Trigger a minor collection. *)
 
-external major_slice : int -> int = "caml_gc_major_slice";;
+external major_slice : int -> int = "caml_gc_major_slice"
 (** Do a minor collection and a slice of major collection.  The argument
     is the size of the slice, 0 to use the automatically-computed
     slice size.  In all cases, the result is the computed slice size. *)
@@ -185,6 +204,7 @@ val allocated_bytes : unit -> float
 (** Return the total number of bytes allocated since the program was
    started.  It is returned as a [float] to avoid overflow problems
    with [int] on 32-bit machines. *)
+
 
 val finalise : ('a -> unit) -> 'a -> unit
 (** [finalise f v] registers [f] as a finalisation function for [v].
@@ -242,6 +262,8 @@ val finalise : ('a -> unit) -> 'a -> unit
    heap-allocated and non-constant except when the length argument is [0].
 *)
 
+
+
 val finalise_release : unit -> unit;;
 (** A finalisation function may call [finalise_release] to tell the
     GC that it can launch the next finalisation function without waiting
@@ -261,3 +283,14 @@ val create_alarm : (unit -> unit) -> alarm
 val delete_alarm : alarm -> unit
 (** [delete_alarm a] will stop the calls to the function associated
    to [a].  Calling [delete_alarm a] again has no effect. *)
+
+val tune : ?logger:(string -> unit) ->
+  ?minor_heap_size:int ->
+  ?major_heap_increment:int ->
+  ?space_overhead:int ->
+  ?verbose:int ->
+  ?max_overhead:int ->
+  ?stack_limit:int ->
+  ?allocation_policy:int -> unit -> unit
+(** Adjust the specified GC parameters. *)
+

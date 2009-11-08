@@ -1,6 +1,5 @@
 open Core.Std
 
-(* CR: rdouglass - figure out why String.Escaping exists in Jane.Std but not Core.Std *)
 (* let escape = String.Escaping.escape ~escapeworthy:['%';'^'] ~escape_char:'\\'
 let escape_gen = String.Escaping.escape_gen ~escapeworthy_map:['%','%';'^','^'] ~escape_char:'\\'
 

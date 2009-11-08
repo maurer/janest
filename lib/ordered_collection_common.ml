@@ -1,15 +1,14 @@
 let invalid_argf = Core_printf.invalid_argf
 
-let normalize ~length_fun =
-  fun t i -> if i < 0 then (length_fun t) + i else i
+let normalize ~length_fun t i =
+  if i < 0 then length_fun t + i else i
 
-let slice ~length_fun ~sub_fun =
-  let normalize = normalize ~length_fun in
-  fun t start stop ->
-    let stop = if stop = 0 then length_fun t else stop in
-    let pos = normalize t start in
-    let len = (normalize t stop) - pos in
-    sub_fun t ~pos ~len
+
+let slice ~length_fun ~sub_fun t start stop =
+  let stop = if stop = 0 then length_fun t else stop in
+  let pos = normalize ~length_fun t start in
+  let len = (normalize ~length_fun t stop) - pos in
+  sub_fun t ~pos ~len
 
 let get_pos_len_exn ?(pos=0) ?len ~length =
   if pos < 0 then
@@ -36,3 +35,4 @@ let get_pos_len_exn ?(pos=0) ?len ~length =
 let get_pos_len ?pos ?len ~length =
   try Result.Ok (get_pos_len_exn ?pos ?len ~length)
   with Invalid_argument s -> Result.Error s
+

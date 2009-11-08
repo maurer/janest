@@ -5,11 +5,7 @@
       [pop] and [top] return an [option] rather than raise [Empty].
       [iter] takes a labeled argument.
       [push] takes the stack argument first.
-
-   Core_stack uses  same implementation as the OCaml library.  It is a
-   reimplementation rather than a wrapper to enable direct implementations
-   of some functions (e.g. fold) that cannot be easily implemented given
-   the functions provided by OCaml's Stack module.
+      [length] is O(1)
 *)
 open Sexplib
 
@@ -55,6 +51,7 @@ val clear : 'a t -> unit
 val copy : 'a t -> 'a t
 
 (** [until_empty t f] repeatedly pops an element [v] off of [t] and runs [f v]
-    until [t] becomes empty.  It is fine if [f] adds more elements to [t].
+    until [t] becomes empty.  It is fine if [f] adds more elements to [t], in which case
+    the most-recently-added element will be processed first.
 *)
 val until_empty : 'a t -> ('a -> unit) -> unit

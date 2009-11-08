@@ -2,122 +2,142 @@
 (** Basic types and definitions required throughout the system. *)
 
 exception Bug of string
-exception Finally of exn * exn
+
 (** Raised when finalization after an exception failed, too.
     The first exception argument is the one raised by the initial
     function, the second exception the one raised by the finalizer. *)
+exception Finally of exn * exn
+
 exception Validation_error of string list
+
 exception Unimplemented of string
 
+(* The sexps of this type only have 12 digits after the decimal. Therefore they're less
+   annoying to look at than the sexps of floats. *)
 type decimal = float with bin_io, sexp
-type 'a set = 'a PSet.t
-type ('a,'b) map = ('a,'b) PMap.t
 
 type ('a,'b) result = ('a,'b) Result.t = Ok of 'a | Error of 'b
 type 'a bound = Incl of 'a | Excl of 'a | Unbounded
+
+
+
 type passfail = Pass | Fail of string
 
-(** handy types for marking things read-only and read-write *)
 
+(** handy types for marking things read-only and read-write *)
 type immutable with sexp, bin_io
 type read_only with sexp, bin_io
 type read_write with sexp, bin_io
 type write_only with sexp, bin_io
 
-(** {6 Integer mod and div} *)
-
-(** mod and div operators that have the right behavior on negative numbers,
-    that is, [x % y] always returns a positive int between 0 and y-1.
-    Invariant: [if r = a % b && q = a /% b then q * b + r = a] *)
-val ( % ) : int -> int -> int
-val ( /% ) : int -> int -> int
+(** [never_returns] should be used as the return type of functions that don't return and
+ * might block forever, rather than ['a] or [_].  This forces callers of such functions to
+ * have a call to [never_returns] at the call site, which makes it clear to readers what's
+ * going on. We do not intend to use this type for functions such as [failwithf] that
+ * always raise an exception. *)
+type never_returns
+val never_returns : never_returns -> _
 
 (** {6 Error handling} *)
+(** See exn.mli *)
 val protectx : f:('a -> 'b) -> 'a -> finally:('a -> unit) -> 'b
-(** A common idiom used in functional languages, that executes [f] and
-    afterwards executes [finally], whether [f] throws an exception or
-    not.*)
-
 val protect : f:(unit -> 'a) -> finally:(unit -> unit) -> 'a
+
 
 val critical_section : Mutex.t -> f:(unit -> 'a) -> 'a
 
 (** {6 Input Output}*)
 
-val read_wrap : ?binary:bool -> f:(in_channel -> 'a) -> string -> 'a
+
+
+
 (** [read_wrap ~f fname] executes [~f] on the open input channel from
     [fname], and closes it afterwards.  Opens channel in binary mode iff
     [binary] is true. *)
+val read_wrap : ?binary:bool -> f:(in_channel -> 'a) -> string -> 'a
 
-val write_wrap : ?binary:bool -> f:(out_channel -> 'a) -> string -> 'a
+
 (** [write_wrap ~f fname] executes [~f] on the open output channel from
     [fname], and closes it afterwards.  Opens channel in binary mode iff
     [binary] is true. *)
+val write_wrap : ?binary:bool -> f:(out_channel -> 'a) -> string -> 'a
 
-val input_lines : ?fix_win_eol:bool -> in_channel -> string list
+
+(** [write_lines fname lines] writes each string in [lines] (plus a newlnie) to file
+    [fname]. *)
+val write_lines : string -> string list -> unit
+
+
 (** Completely reads an input channel and returns the results as a list of
     strings. Each line in one string. *)
+val input_lines : ?fix_win_eol:bool -> in_channel -> string list
 
+
+(** [read_lines filename] Opens filename, reads all lines, and closes the file. *)
+val read_lines : string -> string list
 
 (**{6 triple handling }*)
-(*
-  CRv2 tvaroquaux these are now redundant with the functions in tupple3
-*)
-val fst3 : ('a*_*_) -> 'a
-(** Returns the first element of a triple. *)
+val fst3 : ('a * _ * _) -> 'a
+val snd3 : (_ * 'a * _) -> 'a
+val trd3 : (_ * _ * 'a) -> 'a
 
-val snd3 : (_*'a*_) -> 'a
-(** Returns the second element of a triple. *)
+(**{6 space safe double and triple handling }*)
 
-val trd3 : (_*_*'a) -> 'a
-(** Returns the third element of a triple. *)
+
+val ss_fst : ('a, _) Space_safe_tuple.T2.t -> 'a
+val ss_snd : ( _,'a) Space_safe_tuple.T2.t -> 'a
+val ss_fst3 : ('a, _, _) Space_safe_tuple.T3.t -> 'a
+val ss_snd3 : ( _,'a, _) Space_safe_tuple.T3.t -> 'a
+val ss_trd3 : ( _, _,'a) Space_safe_tuple.T3.t -> 'a
 
 (**
    {6 Option handling}
 *)
-(*
-  CRv2 tvaroquaux: These functions are rebinds from the option module and they
-  should be considered as deprecated
-*)
-val opt_map : ('a -> 'b) -> 'a option -> 'b option
+
 val may : ('a -> unit) -> 'a option -> unit
 val uw : 'a option -> 'a
-val uw_default : 'a -> 'a option -> 'a
 
-val forever : (unit -> unit) -> exn
-(** [forever f] runs [f ()] until it throws an exception and returns the exception.
-    This function is useful for read_line loops, etc. *)
+(** {6 Functions from function.ml} *)
+val (|!) : 'a -> ('a -> 'b) -> 'b
+val ident : 'a -> 'a
+val const : 'a -> _ -> 'a
 
-
-(** The identity function*)
-external ident : 'a -> 'a = "%identity"
-
-(*CRv2 tvaroquaux
-  external ascending : 'a -> 'a -> int = "%compare "
-*)
-val ascending : 'a -> 'a -> int
 (** A comparator that returns results in ascending order. *)
-val descending : 'a -> 'a -> int
+external ascending : 'a -> 'a -> int = "%compare"
 (** A comparator that returns results in descending order. *)
-
-val ( |! ) : 'a -> ( 'a -> 'b) -> 'b
-(** A 'pipe' operator. *)
-
-val ( ||> ) : ('a -> 'b) -> ('b -> 'c) -> 'a -> 'c
-(** Reverse function composition. *)
-
-val (<||) : ('b -> 'c) -> ('a -> 'b) -> 'a -> 'c
-(** Function composition *)
+val descending : 'a -> 'a -> int
 
 val (^/) : string -> string -> string
 (** same as [Filename.concat]*)
 
-val failwithf :  ('a, unit, string, unit -> 'b) format4 -> 'a
-val invalid_argf :  ('a, unit, string, unit -> 'b) format4 -> 'a
+val failwithf :  ('a, unit, string, unit -> _) format4 -> 'a
+val invalid_argf :  ('a, unit, string, unit -> _) format4 -> 'a
+val exitf : ('a, unit, string, unit -> _) format4 -> 'a
 
-val register_pretty_printer : string -> unit
+(** toplevel binding for polymorphic equality (=).  Named for easy use in
+    labelled arguments (one can do [f x y ~equal]).
+*)
+val equal : 'a -> 'a -> bool
 
-(* DEPRECATED: Use [Exn] module. *)
-val register_exn_converter : (exn -> string option) -> unit
-val exn_to_string : exn -> string
-val sexp_of_exn : exn -> Sexplib.Sexp.t
+(* We disable [==] and [!=] and replace them with the longer and more mnemonic
+   [phys_equal] because they too easily lead to mistakes (for example
+   they don't even work right on Int64 or Float).  One can usually use the
+   [equal] function for a specific type, or use (=) or (<>) for built in types
+   like char, int, float, ...
+*)
+val phys_equal : 'a -> 'a -> bool
+val (==) : 'a -> 'a -> [ `Consider_using_phys_equal ]
+val (!=) : 'a -> 'a -> [ `Consider_using_phys_equal ]
+
+
+val kprintf : _ -> [ `Please_use_ksprintf ]
+
+
+
+(* override Pervasives methods that need LargeFile support *)
+val seek_out : out_channel -> int64 -> unit
+val pos_out : out_channel -> int64
+val out_channel_length : out_channel -> int64
+val seek_in : in_channel -> int64 -> unit
+val pos_in : in_channel -> int64
+val in_channel_length : in_channel -> int64

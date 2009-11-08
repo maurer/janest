@@ -1,52 +1,22 @@
+(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
+TYPE_CONV_PATH "Core.Core_hashtbl"
+
 open Sexplib
 open Sexplib.Conv
+open Core_hashtbl_intf
+module List = Core_list
+module type HashedType = HashedType
+module type S = S
+
 module H = MoreLabels.Hashtbl
-
-module type HashedType = sig 
-  include H.HashedType
-  val sexp_of_t : t -> Sexp.t
-  val t_of_sexp : Sexp.t -> t
-end
-
-module type S = sig
-  type key
-  and 'a t
-  val create : int -> 'a t
-  val clear : 'a t -> unit
-  val copy : 'a t -> 'a t
-  val add : 'a t -> key:key -> data:'a -> unit
-  val remove : 'a t -> key -> unit
-  val find_all : 'a t -> key -> 'a list
-  val replace : 'a t -> key:key -> data:'a -> unit
-  val mem : 'a t -> key -> bool
-  val iter : f:(key:key -> data:'a -> unit) -> 'a t -> unit
-  val fold : f:(key:key -> data:'a -> 'b -> 'b) -> 'a t -> init:'b -> 'b
-  val length : 'a t -> int
-  val find_default : 'a t -> key -> default:(unit -> 'a) -> 'a
-  val find : 'a t -> key -> 'a option
-  val find_exn : 'a t -> key -> 'a
-  val iter_vals : f:('a -> unit) -> 'a t -> unit
-  val of_alist : (key * 'a) list -> 'a t
-  val to_alist : 'a t -> (key * 'a) list
-  val keys : 'a t -> key list
-  val data : 'a t -> 'a list
-  val sexp_of_t : ('a -> Sexplib.Sexp.t) -> 'a t -> Sexplib.Sexp.t
-  val t_of_sexp : (Sexplib.Sexp.t -> 'a) -> Sexplib.Sexp.t -> 'a t
-  module Infix :
-    sig
-      val ( |> ) : 'a t -> key -> 'a
-      val ( |?> ) : 'a t -> key -> 'a option
-      val ( <| ) : 'a t -> key * 'a -> unit
-    end
-end
 
 type ('a, 'b) t = ('a, 'b) H.t
 
-let add = H.add
+let shadow_add = H.add  
 let clear = H.clear
 let copy = H.copy
 let create = H.create
-let find_all = H.find_all
+let shadow_find = H.find_all
 let fold = H.fold
 let iter = H.iter
 let length = H.length
@@ -62,117 +32,284 @@ let hash_param = H.hash_param
    the standard hashtable (MoreLabels.Hashtbl) and specialized hashtables
    created by Hashtbl.Make.
 *)
-module Extend (T : 
+module Extend (T :
   sig
-    type ('a, 'b) t 
-    type 'a key
+    include Types
 
     val add : ('a, 'b) t -> key:('a key) -> data:'b -> unit
+    val replace : ('a, 'b) t -> key:('a key) -> data:'b -> unit
     val create : int -> ('a, 'b) t
     val find : ('a, 'b) t -> 'a key -> 'b
+    val find_all : ('a, 'b) t -> 'a key -> 'b list
     val fold :
       f:(key:('a key) -> data:'b -> 'c -> 'c) ->
       ('a, 'b) t -> init:'c -> 'c
     val iter : f:(key:('a key) -> data:'b -> unit) -> ('a, 'b) t -> unit
-  end): sig
-  val find_default : ('a, 'b) T.t -> 'a T.key -> default:(unit -> 'b) -> 'b 
-  val find : ('a, 'b) T.t -> 'a T.key -> 'b option
-  val find_exn : ('a, 'b) T.t -> 'a T.key -> 'b
-  val iter_vals : f:('b -> unit) -> ('a, 'b) T.t -> unit
-  val of_alist : ('a T.key * 'b) list -> ('a, 'b) T.t
-  val to_alist : ('a, 'b) T.t -> ('a T.key * 'b) list
-  val sexp_of_t : ('a T.key -> Sexp.t) -> ('b -> Sexp.t) -> ('a, 'b) T.t -> Sexp.t
-  val t_of_sexp : (Sexp.t -> 'a T.key) -> (Sexp.t -> 'b) -> Sexp.t -> ('a, 'b) T.t
-  val keys : ('a, 'b) T.t -> 'a T.key list
-  val data : ('a, 'b) T.t -> 'b list
-  module Infix : sig
-    val ( |> ) : ('a, 'b) T.t -> 'a T.key -> 'b
-    val ( |?> ) : ('a, 'b) T.t -> 'a T.key -> 'b option
-    val ( <| ) : ('a, 'b) T.t -> 'a T.key * 'b -> unit
-  end
-end = struct
-  
+    val length : ('a, 'b) t -> int
+    val mem : ('a, 'b) t -> 'a key -> bool
+    val remove : ('a, 'b) t -> 'a key -> unit
+  end) = struct
+
+  module T = T
+
+  let shadow_add = T.add
+  let shadow_find = T.find_all
+
   let find_exn t id = T.find t id
-  
+
+  let iter t ~f = T.iter ~f t
+
+  let fold t ~init ~f = T.fold ~f t ~init
+
+  let mapi t ~f =
+    let bindings =
+      T.fold t ~init:[] ~f:(fun ~key ~data bindings -> (key, f ~key ~data) :: bindings)
+    in
+    let new_t = T.create 1 in
+    List.iter bindings ~f:(fun (key,data) -> shadow_add new_t ~key ~data);
+    new_t
+
+  let map t ~f = mapi t ~f:(fun ~key:_ ~data -> f data)
+
+  let filter_mapi t ~f =
+    let bindings =
+      T.fold t ~init:[] ~f:(fun ~key ~data bindings -> match f ~key ~data with
+        | Some new_data -> (key,new_data) :: bindings
+        | None -> bindings)
+    in
+    let new_t = T.create 1 in
+    List.iter bindings ~f:(fun (key,data) -> shadow_add new_t ~key ~data);
+    new_t
+
+  let filter_map t ~f = filter_mapi t ~f:(fun ~key:_ ~data -> f data)
+
   let find t id =
-    try 
+    try
       let res = T.find t id in
       Some res
     with Not_found -> None
-      
+
+  let remove_all t key =
+    for i = 1 to List.length (T.find_all t key) do
+      T.remove t key
+    done
+
   let find_default t id ~default =
     match find t id with
     | Some x -> x
     | None ->
         let default = default () in
-        T.add t ~key:id ~data:default;
+        T.replace t ~key:id ~data:default;
         default
 
-  let iter_vals ~f t = T.iter t ~f:(fun ~key:_ ~data -> f data)          
+  let iter_vals t ~f = T.iter t ~f:(fun ~key:_ ~data -> f data)
 
   let of_alist lst =
-    let len = List.length lst in
-    let t = T.create len in
-    ListLabels.iter lst ~f:(fun (k, v) -> T.add t ~key:k ~data:v);
+    let t = T.create (List.length lst) in
+    let res = ref (`Ok t) in
+    List.iter lst ~f:(fun (k, v) ->
+      match T.mem t k with
+      | true -> res := `Duplicate_key k
+      | false -> T.replace t ~key:k ~data:v
+    );
+    !res
+
+  let of_alist_exn lst =
+    match of_alist lst with
+    | `Ok v -> v
+    | `Duplicate_key _k -> failwith "Hashtbl.of_alist_exn: duplicate key"
+
+  let of_alist_shadow lst =
+    let t = T.create (List.length lst) in
+    let default () = [] in
+    List.iter lst ~f:(fun (key, datum) ->
+      let existing_data = find_default t key ~default in
+      let data = datum :: existing_data in
+      T.replace t ~key ~data);
     t
 
   let to_alist htbl =
-    T.fold ~f:(fun ~key ~data list -> (key,data)::list) ~init:[] htbl
-      
-  let keys htbl =
-    T.fold ~f:(fun ~key ~data:_ list -> key::list) ~init:[] htbl
+    T.fold ~f:(fun ~key ~data list -> (key, data)::list) ~init:[] htbl
 
+  
+  let to_alist_shadow htbl =
+    let visited = T.create (T.length htbl) in
+    T.fold ~f:(fun ~key ~data:_ acc ->
+      if T.mem visited key then acc
+      else (
+        shadow_add visited ~key ~data:();
+        (key, T.find_all htbl key) :: acc)) ~init:[] htbl
+
+  let keys t =
+    let visited = T.create (T.length t) in
+    T.fold t ~init:[] ~f:(fun ~key ~data:_ acc -> begin
+      if T.mem visited key then acc
+      else begin
+        T.replace visited ~key ~data:();
+        key :: acc
+      end
+    end)
+      
   let data htbl =
     T.fold ~f:(fun ~key:_ ~data list -> data::list) ~init:[] htbl
 
-  let sexp_of_t sexp_of_k sexp_of_d t = 
-    sexp_of_list (sexp_of_pair sexp_of_k sexp_of_d) (to_alist t)
+  let add_to_groups groups ~get_key ~get_data ~combine ~rows =
+    List.iter rows ~f:(fun row ->
+      let key = get_key row in
+      let data = get_data row in
+      let data =
+        match find groups key with
+        | None -> data
+        | Some old -> combine old data
+      in
+      T.replace groups ~key ~data)
+  ;;
 
-  let t_of_sexp k_of_sexp d_of_sexp sexp = 
-    let t = T.create 0 in
-    let sexps =  match sexp with
-      | Sexp.Atom _ -> Conv.of_sexp_error
-          "Hashtbl.t_of_sexp: found Atom where list was expected" sexp
-      | Sexp.List l -> l
-    in
-    ListLabels.iter sexps ~f:(fun kd_sexp -> 
-      let (k,d) = pair_of_sexp k_of_sexp d_of_sexp kd_sexp in
-      if find t k = None then 
-        T.add t ~key:k ~data:d
-      else 
-        Conv.of_sexp_error "Hashtbl: duplicate key" kd_sexp
-    );
+  let group ?(size=1000) ~get_key ~get_data ~combine rows =
+    let res = T.create size in
+    add_to_groups res ~get_key ~get_data ~combine ~rows;
+    res
+  ;;
+
+  let create_mapped ~get_key ~get_data rows =
+    let res = T.create (List.length rows) in
+    List.iter rows ~f:(fun r ->
+      let key = get_key r in
+      let data = get_data r in
+      
+      shadow_add res ~key ~data);
+    res
+  ;;
+
+  let create_with_key ~get_key rows =
+    create_mapped ~get_key ~get_data:(fun x -> x) rows
+  ;;
+
+  let merge ~f t1 t2 =
+    let bound = max (T.length t1) (T.length t2) in
+    let t = T.create bound in
+    let unique_keys = T.create bound in
+    let record_key ~key ~data:_ = T.replace unique_keys ~key ~data:() in
+    iter t1 ~f:record_key;
+    iter t2 ~f:record_key;
+    iter unique_keys ~f:(fun ~key ~data:_ ->
+      match f ~key (find t1 key) (find t2 key) with
+      | Some data -> shadow_add t ~key ~data
+      | None -> ());
     t
 
-  module Infix = struct
-    (** {!Hashtbl.find_exn} *)
-    let ( |> ) htbl key = T.find htbl key
-    (** {!Hashtbl.find} *)
-    let ( |?> ) htbl key = find htbl key
-    (** {!Hashtbl.add} *)
-    let ( <| ) htbl (key,data) = T.add htbl ~key ~data
-  end
+  let filteri_inplace t ~f =
+    let to_remove =
+      T.fold t ~init:[] ~f:(fun ~key ~data ac ->
+        if f key data then ac else key :: ac)
+    in
+    List.iter to_remove ~f:(fun key -> T.remove t key);
+  ;;
 
+  let filter_inplace t ~f =
+    filteri_inplace t ~f:(fun _ data -> f data)
+  ;;
+
+  let sexp_of_t sexp_of_k sexp_of_d t =
+    let coll ~key:k ~data:v acc = Sexp.List [sexp_of_k k; sexp_of_d v] :: acc in
+    Sexp.List (T.fold ~f:coll t ~init:[])
+
+  
+  
+  let t_of_sexp k_of_sexp d_of_sexp sexp =
+    match sexp with
+    | Sexp.List sexps ->
+        let t = T.create 0 in
+        List.iter sexps ~f:(function
+            (* Bindings in the S-expression list constituting
+               the hashtable have the following semantics: bindings
+               later in the list shadow bindings earlier in the list.
+               Thus inserting them in the order of appearance is the
+               correct behavior.  The [sexp_of_t] function writes out
+               the S-expressions in the appropriate order (shadowed
+               bindings first). *)
+          | Sexp.List [k_sexp; v_sexp] ->
+              shadow_add t ~key:(k_of_sexp k_sexp) ~data:(d_of_sexp v_sexp)
+          | Sexp.List _ | Sexp.Atom _ ->
+              Conv.of_sexp_error "Hashtbl.t_of_sexp: tuple list needed" sexp);
+        t
+    | Sexp.Atom _ ->
+        Conv.of_sexp_error
+          "Hashtbl.t_of_sexp: found atom where list was expected" sexp
+
+  
+  exception Not_equal
+  let equal t t' equal =
+    let half t t' =
+      T.iter t ~f:(fun ~key ~data ->
+        match find t' key with
+        | None -> raise Not_equal
+        | Some data' -> if not (equal data data') then raise Not_equal)
+    in
+    try
+      half t t';
+      half t' t;
+      true
+    with Not_equal -> false
+  ;;
 end
 
 include Extend (struct
   include H
+
   type 'a key = 'a
 end)
 
-module Make (Ht : HashedType) = struct
-  module M = H.Make (Ht)
+type ('a, 'b) sexpable = ('a, 'b) t
+
+module Make (Key : HashedType) = struct
+  module M = H.Make (Key)
   include M
 
   include Extend (struct
     type ('a, 'b) t = 'b M.t
-    type 'a key = Ht.t
+    type 'a key = Key.t
     let create = M.create
     let find = M.find
+    let find_all = M.find_all
     let add = M.add
+    let replace = M.replace
     let fold = M.fold
     let iter = M.iter
+    let length = M.length
+    let mem = M.mem
+    let remove = M.remove
   end)
-  let sexp_of_t f x = sexp_of_t Ht.sexp_of_t f x
-  let t_of_sexp f x = t_of_sexp Ht.t_of_sexp f x
+  type 'a sexpable = 'a t
+  let sexp_of_t f x = sexp_of_t Key.sexp_of_t f x
+  let t_of_sexp f x = t_of_sexp Key.t_of_sexp f x
+end
+
+module Make_binable (Key : sig
+  include HashedType
+  include Binable.S with type binable = t
+end) = struct
+  include Make (Key)
+
+  type 'a dummy = 'a t
+
+  module Make_iterable_binable1_spec = struct
+    type 'a t = 'a dummy
+    type 'a el = Key.t * 'a with bin_io
+    type 'a acc = 'a el list
+    let module_name = Some "Core.Core_hashtbl"
+    let length = length
+    let iter ~f t = iter ~f:(fun ~key ~data -> f (key, data)) t
+    let init _n = []
+    let insert acc (key, data) _i = (key, data) :: acc
+    let finish acc =
+      let t = create (List.length acc) in
+      let rec loop = function
+        | [] -> t
+        | (key, data) :: rest -> shadow_add t ~key ~data; loop rest
+      in
+      loop acc
+  end
+
+  include Bin_prot.Utils.Make_iterable_binable1 (Make_iterable_binable1_spec)
 end

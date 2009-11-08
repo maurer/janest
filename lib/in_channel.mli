@@ -24,6 +24,7 @@ val input_binary_int : t -> int option
 val input_value : t -> 'a option
 val input_all : t -> string
 
+
 (** [input_line ?fix_win_eol t] reads a line from [t] and returns it, without
     the newline ("\n") character at the end, and, if [fix_win_eol] the trailing
     "\r\n" is dropped.
@@ -31,8 +32,8 @@ val input_all : t -> string
 val input_line : ?fix_win_eol:bool -> t -> string option
 
 (** [fold_lines ?fix_win_eol t ~init ~f] folds over the lines read from [t]
-    using [input_line].
-*)
+    using [input_line].  Lines are provided to [f] in the order they are
+    found in the file. *)
 val fold_lines :
   ?fix_win_eol:bool -> t -> init:'a -> f:('a -> string -> 'a) -> 'a
 
@@ -45,8 +46,8 @@ val input_lines : ?fix_win_eol:bool -> t -> string list
     [input_line]. *)
 val iter_lines : ?fix_win_eol:bool -> t -> f:(string -> unit) -> unit
 
-val seek : t -> int -> unit
-val pos : t -> int
-val length : t -> int
+val seek : t -> int64 -> unit
+val pos : t -> int64
+val length : t -> int64
 
 val set_binary_mode : t -> bool -> unit

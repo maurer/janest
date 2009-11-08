@@ -1,4 +1,4 @@
-(** The raison d'être for Space_safe_tuple<N> is that OCaml doesn't properly
+(** The raison d'etre for Space_safe_tuple<N> is that OCaml doesn't properly
     free variables matched in tuple patterns.  If one writes
 
       let (a, b) = ... in

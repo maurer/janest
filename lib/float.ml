@@ -6,10 +6,19 @@ module Sexp = Sexplib.Sexp
 module String = Core_string
 open Core_printf
 
-type t = float with sexp, bin_io
+module T = struct
+  type t = float with sexp, bin_io
 
-type sexpable = t
-type binable = t
+  type binable = t
+  type sexpable = t
+
+  
+  let compare (x : t) y = compare x y
+  let equal (x : t) y = x = y
+  let hash (x : t) = Hashtbl.hash_param 1 1 x
+end
+
+include T
 
 type floatable = t
 let to_float x = x
@@ -22,81 +31,52 @@ let to_string = string_of_float
 let max_value = infinity
 let min_value = neg_infinity
 let zero = 0.
-let epsilon = 0.000001
 
 let is_nan x = (x : t) <> x
+include Float_robust_compare
 
-type robustly_comparable = t
-let ( >=. ) x y = x >= y -. epsilon
-let ( <=. ) x y = y >=. x
-let ( =. ) x y = x >=. y && y >=. x
-let ( >. ) x y = x > y +. epsilon
-let ( <. ) x y = y >. x
-let ( <>. ) x y = not (x =. y)
-
-include Hashable.Make (struct
-  type t = float
-  let equal (x : t) y = x = y
-  let hash (x : t) = Hashtbl.hash_param 1 1 x
-  let sexp_of_t = sexp_of_t
-  let t_of_sexp = t_of_sexp
-end)
+include Hashable.Make (T)
 
 let of_int = Pervasives.float_of_int
 
 let to_int f =
   match classify_float f with
   | FP_normal | FP_subnormal | FP_zero -> int_of_float f
-  | FP_infinite | FP_nan -> failwith "int_of_float on nan or inf"
+  | FP_infinite | FP_nan -> failwith "Float.to_int on nan or inf"
 
-let to_string_hum f =
-  let s_rev s = (* In place reversal *)
-    if s = "" then
-      ""
-    else
-      let n = (String.length s - 1)in
-      for i = 0 to n/2 do
-        let c1 = s.[i]
-        and c2 = s.[n-i] in
-        s.[i] <- c2;
-        s.[n-i] <- c1
-      done;
-      s
-  in
-  let put_ s =
-    let l = String.length s in
-    let nu = (*The number of underscores to insert *)
-      (l/3) + (if (l mod 3) > 1 then 0 else -1)
-    in
-    if nu <= 0 then
-      s
-    else begin
-      let l' = (l+nu) in
-      let res = String.create l' in
-      for i = 1 to nu do
-        String.blit ~src:s ~src_pos:(l-3*i) ~dst_pos:(l'+1-4*i) ~len:3 ~dst:res;
-        res.[l'-4*i] <- '_'
-      done;
-      let len =
-        match (l mod 3) with
-        | (0|1) as i -> i+3
-        | i -> i
-      in
-      String.blit ~src:s ~src_pos:0 ~dst_pos:0 ~len:len ~dst:res;
-      res
-    end
-  in
-  let s = string_of_float f in
-  match String.split2 s '.' with
-  | Some (ip,fp) -> (put_ ip) ^ "." ^ (s_rev (put_ (s_rev fp)))
-  | None -> s (*nan,infinity...*)
+let of_int64 i = Int64.to_float i
+
+let to_int64 f =
+  match classify_float f with
+  | FP_normal | FP_subnormal | FP_zero -> Int64.of_float f
+  | FP_infinite | FP_nan -> failwith "Float.to_int64 on nan or inf"
 
 let truncate f =
   match classify_float f with
   | FP_normal | FP_subnormal | FP_zero -> truncate f
   | FP_infinite | FP_nan -> failwith "truncate on nan or inf"
 
-let round x = int_of_float (floor (x +. 0.5));;
+(* max_int/min_int are architecture dependent, e.g. +/- 2^30, +/- 2^62 if 32-bit, 64-bit
+   (respectively) while float is IEEE standard for double (52 significant bits).  We want
+   to avoid losing information as we round from float to int, so we "cap" what we will
+   round based on the less of int and float significant digits.
+*)
+let float_round_lb = max (float_of_int min_int) (-1.0 *. 2.0 ** 52.0)
+let float_round_ub = min (float_of_int max_int) (2.0 ** 52.0)
+let int_round_lb = int_of_float float_round_lb
+let int_round_ub = int_of_float float_round_ub
+
+let round x = floor (x +. 0.5)
+
+let iround x =
+  if float_round_lb < x && x < float_round_ub then
+    Some (int_of_float (round x))
+  else None (* float too big to round reliably to int *)
+
+let iround_exn x =
+  match iround x with
+  | None -> failwithf "Float.iround_exn: argument out of bounds (%f)" x ()
+  | Some n -> n
 
 let is_inf x = (classify_float x = FP_infinite);;
 
@@ -122,6 +102,11 @@ let min (x : t) y =
 let max (x : t) y =
   if is_nan x || is_nan y then nan
   else if x > y then x else y
+
+let modf = modf
+let floor = floor
+let ceil = ceil
+let mod_float = mod_float
 
 module Class = struct
   type t =
@@ -154,6 +139,7 @@ let classify t =
 let compare (x : t) y = compare x y
 let ascending = compare
 let descending x y = compare y x
+
 let ( >= ) (x : t) y = x >= y
 let ( <= ) (x : t) y = x <= y
 let ( = ) (x : t) y = x = y
@@ -166,15 +152,14 @@ let (-) t t' = t -. t'
 let ( * ) t t' = t *. t'
 let (/) t t' = t /. t'
 
-let min_normal_pos =
-  lazy
-    (let rec loop x =
-      let x' = x / 3. in
-      match classify x' with
-      | C.Subnormal -> x
-      | C.Normal -> loop x'
-      | C.Infinite | C.Nan | C.Zero ->
-          failwithf "min_normal_pos bug %f %f" x x' ()
-      in
-     loop 1.)
-;;
+module Set = Core_set.Make (T)
+module Map = Core_map.Make (T)
+
+module Sign = struct
+  type t = Neg | Zero | Pos
+end
+
+let sign t =
+  if t >. 0. then Sign.Pos
+  else if t <. 0. then Sign.Neg
+  else Sign.Zero

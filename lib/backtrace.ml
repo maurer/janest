@@ -1,1 +1,4 @@
-external print : unit -> unit = "print_exception_backtrace_stub" "noalloc"
+let print () =
+  Printexc.print_backtrace Pervasives.stderr;
+  flush Pervasives.stderr
+;;

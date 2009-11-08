@@ -1,3 +1,5 @@
+
+
 #include <stdlib.h>
 #include <time.h>
 #include <caml/mlvalues.h>
@@ -9,6 +11,9 @@
 
 #include "ocaml_utils.h"
 
+/* The code for crc_octets and the constants involded is taken from 
+   RFC2440 http://sunsite.icm.edu.pl/gnupg/rfc2440-6.html
+ */
 #define CRC24_INIT 0xb704ceL
 #define CRC24_POLY 0x1864cfbL
 
@@ -35,21 +40,6 @@ value caml_crc_octets(value v_str)
   long crc = crc_octets(octets, len);
   return Val_int(crc);
 }
-
-value caml_get_tzname(value __unused v_unit)
-{
-  CAMLparam0();
-  CAMLlocal2(v_tzname0, v_tzname1);
-  value v_res;
-  tzset();
-  v_tzname0 = caml_copy_string(tzname[0]);
-  v_tzname1 = caml_copy_string(tzname[1]);
-  v_res = caml_alloc_small(2, 0);
-  Field(v_res, 0) = v_tzname0;
-  Field(v_res, 1) = v_tzname1;
-  CAMLreturn(v_res);
-}
-
 
 /* Copyright abandoned; this code is in the public domain. */
 /* Provided to GNUnet by peter@horizon.com */
@@ -130,7 +120,11 @@ static value alloc_tm(struct tm *tm)
   return res;
 }
 
-CAMLprim value jane_timegm (value tm_val) {
+/*
+ * converts a tm structure to a float with the assumption that that the structure
+ * defines a gmtime
+*/
+CAMLprim value core_timegm (value tm_val) {
   struct tm tm;
   time_t res;
 
@@ -142,9 +136,8 @@ CAMLprim value jane_timegm (value tm_val) {
   tm.tm_year = Int_val(Field(tm_val,5));
   tm.tm_wday = Int_val(Field(tm_val,6));
   tm.tm_yday = Int_val(Field(tm_val,7));
-  /* CR sweeks: Why don't we get tm_isdst from tm_val? */
-  tm.tm_isdst = -1;
-  tm.tm_gmtoff = -1;
+  tm.tm_isdst = 0;  /*  tm_isdst is not used by timegm (which sets it to 0) */
+  tm.tm_gmtoff = 0; /* tm_gmtoff is not used by timegm (which sets it to 0) */
   tm.tm_zone = NULL;
 
   res = timegm(&tm);
@@ -155,7 +148,7 @@ CAMLprim value jane_timegm (value tm_val) {
 }
 
 #define WRAP_TIME_FUN(NAME) \
-  CAMLprim value jane_##NAME (value t)         \
+  CAMLprim value core_##NAME (value t)         \
   { \
     time_t clock; \
     struct tm *tm; \

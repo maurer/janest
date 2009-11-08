@@ -1,0 +1,8 @@
+name = "core_extended"
+version = "0.6.0"
+description = "Core_extended - Extra, less tested things for Jane Street Capital's standard library overlay"
+
+requires = "bigarray, res, sexplib, bin_prot, threads, fieldslib, core, pcre"
+
+archive(byte) = "core_extended.cma"
+archive(native) = "core_extended.cmxa"

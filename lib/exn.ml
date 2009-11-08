@@ -1,29 +1,46 @@
-open Sexplib.Sexp
-open Printf
+(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
+TYPE_CONV_PATH "Core.Exn"
 
-type t = exn
+module Sexp = Sexplib.Sexp
+module Conv = Sexplib.Conv
 
-exception Finally of t * t
+let sexp_of_exn = Conv.sexp_of_exn
 
-let converters = ref []
-  
-let rec to_string e =
-  match e with
-  | Finally (e1,e2) -> sprintf "Finally (%s,%s)" (to_string e1) (to_string e2)
-  | _ ->
-      let rec loop = function
-        | [] -> Printexc.to_string e
-        | cvt :: tl ->
-            match cvt e with
-            | None -> loop tl
-            | Some s -> s
-      in
-      loop !converters
-;;
+type t = exn with sexp_of
 
-let sexp_of_t e = Sexplib.Sexp.Atom (to_string e)
+exception Finally of t * t with sexp
+exception Reraised of string * t with sexp
 
-let register_converter f = converters := f :: !converters
+let reraise exc str =
+  raise (Reraised (str, exc))
+
+let reraisef exc format =
+  Printf.ksprintf (fun str () -> reraise exc str) format
+
+let () =
+  ignore (Conv.add_exn_converter (function
+    | Bin_prot.Common.Read_exc (exc, pos) ->
+        Some (Sexp.List [
+          Sexp.Atom "Bin_prot.Common.Read_exc";
+          sexp_of_exn exc;
+          Conv.sexp_of_int pos;
+        ])
+    | Bin_prot.Common.Read_error (err, pos) ->
+        let str_err = Bin_prot.Common.ReadError.to_string err in
+        Some (Sexp.List [
+          Sexp.Atom "Bin_prot.Common.Read_error";
+          Sexp.Atom str_err;
+          Conv.sexp_of_int pos;
+        ])
+    | Bin_prot.Unsafe_read_c.Error err ->
+        let str_err = Bin_prot.Common.ReadError.to_string err in
+        Some (Sexp.List [ Sexp.Atom "Bin_prot.Common.Read_error";
+                          Sexp.Atom str_err ])
+    | _ -> None))
+
+let to_string exc = Sexp.to_string_hum ~indent:2 (sexp_of_exn exc)
+
+let sexp_of_t = sexp_of_exn
 
 let protectx ~f x ~(finally : 'a -> unit) =
   let res =
@@ -34,47 +51,21 @@ let protectx ~f x ~(finally : 'a -> unit) =
   in
   finally x;
   res
-;;
 
-let protect = protectx ()
+let protect ~f ~finally = protectx ~f () ~finally
 
-let pp ppf t = Format.pp_print_string ppf (to_string t)
+let pp ppf t = Sexp.pp_hum ppf (sexp_of_exn t)
+
+let handle_uncaught ~exit:must_exit f =
+  try f ()
+  with exc ->
+    Format.eprintf "@[<2>Uncaught exception:@\n@\n@[%a@]@]@." pp exc;
+    if Printexc.backtrace_status () then Printexc.print_backtrace stderr;
+    if must_exit then exit 1
+
+let reraise_uncaught str func =
+  try func () with
+  | exn -> raise (Reraised (str, exn))
+
 
 let () = Pretty_printer.register "Core.Exn.pp"
-
-let () =
-  register_converter
-    (function
-      | Failure s -> Some (sprintf "Failure (%s)" s)
-      | Invalid_argument s -> Some (sprintf "Invalid_argument (%s)" s)
-      | Unix.Unix_error (err,s,t) ->
-          Some (sprintf "Unix_error(%s, %s, %s)" (Unix.error_message err) s t)
-      | Sexplib.Sexp.Parse_error pe ->
-          let ppos = pe.parse_state.parse_pos in
-          Some (
-            sprintf "\
-             ParseError { \
-               location = %S; \
-               err_msg = %S; \
-               text_line = %d; \
-               text_pos = %d; \
-               buf_pos = %d }"
-              pe.location
-              pe.err_msg
-              ppos.text_line
-              ppos.text_char
-              ppos.buf_pos)
-      | Sexplib.Conv.Of_sexp_error (reason,sexp) ->
-          Some (
-            sprintf "Of_sexp_error (\"%s\", %s)"
-              reason (Sexplib.Sexp.to_string_hum sexp))
-      | Bin_prot.Common.Read_error (err, pos) ->
-          let str_err = Bin_prot.Common.ReadError.to_string err in
-          let str = sprintf "Bin_prot.Common.ReadError: (%s, %d)" str_err pos in
-          Some str
-      | Bin_prot.Unsafe_read_c.Error err ->
-          let str_err = Bin_prot.Common.ReadError.to_string err in
-          let str = sprintf "Bin_prot.Unsafe_read_c.Error: %s" str_err in
-          Some str
-      | _ -> None)
-;;

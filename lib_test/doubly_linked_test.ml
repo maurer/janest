@@ -130,5 +130,24 @@ let test =
           is_elts [elt4];
           ignore (remove_first t);
           is_elts [];
-        )
+        );
+      "filter-inplace" >::
+        (fun () ->
+          let t = create () in
+          let r1 = ref 0 in
+          let r2 = ref 1 in
+          let r3 = ref 2 in
+          let i x = ignore (insert_first t x) in
+          i r1;
+          i r2;
+          i r3;
+          assert (length t = 3);
+          filter_inplace t ~f:(fun r -> not (phys_equal r r2));
+          assert (length t = 2);
+          let len =
+            fold t ~init:0 ~f:(fun acc x ->
+              assert (not (phys_equal x r2));
+              acc + 1)
+          in
+          assert (len = length t))
     ]

@@ -22,7 +22,7 @@ let inverses inc inc_inc pack unpack min max to_string () =
   f min 1;
   try_it max
 
-let test = 
+let test =
   "binary_packing" >:::
     [ "Binary_packing.test" >::
         (fun () ->
@@ -42,15 +42,35 @@ let test =
         inverses (+) 0 B.pack_signed_16 B.unpack_signed_16
         (-0x8000) 0x7FFF string_of_int;
       "[pack|unpack]_signed_32" >::
-        inverses (fun n -> Int32.add (Int32.of_int_exn n)) 1 B.pack_signed_32 B.unpack_signed_32
+        inverses (fun n -> Int32.(+) (Int32.of_int_exn n)) 1 B.pack_signed_32 B.unpack_signed_32
         (Int32.of_string "-0x80000000") (Int32.of_string "0x7FFFFFFF") Int32.to_string;
       "[pack|unpack]_signed_32_int" >::
-        if Sys.word_size = 8 then
+        if Sys.word_size = 64 then
           inverses (+) 1 B.pack_signed_32_int B.unpack_signed_32_int
             (int_of_string "-0x80000000") (int_of_string "0x7FFFFFFF") string_of_int
         else
           (fun () -> ());
-      
+      "[pack|unpack]_signed_64" >:: (
+        let buf = String.make 8 'a' in
+        let test name to_string p u ns () =
+          List.iter ns ~f:(fun n ->
+            p ~buf ~pos:0 n;
+            let n' = u ~buf ~pos:0 in
+            if n <> n' then
+              failwith (sprintf "%s = unpack_%s (pack_%s %s)"
+                           (to_string n') name name (to_string n)))
+        in
+        test "signed_64" Int64.to_string
+          B.pack_signed_64 B.unpack_signed_64
+          [-0x8000_0000_0000_0000L;
+           -0x789A_BCDE_F012_3456L;
+           -0xFFL; 
+           Int64.minus_one;
+           Int64.zero;
+           Int64.one;
+           0x789A_BCDE_F012_3456L;
+           0x7FFF_FFFF_FFFF_FFFFL]
+      );
       "[pack|unpack]_float" >::
         (fun () ->
           let test_float i =

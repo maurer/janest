@@ -1,13 +1,12 @@
+
 open Core.Std
 open OUnit;;
-open OUnit_utils
+open Quickcheck
 module S = String
 
 let str1 = "1234567890"
 
-let unescaped_test ~name s = name @? (S.unescaped (S.escaped s) = s)
-
-let test = 
+let test =
   "core_string" >:::
     [ "slice" >::
         (fun () ->
@@ -25,16 +24,31 @@ let test =
              (try ignore (S.nget str1 (-100)); false
               with Invalid_argument _ -> true | _ -> false)
         );
-      "split2_exn" >::
+      "lsplit2_exn" >::
         (fun () ->
-           "none" @? (try ignore (S.split2_exn str1 ' '); false
+           "none" @? (try ignore (S.lsplit2_exn str1 ~on:' '); false
                       with Not_found -> true | _ -> false);
-           "some" @? (S.split2_exn str1 '5' = ("1234","67890"));
+           "some1" @? (S.lsplit2_exn str1 ~on:'5' = ("1234","67890"));
+           "some2" @? (S.lsplit2_exn "123.456.789" ~on:'.' = ("123","456.789"));
         );
-      "split2" >::
+      "lsplit2" >::
         (fun () ->
-           "none" @? (S.split2 str1 ' ' = None);
-           "some" @? (S.split2 str1 '5' = Some ("1234","67890"));
+           "none" @? (S.lsplit2 str1 ~on:' ' = None);
+           "some1" @? (S.lsplit2 str1 ~on:'5' = Some ("1234","67890"));
+           "some2" @? (S.lsplit2 "123.456.789" ~on:'.' = Some ("123","456.789"));
+        );
+      "rsplit2_exn" >::
+        (fun () ->
+           "none" @? (try ignore (S.rsplit2_exn str1 ~on:' '); false
+                      with Not_found -> true | _ -> false);
+           "some1" @? (S.rsplit2_exn str1 ~on:'5' = ("1234","67890"));
+           "some2" @? (S.rsplit2_exn "123.456.789" ~on:'.' = ("123.456","789"));
+        );
+      "rsplit2" >::
+        (fun () ->
+           "none" @? (S.rsplit2 str1 ~on:' ' = None);
+           "some1" @? (S.rsplit2 str1 ~on:'5' = Some ("1234","67890"));
+           "some2" @? (S.rsplit2 "123.456.789" ~on:'.' = Some ("123.456","789"));
         );
       "strip" >::
         (fun () ->
@@ -62,13 +76,30 @@ let test =
            "1" @? (S.map ~f:(function 'a' -> 'b' | 'b' -> 'a' | x -> x)
                      "faboo" = "fbaoo");
         );
-      "split_on_char" >::
+      "split" >::
         (fun () ->
-           "empty" @? (S.split_on_char "" 'c' = [""]);
-           "1" @? (S.split_on_char "c" 'c' = ["";""]);
-           "end" @? (S.split_on_char "fooc" 'c' = ["foo";""]);
-           "begin" @? (S.split_on_char "cfoo" 'c' = ["";"foo"]);
-           "beginend" @? (S.split_on_char "cfooc" 'c' = ["";"foo";""]);
+           "empty" @? (S.split "" ~on:'c' = [""]);
+           "1" @? (S.split "c" ~on:'c' = ["";""]);
+           "end" @? (S.split "fooc" ~on:'c' = ["foo";""]);
+           "begin" @? (S.split "cfoo" ~on:'c' = ["";"foo"]);
+           "beginend" @? (S.split "cfooc" ~on:'c' = ["";"foo";""]);
+           "consecutive_delims" @? (S.split "bocci ball" ~on:'c'
+             = ["bo"; ""; "i ball"]);
+        );
+      "split_on_chars" >::
+        (fun () ->
+           "empty" @? (S.split_on_chars "" ~on:['c'] = [""]);
+           "1" @? (S.split_on_chars "c" ~on:['c'] = ["";""]);
+           "1-grouped" @? (S.split_on_chars "chr" ~on:['h';'c';'r'] = ["";"";"";""]);
+           "end" @? (S.split_on_chars "fooc" ~on:['c'] = ["foo";""]);
+           "end-grouped" @? (S.split_on_chars "fooc" ~on:['c';'o'] = ["f";"";"";""]);
+           "begin" @? (S.split_on_chars "cfoo" ~on:['c'] = ["";"foo"]);
+           "begin-grouped" @? (S.split_on_chars "cfoo" ~on:['c';'f'] = ["";"";"oo"]);
+           "consecutive_delims" @? (S.split_on_chars "bocci ball" ~on:['c']
+            = ["bo"; ""; "i ball"]);
+           "consecutive_delims-grouped" @?
+            (S.split_on_chars "bocci ball" ~on:['c';' ';'i'] =
+              ["bo"; ""; ""; ""; "ball"]);
         );
       "fold" >::
         (fun () ->
@@ -77,19 +108,23 @@ let test =
           "singleton" @? (to_list "H" = ['H']);
           "simple" @? (to_list "Hello" = ['o';'l';'l';'e';'H']);
         );
-      "check_suffix" >::
+      "is_suffix" >::
         (fun () ->
-          "empty" @? (S.check_suffix "" "a" = false);
-          "singleton" @? (S.check_suffix "H" "H" = true);
-          "simple" @? (S.check_suffix "Hello" "lo" = true);
-          "simplefalse" @? (S.check_suffix "HelloFoo" "lo" = false);
+          "empty" @? (S.is_suffix "" ~suffix:"a" = false);
+          "empty_empty_suffix" @? (S.is_suffix "" ~suffix:"" = true);
+          "simple_empty_suffix" @? (S.is_suffix "Foo" ~suffix:"" = true);
+          "singleton" @? (S.is_suffix "H" ~suffix:"H" = true);
+          "simple" @? (S.is_suffix "Hello" ~suffix:"lo" = true);
+          "simplefalse" @? (S.is_suffix "HelloFoo" ~suffix:"lo" = false);
         );
-      "check_prefix" >::
+      "is_prefix" >::
         (fun () ->
-          "empty" @? (S.check_prefix "" "a" = false);
-          "singleton" @? (S.check_prefix "H" "H" = true);
-          "simple" @? (S.check_prefix "Hello" "He" = true);
-          "simplefalse" @? (S.check_prefix "HelloFoo" "lo" = false);
+          "empty" @? (S.is_prefix "" ~prefix:"a" = false);
+          "empty_empty_prefix" @? (S.is_prefix "" ~prefix:"" = true);
+          "simple_empty_prefix" @? (S.is_prefix "Foo" ~prefix:"" = true);
+          "singleton" @? (S.is_prefix "H" ~prefix:"H" = true);
+          "simple" @? (S.is_prefix "Hello" ~prefix:"He" = true);
+          "simplefalse" @? (S.is_prefix "HelloFoo" ~prefix:"lo" = false);
         );
       "concat_array" >::
         (fun () ->
@@ -98,17 +133,105 @@ let test =
           "singleton" @? (S.concat_array ~sep:":" [|"Hello"|] = "Hello");
           "Words" @? (S.concat_array ~sep:" " [|"Hello"; "World"; "!"|] = "Hello World !");
         );
-      "unescaped" >::
+      "suffix" >::
         (fun () ->
-           unescaped_test ~name:"empty" "";
-           repeat 50 (unescaped_test ~name:"random") sg;
-           "hex" @? (S.unescaped "\\xff" = "\xff");
-           "strict illegal escape" @?
-             (try ignore (S.unescaped "\\a"); false
-              with Invalid_argument _ -> true);
-           "non strict" @? (S.unescaped ~strict:false "\\a" = "\\a");
-           "non-strict illegal escape" @?
-             (try ignore (S.unescaped ~strict:false "\\512"); false
-              with Invalid_argument _ -> true)
-        )
+          let base = "0123456789" in
+          let test len res =
+            (sprintf "%d" len) @? (S.suffix base len = res)
+          in
+          test 0 "";
+          test 1 "9";
+          test 2 "89";
+          test 10 base;
+          test 20 base;
+          assert_raises ~msg:"-1"
+            (Invalid_argument "suffix expecting nonnegative argument")
+            (fun () -> test (-1) "");
+        );
+      "prefix" >::
+        (fun () ->
+          let base = "0123456789" in
+          let test len res =
+            (sprintf "%d" len) @? (S.prefix base len = res)
+          in
+          test 0 "";
+          test 1 "0";
+          test 2 "01";
+          test 10 base;
+          test 20 base;
+          assert_raises ~msg:"-1"
+            (Invalid_argument "prefix expecting nonnegative argument")
+            (fun () -> test (-1) "");
+        );
+      "drop_suffix" >::
+        (fun () ->
+          let base = "0123456789" in
+          let test len res =
+            (sprintf "%d" len) @? (S.drop_suffix base len = res)
+          in
+          test 0 base;
+          test 1 "012345678";
+          test 2 "01234567";
+          test 10 "";
+          test 20 "";
+          assert_raises ~msg:"-1"
+            (Invalid_argument "drop_suffix expecting nonnegative argument")
+            (fun () -> test (-1) "");
+        );
+      "drop_prefix" >::
+        (fun () ->
+          let base = "0123456789" in
+          let test len res =
+            (sprintf "%d" len) @? (S.drop_prefix base len = res)
+          in
+          test 0 base;
+          test 1 "123456789";
+          test 2 "23456789";
+          test 10 "";
+          test 20 "";
+          assert_raises ~msg:"-1"
+            (Invalid_argument "drop_prefix expecting nonnegative argument")
+            (fun () -> test (-1) "");
+        );
+        "chop_suffix" >::
+          (fun () ->
+            "simple" @? (S.chop_suffix str1 ~suffix:"7890" = "123456");
+            "end" @? (S.chop_suffix str1 ~suffix:"" = "1234567890");
+            assert_raises
+              ~msg:"not a suffix"
+              (Invalid_argument "Core_string.chop_suffix \"1234567890\" \"abc\"")
+              (fun () -> S.chop_suffix str1 ~suffix:"abc")
+        );
+        "chop_prefix" >::
+          (fun () ->
+            "simple" @? (S.chop_prefix str1 ~prefix:"123" = "4567890");
+            "end" @? (S.chop_prefix str1 ~prefix:"" = "1234567890");
+            assert_raises
+              ~msg:"not a prefix"
+              (Invalid_argument "Core_string.chop_prefix \"1234567890\" \"abc\"")
+              (fun () -> S.chop_prefix str1 ~prefix:"abc")
+        );
+        "chop_suffix_opt" >::
+          (fun () ->
+            "simple" @? (S.chop_suffix_opt str1 ~suffix:"7890" = Some "123456");
+            "end" @? (S.chop_suffix_opt str1 ~suffix:"" = Some "1234567890");
+            "not a suffix" @? (S.chop_suffix_opt str1 ~suffix:"abc" = None)
+        );
+        "chop_prefix_opt" >::
+          (fun () ->
+            "simple" @? (S.chop_prefix_opt str1 ~prefix:"123" = Some "4567890");
+            "end" @? (S.chop_prefix_opt str1 ~prefix:"" = Some "1234567890");
+            "not a prefix" @? (S.chop_prefix_opt str1 ~prefix:"abc" = None)
+        );
+        "to_list_and_to_list_rev" >::
+          (fun () ->
+            let seaweed = "bladderwrack" in
+            assert (S.to_list seaweed
+                      = ['b';'l';'a';'d';'d';'e';'r';'w';'r';'a';'c';'k']);
+            assert (S.to_list_rev seaweed
+                      = ['k';'c';'a';'r';'w';'r';'e';'d';'d';'a';'l';'b']);
+            let empty = "" in
+            assert (S.to_list empty = []);
+            assert (S.to_list_rev empty = [])
+        );
     ]

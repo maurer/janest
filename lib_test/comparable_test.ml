@@ -17,7 +17,7 @@ end = struct
 
   let test =
     let foreach f = f one; f two; f three in
-    "all" >::
+    "comparable" >::
       (fun () ->
         foreach (fun a ->
           foreach (fun b ->
@@ -121,7 +121,7 @@ module Time =
 module Int32 =
   F (struct
     include Int32
-    let one = 1l
+    let one = Int32.one
     let two = 2l
     let three = 3l
   end)
@@ -129,7 +129,7 @@ module Int32 =
 module Int64 =
   F (struct
     include Int64
-    let one = 1L
+    let one = Int64.one
     let two = 2L
     let three = 3L
   end)
@@ -145,7 +145,7 @@ module Nativeint =
 module Int' =
   F (struct
     type t = int
-    include Comparable.From_compare (Int)
+    include Comparable.Make (Int)
     let one = 1
     let two = 2
     let three = 3
@@ -155,7 +155,10 @@ module Int'' =
   F (struct
     type t = int
     include
-      Comparable.Inherit (Int) (struct type t = int let component x = x end)
+      Comparable.Inherit (Int) (struct
+        include Int
+        let component x = x
+      end)
     let one = 1
     let two = 2
     let three = 3

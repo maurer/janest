@@ -25,7 +25,6 @@ val heap_el_get_el : 'el heap_el -> 'el
 (** [heap_el_get_el heap_el] @return the element associated with the heap
     element. *)
 
-
 (** {6 Information on heap values} *)
 
 val length : 'el t -> int
@@ -77,33 +76,44 @@ val find_heap_el : 'el t -> 'el -> 'el heap_el
 
 (** {6 Non-destructive heap accessors} *)
 
-val top : 'el t -> 'el
-(** [top heap] @return the top element of [heap] without changing it.
-    @raise Empty if [heap] is empty. *)
-
-val maybe_top : 'el t -> 'el option
-(** [maybe_top heap] @return [Some top_element] of [heap] without
+val top : 'el t -> 'el option
+(** [top heap] @return [Some top_element] of [heap] without
     changing it, or [None] if [heap] is empty. *)
 
+val top_exn : 'el t -> 'el
+(** [top_exn heap] @return the top element of [heap] without changing it.
+    @raise Empty if [heap] is empty. *)
+
+val top_heap_el : 'el t -> 'el heap_el option
+(** [top_heap_el heap] @return [Some top_heap_el] of [heap] without
+    changing it, or [None] if [heap] is empty. *)
+
+val top_heap_el_exn : 'el t -> 'el heap_el
+(** [top_heap_el_exn heap] @return the top heap element of [heap]
+    without changing it.  @raise Empty if [heap] is empty. *)
+
 val iter : 'a t -> f:('a -> unit) -> unit
+(** [iter heap ~f] iterate over [heap] with function [f].  The elements
+    are passed in an unspecified order. *)
+
   
 (** {6 Destructive heap accessors} *)
 
-val pop : 'el t -> 'el
-(** [pop heap] @return the top element of [heap], removing it.
-    @raise Empty if [heap] is empty. *)
-
-val maybe_pop : 'el t -> 'el option
-(** [maybe_pop heap] @return [Some top_element] of [heap], removing it,
+val pop : 'el t -> 'el option
+(** [pop heap] @return [Some top_element] of [heap], removing it,
     or [None] if [heap] is empty. *)
 
-val pop_heap_el : 'el t -> 'el heap_el
-(** [pop_heap_el heap] @return the top heap element of [heap], removing
-    it.  @raise Empty if [heap] is empty. *)
+val pop_exn : 'el t -> 'el
+(** [pop_exn heap] @return the top element of [heap], removing it.
+    @raise Empty if [heap] is empty. *)
 
-val maybe_pop_heap_el : 'el t -> 'el heap_el option
-(** [maybe_pop_heap_el heap] @return [Some top_heap_element], removing
+val pop_heap_el : 'el t -> 'el heap_el option
+(** [pop_heap_el heap] @return [Some top_heap_element], removing
     it, or [None] if [heap] is empty. *)
+
+val pop_heap_el_exn : 'el t -> 'el heap_el
+(** [pop_heap_el_exn heap] @return the top heap element of [heap],
+    removing it.  @raise Empty if [heap] is empty. *)
 
 val cond_pop : 'el t -> ('el -> bool) -> 'el option
 (** [cond_pop heap cond] @return [Some top_element] of [heap] if it

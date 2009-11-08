@@ -6,7 +6,6 @@ TYPE_CONV_PATH "Core_list"
 
 module List = StdLabels.List
 module String = StdLabels.String
-module Set = PSet
 
 let invalid_argf = Core_printf.invalid_argf
 
@@ -33,7 +32,7 @@ let tl t =
   | _ :: t' -> Some t'
 ;;
 
-let nth t n = 
+let nth t n =
   if n < 0 then None else
   let rec nth_aux t n =
     match t with
@@ -43,10 +42,11 @@ let nth t n =
 ;;
 
 let nth_exn t n =
-  if n < 0 then raise (Invalid_argument "List.nth") else
-    match nth t n with
-    | None -> raise (Failure "nth")
-    | Some a -> a
+  match nth t n with
+  | None ->
+      invalid_argf "List.nth_exn %d called on list of length %d"
+        n (List.length t) ()
+  | Some a -> a
 ;;
 
 let rev = List.rev
@@ -57,24 +57,35 @@ let fold_left = List.fold_left
 let iter2 = List.iter2
 let rev_map2 = List.rev_map2
 let fold_left2 = List.fold_left2
-let for_all = List.for_all
-let exists = List.exists
 let for_all2 = List.for_all2
 let exists2 = List.exists2
 let mem = List.mem
 let memq = List.memq
 let filter = List.filter
 let find_all = List.find_all
-let partition = List.partition
+
 let assoc = List.assoc
 let mem_assoc = List.mem_assoc
 let remove_assoc = List.remove_assoc
+
+
 let sort = List.sort
 let stable_sort = List.stable_sort
 let fast_sort = List.fast_sort
-let merge = List.merge
 
-let rec find t ~f =
+
+let find_map t ~f =
+  let rec loop = function
+    | [] -> None
+    | x :: l ->
+        match f x with
+        | None -> loop l
+        | Some _ as r -> r
+  in
+  loop t
+;;
+
+let find t ~f =
   let rec loop = function
     | [] -> None
     | x :: l -> if f x then Some x else loop l
@@ -84,18 +95,34 @@ let rec find t ~f =
 
 let find_exn t ~f = List.find t ~f
 
+let findi t ~f =
+  let rec loop i t =
+    match t with
+    | [] -> None
+    | x :: l -> if f i x then Some (i, x) else loop (i + 1) l
+  in
+  loop 0 t
+;;
+
+(** changing the order of arguments on some standard [List] functions. *)
 let exists t ~f = List.exists t ~f
 let for_all t ~f = List.for_all t ~f
-let fold t ~init ~f = fold_left t ~f ~init
 let iter t ~f = List.iter t ~f
+
+(** For the container interface. *)
+let fold t ~init ~f = fold_left t ~f ~init
 let to_array = Caml.Array.of_list
 let to_list t = t
 
 (** Tail recursive versions of standard [List] module *)
 
 let append l1 l2 = List.rev_append (List.rev l1) l2
+(* Rebind [@] so that uses below get our tail-recursive version rather than
+   Pervasive's nontail version. *)
+let (@) = append
 let map l ~f = List.rev (List.rev_map ~f l)
-let map2 l1 l2 ~f = List.rev (List.rev_map2 ~f l1 l2)
+let (>>|) l f = map l ~f
+let map2 l1 l2 ~f = List.rev (List.rev_map2 l1 l2 ~f)
 
 let rev_map3 l1 l2 l3 ~f =
   let rec loop l1 l2 l3 ac =
@@ -107,9 +134,9 @@ let rev_map3 l1 l2 l3 ~f =
   loop l1 l2 l3 []
 ;;
 
-let map3 l1 l2 l3 ~f = List.rev (rev_map3 ~f l1 l2 l3)
+let map3 l1 l2 l3 ~f = List.rev (rev_map3 l1 l2 l3 ~f)
 
-let rec rev_map_append l1 ~f l2 =
+let rec rev_map_append l1 l2 ~f =
   match l1 with
   | [] -> l2
   | h :: t -> rev_map_append ~f t (f h :: l2)
@@ -137,8 +164,9 @@ let mapi l ~f =
   List.rev out
 
 let iteri l ~f =
-  let _ = List.fold_left ~f:(fun i x -> f i x; i + 1) ~init:0 l in
-  ()
+  ignore (List.fold_left l ~init:0 ~f:(fun i x -> f i x; i + 1));
+;;
+
 
 let fold_lefti l ~f ~init =
   let (_,final_accum) =
@@ -147,41 +175,78 @@ let fold_lefti l ~f ~init =
       ~init:(0,init) l
   in final_accum
 
-let rec fold_left_term_internal list ~f ~acc continue =
-  match continue,list with
-  | false,_ | _,[] -> acc
-  | true, v::tl ->
-      let (continue,acc) = f acc v in
-      fold_left_term_internal tl ~f ~acc continue
-
-let fold_left_term list ~f ~init =
-  fold_left_term_internal list ~f ~acc:init true
+let filteri l ~f =
+  List.rev (fold_lefti l
+               ~f:(fun pos acc x ->
+                 if f pos x then x :: acc else acc)
+               ~init:[])
 
 let reduce l ~f = match l with
-  | [] -> raise (Invalid_argument "List.reduce")
-  | hd::tl -> List.fold_left ~init:hd ~f tl
+  | [] -> None
+  | hd::tl -> Some (List.fold_left ~init:hd ~f tl)
 
-let best l ~f =
-  try reduce ~f l
-  with Invalid_argument "List.reduce" -> raise (Invalid_argument "List.best")
+let reduce_exn l ~f =
+  match reduce l ~f with
+  | None -> raise (Invalid_argument "List.reduce_exn")
+  | Some v -> v
+
+let groupi l ~break =
+  let groups =
+    fold_lefti l ~init:[] ~f:(fun i acc x ->
+      match acc with
+      | [] -> [[x]]
+      | hd :: tl ->
+          if break i x (hd_exn hd) then
+            [x] :: hd :: tl
+          else
+            (x :: hd) :: tl)
+  in
+  match groups with
+  | [] -> []
+  | l -> rev_map l ~f:rev
+
+let group l ~break = groupi l ~break:(fun _ x y -> break x y)
 
 let concat_map l ~f =
   let rec aux acc = function
-    | [] -> acc
-    | hd::tl -> aux (f hd @ acc) tl
+    | [] -> List.rev acc
+    | hd::tl -> aux (rev_append (f hd) acc) tl
   in
-  aux [] (List.rev l)
+  aux [] l
 
-let map_aux = map
-include (Monad.Make
-           ( struct
-               type 'a t = 'a list
-               let bind x f = concat_map ~f x
-               let return x = [x]
-             end)
-        )
-let map = map_aux (*Avoid being overwritten by Monad.map*)
+let merge l1 l2 ~cmp =
+  let rec loop acc l1 l2 =
+    match l1,l2 with
+    | [], l2 -> rev_append acc l2
+    | l1, [] -> rev_append acc l1
+    | h1::t1, h2::t2 ->
+        if cmp h1 h2 <= 0
+        then loop (h1::acc) t1 l2
+        else loop (h2::acc) l1 t2
+  in
+  loop [] l1 l2
+;;
 
+
+include struct
+  (* We are explicit about what we import from the general Monad functor so that
+   * we don't accidentally rebind more efficient list-specific functions.
+   *)
+  module Monad = Monad.Make (struct
+    type 'a t = 'a list
+    let bind x f = concat_map x ~f
+    let return x = [x]
+  end)
+  open Monad
+  module Monad_infix = Monad_infix
+  type 'a monad = 'a t
+  let unit = unit
+  let ignore = ignore
+  let join = join
+  let bind = bind
+  let (>>=) = bind
+  let return = return
+end
 
 (** combines two lists, possibly of different length, returning a list the
     length of the min-length list *)
@@ -194,19 +259,28 @@ let min_combine l1 l2 =
   loop l1 l2 []
 
 (** returns final element of list *)
-let rec last list = match list with
+let rec last_exn list = match list with
   | [x] -> x
-  | _::tl -> last tl
+  | _::tl -> last_exn tl
   | [] -> raise (Invalid_argument "Core_list.last")
 
+(** optionally returns final element of list *)
+let rec last list = match list with
+  | [x] -> Some x
+  | _::tl -> last tl
+  | [] -> None
+
 (** returns sorted version of list with duplicates removed *)
-let dedup list =
+
+let dedup ?(compare=Pervasives.compare) list =
   let sorted = List.sort ~cmp:(fun x y -> compare y x) list in
   let rec loop list accum = match list with
       [] -> accum
+
     | hd::[] -> loop [] (hd::accum)
     | hd1::hd2::tl ->
-        if hd1 = hd2 then loop (hd2::tl) accum
+        if compare hd1 hd2 = 0
+        then loop (hd2::tl) accum
         else loop (hd2::tl) (hd1::accum)
   in
   loop sorted []
@@ -216,11 +290,11 @@ let stable_dedup lst =
     match lst with
     | [] -> List.rev left
     | hd::tl ->
-        if Set.mem set hd
+        if Core_set.mem set hd
         then dedup_order tl left set
-        else dedup_order tl (hd::left) (Set.add set hd)
+        else dedup_order tl (hd::left) (Core_set.add set hd)
   in
-  dedup_order lst [] Set.empty
+  dedup_order lst [] Core_set.empty
 
 let contains_dup lst = List.length (dedup lst) <> List.length lst
 
@@ -233,13 +307,6 @@ let find_a_dup l =
   in
   loop sorted
 
-(* let stable_dedup lst = fst
-    (List.fold_right
-      ~f:(fun x (uniq, set) ->
-              if Set.mem x then (x::uniq, Set.add x set) else (uniq, set))
-      ~init:([], set.empty)
-    ) *)
-
 (** Returns number of elements in list for which test function returns true *)
 let count list ~f =
   List.fold_left ~init:0 ~f:(fun count el -> if f el then count + 1 else count)
@@ -247,6 +314,7 @@ let count list ~f =
 
 (** [range low high] returns integers in range from [low](inclusive) to
     [high](exclusive).  [stride] is used to specify the step size *)
+
 let range ?(stride=1) low high =
   if stride <= 0 then
     invalid_arg "Core_list.range: stride must be positive";
@@ -257,8 +325,9 @@ let range ?(stride=1) low high =
   List.rev (loop low high [])
 
 (** Like [range], but for floating point *)
+
 let frange ?(stride=1.) low high =
-  if Float.(<=.) stride 0. then
+  if Float_robust_compare.(<=.) stride 0. then
     invalid_arg "Core_list.frange: stride must be positive";
   let epsilon = stride /. 1000. in
   let rec loop low high accum =
@@ -267,21 +336,16 @@ let frange ?(stride=1.) low high =
   in
   List.rev (loop low high [])
 
-(** [init n ~f] Creates a new list of length [n], using [f] to instantiate
-    the elements. *)
-(* CR sweeks: [init] currently returns the empty list if [n < 0].  I think it
-   would be better to fail. *)
 let init n ~f =
   if n < 0 then invalid_argf "List.init %d" n ();
   let rec loop i accum =
-    if i <= 0 then accum
+    assert (i >= 0);
+    if i = 0 then accum
     else loop (i-1) (f (i-1)::accum)
   in
   loop n []
+;;
 
-(** [rev_filter_map ~f l] applies [f] to [l], filtering out elements
-    for which [f] returns [None], and unwrapping those that return [Some].
-    Returns reversed list. *)
 let rev_filter_map l ~f =
   let rec loop l accum = match l with
     | [] -> accum
@@ -291,21 +355,29 @@ let rev_filter_map l ~f =
         | None -> loop tl accum
   in
   loop l []
+;;
 
-(** [filter_map ~f l] applies [f] to [l], filtering out elements for which
-    [f] returns [None], and unwrapping those that return [Some] *)
-let filter_map l ~f = List.rev (rev_filter_map ~f l)
+let filter_map l ~f = List.rev (rev_filter_map l ~f)
 
-let filter_opt l = filter_map ~f:(fun x -> x) l
+let filter_opt l = filter_map l ~f:(fun x -> x)
 
-let partition_map l ~f = 
-  let rec loop l pass fail = match l with
-      [] -> (List.rev pass,List.rev fail)
-    | hd::tl -> match f hd with
-        `Pass x -> loop tl (x::pass) fail
-      | `Fail x -> loop tl pass (x::fail)
+let partition_map t ~f =
+  let rec loop t fst snd =
+    match t with
+    | [] -> (rev fst, rev snd)
+    | x :: t ->
+        match f x with
+        | `Fst y -> loop t (y :: fst) snd
+        | `Snd y -> loop t fst (y :: snd)
   in
-  loop l [] []
+  loop t [] []
+;;
+
+let partition t ~f =
+  let f x = if f x then `Fst x else `Snd x in
+  partition_map t ~f
+;;
+
 
 (** Reverses an association list. *)
 let reverse_pairs lst =
@@ -317,6 +389,7 @@ let reverse_pairs lst =
   List.rev (loop lst [])
 
 let sub l ~pos ~len =
+
   if pos < 0 || len < 0 || pos + len > List.length l then invalid_arg "List.sub";
   List.rev
     (fold_lefti l ~init:[]
@@ -333,21 +406,27 @@ let slice start stop a =
   Ordered_collection_common.slice ~length_fun:List.length ~sub_fun:sub
     start stop a
 
+let split_n list n =
+  if n < 0 then invalid_arg "n < 0 in List.split_n"
+  else if n >= List.length list then
+    list,[]
+  else
+    let rec loop n list accum =
+      if n = 0 then (accum, list)
+      else match list with
+      | [] -> assert false
+      | hd::tl -> loop (n-1) tl (hd::accum)
+    in
+    let (rev_first, second) = loop n list [] in
+    (List.rev rev_first, second)
 
-(** [split_n n l] returns two lists, the first containing the first n elements of the
-    list, the second containing the rest of the list *)
-let split_n t n = 
-  let rec loop n list accum = 
-    if n <= 0 then (accum,list)
-    else match list with
-      [] -> (accum,list)
-    | hd::tl -> loop (n-1) tl (hd::accum)
-  in
-  let (rev_first,second) = (loop n t []) in
-  (List.rev rev_first,second)
+let take list n = fst (split_n list n)
+let drop list n = snd (split_n list n)
 
-(** [first_n n l] Returns the first [n] elements of list [l] *)
-let first_n t n = fst (split_n t n)
+let rec drop_while lst ~f =
+  match lst with
+  | h :: t when f h -> drop_while t ~f
+  | lst -> lst
 
 let assoc_opt key list =
   try
@@ -368,6 +447,7 @@ let cartesian_product list1 list2 =
     List.rev (loop list1 list2 [])
 
 let flatten l = fold_right l ~init:[] ~f:append
+let flatten_no_order l = fold_left l ~init:[] ~f:rev_append
 
 let concat = flatten
 
@@ -375,46 +455,70 @@ let cons x l = x :: l
 
 let is_empty l = match l with [] -> true | _ -> false
 
-let to_string x_to_string t =
-  String.concat ~sep:""
-    ["[";
-     String.concat ~sep:"; " (map t ~f:x_to_string);
-     "]";]
+let is_sorted l ~compare =
+  let rec loop l =
+    match l with
+    | [] | [_] -> true
+    | x1 :: ((x2 :: _) as rest) ->
+        compare x1 x2 <= 0 && loop rest
+  in loop l
 ;;
-  
+
 module Infix = struct
   let ( @ ) = append
 end
 
-let assoc' l f = Option.map (find l ~f:(fun (a, _) -> f a)) ~f:snd
+let assoc' l x ~equal =
+  Option.map (find l ~f:(fun (x', _) -> equal x x')) ~f:snd
+;;
 
-let assoc_exn' t f =
-  match assoc' t f with
+let assoc_exn' t x ~equal =
+  match assoc' t x ~equal with
   | None -> failwith "assoc_exn"
   | Some b -> b
 ;;
 
-let mem_assoc' t f = Option.is_some (assoc' t f)
+let mem_assoc' t x ~equal = Option.is_some (assoc' t x ~equal)
 
-let remove_assoc' t f =
-  rev (fold t ~init:[] ~f:(fun ac ((a, _) as pair) ->
-    if f a then ac else pair :: ac))
+let remove_assoc' t x ~equal =
+  rev (fold t ~init:[] ~f:(fun ac ((x', _) as pair) ->
+    if equal x x' then ac else pair :: ac))
 ;;
 
-(*
-  other non tail-recursive functions to fix (eventually)
 
-  let remove_assoc
-*)
-
-let shuffle lst =
+let permute ?random_state lst =
   let arr = Array.of_list lst in
-  let len = Array.length arr in
-  Array.iteri (fun i tile ->
-    let ran = Random.int (len - i) in
-    arr.(i) <- arr.(ran + i);
-    arr.(ran + i) <- tile
-  ) arr;
+  Array_permute.permute ?random_state arr;
   Array.to_list arr
 ;;
 
+let to_string f x =
+  Sexplib.Sexp.to_string
+    (sexp_of_t (fun x -> Sexplib.Sexp.Atom x) (List.map ~f x))
+
+let compare a b ~cmp =
+  let rec loop a b =
+    match a, b with
+    | [], [] -> 0
+    | [], _  -> -1
+    | _ , [] -> 1
+    | x::xs, y::ys ->
+      let n = cmp x y in
+      if n = 0 then loop xs ys
+      else n
+  in
+  loop a b
+;;
+
+let container = {
+  Container.
+  length = length;
+  is_empty = is_empty;
+  iter = iter;
+  fold = fold;
+  exists = exists;
+  for_all = for_all;
+  find = find;
+  to_list = to_list;
+  to_array = to_array;
+}

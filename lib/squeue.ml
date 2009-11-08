@@ -1,5 +1,4 @@
 open Std_internal
-(** Synchronized queue module *)
 
 module Mutex = Core_mutex
 
@@ -27,11 +26,11 @@ let wrap q run =
   Mutex.lock q.mutex;
   protect ~f:run
     ~finally:(fun () ->
-		let len = Queue.length q.ev_q in
-		if len <> 0 then Condition.signal q.not_empty;
-		if len < q.maxsize then Condition.signal q.not_full;
-		Mutex.unlock q.mutex)
-
+      let len = Queue.length q.ev_q in
+      if len <> 0 then Condition.signal q.not_empty;
+      if len < q.maxsize then Condition.signal q.not_full;
+      Mutex.unlock q.mutex)
+;;
 
 let clear q =
   let run () =
@@ -102,17 +101,24 @@ let lpop q =
   in
   wrap q run
 
-let transfer_queue_in q in_q = 
+let transfer_queue_in_uncond q in_q =
   if not (Queue.is_empty in_q) then begin
-    let run () = 
+    let run () =
+      Queue.transfer ~src:in_q ~dst:q.ev_q
+    in
+    wrap q run
+  end
+
+let transfer_queue_in q in_q =
+  if not (Queue.is_empty in_q) then begin
+    let run () =
       wait_not_full q;
       Queue.transfer ~src:in_q ~dst:q.ev_q
     in
     wrap q run
   end
 
-(* CRv2 OG: Now that we have transfer_queue_in, shouldn't these be
-   renamed transfer_queue_out_* *)
+
 let transfer_queue_nowait_nolock sq q = Queue.transfer ~src:sq.ev_q ~dst:q
 
 
@@ -131,6 +137,6 @@ let transfer_queue sq q =
   wrap sq run
 
 (* The external version of wait_not_empty *)
-let wait_not_empty sq = 
+let wait_not_empty sq =
   let run () = wait_not_empty sq in
   wrap sq run

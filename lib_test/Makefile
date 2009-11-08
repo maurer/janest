@@ -3,23 +3,13 @@ export OCAMLMAKEFILE = ../OCamlMakefile
 export INCDIRS = ../lib
 export LIBDIRS = ../lib
 export LIBS = core
-export PACKS = bigarray oUnit type-conv sexplib bin_prot res
+export PACKS = bigarray oUnit type-conv sexplib bin_prot res fieldslib
 export THREADS = yes
 ANNOTATE = true
-
-ifeq ($(shell uname -s), Darwin)
-  export DARWIN = true
-else
-  LINUX_EXT_TEST = linux_ext_test.ml
-  export LINUX = true
-endif
-
 
 define PROJ_sub1
   SOURCES = \
             bag_test.ml \
-            bigstring_test.ml \
-            bigbuffer_test.ml \
             binary_packing_test.ml \
             common_test.ml \
             comparable_test.ml \
@@ -32,16 +22,24 @@ define PROJ_sub1
             crc_test.ml \
             doubly_linked_test.ml \
             fqueue_test.ml \
+						filename_test.ml \
+						hash_heap_test.ml \
+						core_int_test.ml \
             hash_queue_test.ml \
             hashtbl_test.ml \
             heap_test.ml \
             int_conversions_test.ml \
             interval_test.ml \
-            $(LINUX_EXT_TEST) \
+						core_set_test.ml \
             pMap_test.ml \
             pSet_test.ml \
             time_test.ml \
             timer_test.ml \
+						TZ_test.ml \
+						int_set_test.ml \
+            core_float_test.ml \
+						core_mutex_test.ml \
+						core_map_test.ml \
             test.ml \
             test_runner.ml
   

@@ -11,53 +11,56 @@ end
 
 module type S = sig
   type key
-      
+
   type t
   include Sexpable with type sexpable = t
 
-  val create : (key * float) list -> [ `Succeed of t | `Fail of string ]
+  val create : (key * float) list -> (t, string) Result.t
   val get : t -> key -> float
 end
 
 module Make (Key : Key) = struct
 
-  (* todo: consider binary search in array for efficiency *)
+  (* if long lists are needed, consider rewriting with binary search in array *)
   type t = (float * float) list
 
   type key = Key.t
 
   let create knots =
     let t = List.map knots ~f:(fun (x, y) -> (Key.to_float x, y)) in
-    let x_values = List.map knots ~f:fst in
-    let sorted_x_values = List.sort x_values ~cmp:ascending in
-    if t = [] then `Fail "no knots given"
-    else if x_values <> sorted_x_values then `Fail "knots are unsorted"
-    else if List.contains_dup x_values then `Fail "duplicated x-values in knots"
-    else `Succeed t
+    let x_values = List.map t ~f:fst in
+    if t = [] then
+      Error "no knots given"
+    else if not (List.is_sorted x_values ~compare:Float.compare) then
+      Error "knots are unsorted"
+    else if List.exists t ~f:(fun (x, y) -> Float.is_nan x || Float.is_nan y) then
+      Error "knots contain nan"
+    else
+      Ok t
 
   type knots = (Key.t * float) list with sexp
 
   type sexpable = t
-      
+
   let t_of_sexp sexp =
     let knots = knots_of_sexp sexp in
     match create knots with
-    | `Fail str -> raise (Sexplib.Conv.Of_sexp_error (str, sexp))
-    | `Succeed t -> t
+    | Error str -> raise (Sexplib.Conv.Of_sexp_error (str, sexp))
+    | Ok t -> t
 
   let sexp_of_t t =
     let knots = List.map t ~f:(fun (x, y) -> (Key.of_float x, y)) in
     sexp_of_knots knots
-      
+
   let linear x (x1, y1) (x2, y2) =
-    let weight =
-      if x1 =. x2 then 0.5 (* for numerical stability *)
-      else (x -. x1) /. (x2 -. x1)
-    in
+    let weight = (x -. x1) /. (x2 -. x1) in (* note: numerically unstable if x2=.x1 *)
+    let weight = Float.max_inan 0. (Float.min_inan 1. weight) in
     (1. -. weight) *. y1 +. weight *. y2
 
-  let rec get t x =
+  let get t x =
     let x = Key.to_float x in
+    if Float.is_nan x
+    then invalid_arg "Piecewise_linear.get on nan";
     let rec loop = function
       | left :: ((right :: _) as rest) ->
           if x <= fst left then snd left
@@ -67,7 +70,7 @@ module Make (Key : Key) = struct
       | [] -> failwith "Bug in Piecewise_linear.get"
     in
     loop t
-    
+
 end
 
 module Time = Make (Time)

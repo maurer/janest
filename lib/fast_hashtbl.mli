@@ -1,3 +1,6 @@
+(* DEPRECATED, WILL BE REPLACED SOON. *)
+
+
 (** Hashtbl which stores a reference to the data for faster replace.
    Initial adds are _marginally_ slower, while replace is way
    faster.  Lookups etc. are the same. *)

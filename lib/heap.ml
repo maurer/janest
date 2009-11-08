@@ -1,5 +1,6 @@
 module OldArray = Caml.Array
 
+
 open Res
 
 let def_gfactor, def_sfactor, def_min_size = Res.DefStrat.default
@@ -86,7 +87,8 @@ let of_array ?min_size cmp ar =
     let dummy = make_dummy_heap cmp in
     let min_size =
       match min_size with
-      | None -> Core_int.max def_min_size (len / 2)
+      
+      | None -> max def_min_size (len / 2)
       | Some min_size -> min_size in
     let rar =
       Array.sinit (def_gfactor, def_sfactor, min_size) len (fun pos ->
@@ -169,11 +171,17 @@ let heap_el_mem heap h_el = heap_el_is_valid h_el && h_el.heap == heap
 
 (***************************************************************)
 
-let top { ar = ar } =
+let top_heap_el_exn { ar = ar } =
   if Array.length ar = 0 then raise Empty;
-  get_el ar 0
+  ar.(0)
 
-let maybe_top { ar = ar } =
+let top_heap_el { ar = ar } =
+  if Array.length ar = 0 then None
+  else Some ar.(0)
+
+let top_exn t = (top_heap_el_exn t).el
+
+let top { ar = ar } =
   if Array.length ar = 0 then None
   else Some (get_el ar 0)
 
@@ -191,7 +199,7 @@ let iter t ~f =
   loop 0
 ;;
 
-let pop_heap_el ({ ar = ar } as h) =
+let pop_heap_el_exn ({ ar = ar } as h) =
   let len = Array.length ar in
   if len = 0 then raise Empty;
   let min_h_el = Array.get ar 0 in
@@ -203,40 +211,40 @@ let pop_heap_el ({ ar = ar } as h) =
     heapify ar h.cmp (len - 1) 0;
     min_h_el)
 
-let maybe_pop_heap_el ({ ar = ar } as h) =
+let pop_heap_el ({ ar = ar } as h) =
   if Array.length ar = 0 then None
-  else Some (pop_heap_el h)
+  else Some (pop_heap_el_exn h)
 
-let pop h = (pop_heap_el h).el
+let pop_exn h = (pop_heap_el_exn h).el
 
-let maybe_pop ({ ar = ar } as h) =
+let pop ({ ar = ar } as h) =
   if Array.length ar = 0 then None
-  else Some (pop h)
+  else Some (pop_exn h)
 
 let cond_pop_heap_el ({ ar = ar } as h) cond =
   if Array.length ar = 0 then None
   else
     let min_h_el = Array.get ar 0 in
-    if cond min_h_el.el then Some (pop_heap_el h)
+    if cond min_h_el.el then Some (pop_heap_el_exn h)
     else None
 
 let cond_pop ({ ar = ar } as h) cond =
   if Array.length ar = 0 then None
   else
     let min_el = get_el ar 0 in
-    if cond min_el then Some (pop h)
+    if cond min_el then Some (pop_exn h)
     else None
 
 let rec move_up ar cmp el pos =
-  if pos > 0 then
+  if pos <= 0 then pos
+  else
     let parent_pos = calc_parent pos in
     let parent = Array.get ar parent_pos in
-    if cmp el parent.el < 0 then (
+    if cmp el parent.el >= 0 then pos
+    else (
       Array.set ar pos parent;
       parent.pos <- pos;
       move_up ar cmp el parent_pos)
-    else pos
-  else pos
 
 let move_up_h_el h_el ar cmp el pos =
   let pos = move_up ar cmp el pos in

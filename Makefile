@@ -1,17 +1,19 @@
 .PHONY: all
 all:
 	@cd lib && $(MAKE)
-	@cd lib_test && make
+	@cd extended && $(MAKE)
 
 .PHONY:	install
 install:
 	@cd lib && $(MAKE) $@
+	@cd extended && $(MAKE) $@
 
 .PHONY:	uninstall
 uninstall:
 	@cd lib && $(MAKE) $@
+	@cd extended && $(MAKE) $@
 
 .PHONY:	clean
 clean:
 	@cd lib && $(MAKE) clean
-	@cd lib_test && $(MAKE) clean
+	@cd extended && $(MAKE) clean

@@ -7,5 +7,3 @@ let sort_and_align lst =
       compare a b
     ))
 ;;
-
-(* CR sds: move Qbase.Clim.* here? *)

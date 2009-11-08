@@ -67,4 +67,14 @@ let test =
             done
           done
         );
+      "filter_inplace" >::
+        (fun () ->
+          let t = of_list [1; 2; 3; 4; 5; 6; 7] in
+          filter_inplace t ~f:(fun n -> n mod 2 = 0);
+          assert (to_list t = [2; 4; 6]);
+          assert (for_all t ~f:(fun n -> n mod 2 = 0));
+          assert (exists t ~f:(fun n -> n = 4 || n = 6));
+          filter_inplace t ~f:(fun n -> n mod 2 <> 0);
+          assert (to_list t = []);
+        );
     ]

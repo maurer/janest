@@ -1,159 +1,197 @@
-# Make sure we use the right channel representation (new with OCaml 3.10!)
 match $(OCAML_VERSION)
-case ^3\.0.*
+case ^3.11.*
+  export
+  CFLAGS += -DHAVE_OCAML_3_11
 default
-  CFLAGS += -DCHANNEL_HAS_FLAGS
-  export CFLAGS
+  export
 
+OBJS = std_internal
 LIB_CNAMES = \
-  misc ocaml_utils_stubs unix_ext_stubs \
-  bigstring_stubs ml_backtrace
+  misc ocaml_utils_stubs signal_stubs unix_stubs unix_ext_stubs \
+  bigstring_stubs low_level_debug_stubs
 
-LIB_MLNAMES = \
-  OUnit_utils \
-  backtrace \
-  bag \
-  bigbuffer \
-  bigstring \
+LIB_MLNAMES[] =
+  agnostic_mutex
+  array_permute
+  backtrace
+  bag
+  bigbuffer
+  bigstring
+  bigsubstring
+  binable
+  binary_packing
+  bool
+  bucket
+  byte_units
+  caml
+  common
+  comparable
+  container
+  core_arg
+  core_array
+  core_char
+  core_condition
+  core_filename
+  core_gc
+  core_hashtbl
+  core_hashtbl_intf
+  core_int
+  core_int32
+  core_int63
+  core_int64
+  core_list
+  core_map
+  core_map_intf
+  core_mutex
+  core_nativeint
+  core_printf
+  core_printexc
+  core_queue
+  core_set
+  core_set_intf
+  core_sexp
+  core_field
+  core_stack
+  core_string
+  core_sys
+  core_thread
+  core_unix
+  crc
+  daemon
+  dequeue
+  doubly_linked
+  error_check
+  exn
+  fast_hashtbl
+  float
+  float_robust_compare
+  floatable
+  force_once
+  fqueue
+  function
+  hash_heap
+  hash_queue
+  hash_set
+  hash_set_intf
+  hashable
+  heap
+  in_channel
+  int_conversions
+  int_set
+  int_intf
+  interfaces
+  interval
+  interval_intf
+  linebuf
+  low_level_debug
+  lock_file
+  make_substring
+  memo
+  monad
+  month
+  mutex0
+  option
+  ordered_collection_common
+  out_channel
+  piecewise_linear
+  pretty_printer
+  quickcheck
+  ref
+  result
+  robustly_comparable
+  sexpable
+  signal
+  space_safe_tuple
+  squeue
+  set_once
+  std
+  std_internal
+  stringable
+  substring
+  substring_intf
+  terminal_io_intf
+  thread_safe_queue
+  time
+  timer
+  tuple
+  TZ
+  unique_id
+  unix_ext
+  weekday
+  word_size
+
+switch $(OS)
+case Darwin
+  DEBUG_CFLAGS = \
+    -pipe -g -fPIC -DPIC -O0 -Wall -pedantic -Wextra \
+    -Wunused -Wno-long-long -DCAML_NAME_SPACE
+  OPT_CFLAGS = $(DEBUG_CFLAGS) -O2 -fomit-frame-pointer
+  CFLAGS=$(OPT_CFLAGS)
+  CXXFLAGS = $(CFLAGS)
+  export
+default
+  LIB_MLNAMES += linux_ext
+  OCAML_LIB_FLAGS += -cclib -lrt
+  LIB_CNAMES += linux_ext_stubs
+  export
+
+OCamlMakePPDeps($(PA_SEXP_BIN), \
   binable \
-  binary_packing \
   bool \
   bucket \
-  caml \
+  byte_units \
   common \
-  comparable \
-  container \
-  core_arg \
+  dequeue \
+  fast_hashtbl \
+  float \
+  input \
+  interval_intf \
+  interval \
   core_array \
   core_char \
-  core_filename \
   core_gc \
   core_hashtbl \
   core_int \
   core_int32 \
   core_int64 \
   core_list \
-  core_mutex \
+  core_map \
   core_nativeint \
-  core_printf \
-  core_queue \
+  core_set \
+  core_sexp \
   core_stack \
   core_string \
-  core_sys \
-  unix_ext \
   core_unix \
-  crc \
-  dequeue \
-  doubly_linked \
-  error_check \
-  exn \
-  fast_hashtbl \
-  float \
-  floatable \
-  force_once \
-  fqueue \
-  hash_queue \
   hash_set \
-  hashable \
-  heap \
-  in_channel \
-  int_conversions \
-  int_intf \
-  interfaces \
-  interned \
-  interval \
-  interval_set \
-  linebuf \
-  memo \
-  monad \
+  linux_ext \
+  month \
+  weekday \
   option \
-  ordered_collection_common \
-  out_channel \
-  pMap \
-  pSet \
   piecewise_linear \
-  pretty_printer \
-  quickcheck \
-  ref \
-  result \
-  robustly_comparable \
-  setable \
-  sexpable \
-  space_safe_tuple \
-  squeue \
-  std \
-  std_internal \
-  stringable \
-  thread_safe_queue \
+  terminal_io_intf \
   time \
-  timer \
+  result \
+  signal \
+  std_internal \
   tuple \
   unique_id \
-  word_size \
-  size \
-  core_sexp \
-  month \
-
-OCamlMakePPDeps($(PA_SEXP_BIN), \
-  bucket \
-  common \
-  dequeue \
-  fast_hashtbl \
-  float \
-  input \
-  interval \
-  interval_set \
-  core_array \
-  core_char \
-  core_int \
-  core_int32 \
-  core_int64 \
-  core_list \
-  core_nativeint \
-  core_stack \
-  core_string \
-  core_unix \
-  option \
-  OUnit_utils \
-  piecewise_linear \
-  time \
-  pMap \
-  result \
-  std_internal \
-  core_sexp \
-  month \
+  exn \
+  set_once \
+  TZ \
+  linebuf \
 )
 
-switch $(string $(shell uname -s))
-case Darwin
-  DARWIN = true
-  CFLAGS = -pipe -g -fPIC -DPIC -O0 -Wall -pedantic -Wextra \
-		  -Wunused -Wno-long-long -DCAML_NAME_SPACE -O2 -fomit-frame-pointer
-  export
-case Linux
-  LINUX = true
-  LIB_CNAMES += linux_ext_stubs
-  LIB_MLNAMES += linux_ext
-  OCamlPreprocess(./pp.sh, linux_ext)
-  OCAML_LIB_FLAGS += -cclib -lrt
-  export
-default
-  eprintln(unknown os from uname -s.  exiting)
-	exit(1)
-
-switch $(PROCESSOR)
-case x86_64
-  ARCH_FLAGS = -DARCH_SIXTYFOUR
-  export ARCH_FLAGS
-default
-  ARCH_FLAGS =
-  export ARCH_FLAGS
-
-OCamlPreprocess(./pp.sh, std unix_ext bigstring )
+OCamlPreprocess ($(PA_CPP), \
+  core_int63 \
+  std \
+)
 
 OCamlMakeLibPackage (core)
 
-doc:
-	ocamldoc -html -pp 'camlp4o -I ../../../lib pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo' *.ml *.mli -d /var/www/html/docs/core
+OCamlMakeProjDefaults(mycaml)
+OCamlTop(mycaml, $(OBJS))
 
 InstantiateOCamlEnv()
+
+doc: core $(OCAMLDOC_PP)
+  $(OCamlDocs Core, *.mli *.ml, "Standard library overlay.")

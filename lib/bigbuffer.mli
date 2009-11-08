@@ -60,8 +60,8 @@ current contents of the buffer [b] starting at offset [off] of length
 buffer itself is unaffected. *)
 
 val nth : t -> int -> char
-(** get the n-th character of the buffer. Raise [Invalid_argument] if
-index out of bounds *)
+(** get the (zero-based) n-th character of the buffer. Raise
+[Invalid_argument] if index out of bounds *)
 
 val length : t -> int
 (** Return the number of characters currently contained in the buffer. *)

@@ -2,6 +2,8 @@ open Sexplib
 
 let failwithf = Core_printf.failwithf
 
+
+
 module type S = sig
   type sexpable
   val sexp_of_t : sexpable -> Sexp.t
@@ -16,10 +18,20 @@ end
 
 module type S2 = sig
   type ('a, 'b) sexpable
-  val sexp_of_t : 
+  val sexp_of_t :
     ('a -> Sexp.t) -> ('b -> Sexp.t) -> ('a, 'b) sexpable -> Sexp.t
-  val t_of_sexp : 
+  val t_of_sexp :
     (Sexp.t -> 'a) -> (Sexp.t -> 'b) -> Sexp.t -> ('a, 'b) sexpable
+end
+
+module type S3 = sig
+  type ('a, 'b, 'c) sexpable
+  val sexp_of_t :
+    ('a -> Sexp.t) -> ('b -> Sexp.t) -> ('c -> Sexp.t)
+    -> ('a, 'b, 'c) sexpable -> Sexp.t
+  val t_of_sexp :
+    (Sexp.t -> 'a) -> (Sexp.t -> 'b) -> (Sexp.t -> 'c)
+    -> Sexp.t -> ('a, 'b, 'c) sexpable
 end
 
 module Of_stringable (M : Stringable.S)
@@ -28,10 +40,10 @@ module Of_stringable (M : Stringable.S)
   let t_of_sexp sexp =
     match sexp with
     | Sexp.Atom s -> M.of_string s
-    | Sexp.List _ -> failwithf "t_of_sexp %s" (Sexp.to_string sexp) ()
+    | Sexp.List _ -> Conv.of_sexp_error "t_of_sexp" sexp
   let sexp_of_t t = Sexp.Atom (M.to_string t)
 end
-  
+
 module To_stringable (M : S) : Stringable.S with type stringable = M.sexpable =
 struct
   type stringable = M.sexpable

@@ -1,6 +1,6 @@
 (** Simple implementation of a polymorphic functional queue.
     Push and top and bottom are O(1).  Pop and take are O(1) amortized.
-    to_list and length are O(n).
+    to_list is O(n). length is O(1).
 *)
 
 exception Bug of string
@@ -13,6 +13,7 @@ val test_invariants : 'a t -> unit
 
 (** The empty queue *)
 val empty : 'a t 
+
 
 (** push a single element on queue *)
 val push : 'a -> 'a t -> 'a t 
@@ -49,9 +50,8 @@ val deq : 'a t -> ('a * 'a t) option
 (** alias for pop_exn *)
 val deq_exn : 'a t -> 'a * 'a t
 
-
 (** Returns version of queue with top element removed *)
-val discard : 'a t -> 'a t
+val discard_exn : 'a t -> 'a t
 
 val to_list : 'a t -> 'a list
 val length : 'a t -> int
