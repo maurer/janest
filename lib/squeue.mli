@@ -1,3 +1,5 @@
+(** Synchronized queue module *)
+
 open Std_internal
 
 type 'a t
@@ -27,15 +29,12 @@ val pop : 'a t -> 'a
     * this element was popped. *)
 val lpop : 'a t -> 'a * int
 
-(* CRv2 sweeks: The semantics of [transfer_queue_in] seems weird, because it mixes
-   blocking with the ability to grow past maxsize.  It seems like it should have
-   two flavors, one that blocks and doesn't grow past maxsize, and one "_uncond"
-   that doesn't block and does grow past maxsize.
-*)
 (** Transfers all the elements from an ordinary queue into the
     squeue. Blocks until there's room on the queue, then pushes. may
     grow queue past maxsize. *)
 val transfer_queue_in : 'a t -> 'a Queue.t -> unit
+
+val transfer_queue_in_uncond : 'a t -> 'a Queue.t -> unit
 
 (** Transfers all elements from the squeue to an ordinary queue.
     The elements remain in order.
@@ -56,7 +55,7 @@ val clear : 'a t -> unit
     is essential. For example you might need to take another lock
     before you remove something from the queue for processing, you
     might want to try to take that other lock, and if it fails do
-    something else. 
+    something else.
 
     This function is not dangerous, there is just ONE thing you HAVE
     to remember if you use it. Just because this function returns

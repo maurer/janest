@@ -6,41 +6,41 @@ module Toggle = struct
       assertion: ('param -> bool);
       fail_alert: ('param -> 'alert);
       success_alert: ('param -> 'alert);
-      mutable success_last: bool;
+      mutable success_prior: bool;
     }
   let create ~assertion ~fail_alert ~success_alert =
     {
       fail_alert    = fail_alert;
       success_alert = success_alert;
       assertion     = assertion;
-      success_last  = true;
+      success_prior  = true;
     }
 
   let check ec param =
     if ec.assertion param then
       (* assertion succeeded *)
-      if ec.success_last then
+      if ec.success_prior then
         (* and it succeeded last time too -- no change *)
         None
       else
         (* it did not succeed last time -- change to success *)
         begin
-          ec.success_last <- true;
+          ec.success_prior <- true;
           Some (ec.success_alert param)
         end
     else
       (* assertion failed *)
-      if ec.success_last then
+      if ec.success_prior then
         (* but succeeded last time -- change to failure *)
         begin
-          ec.success_last <- false;
+          ec.success_prior <- false;
           Some (ec.fail_alert param)
         end
       else
         (* but failed last time -- no change *)
         None
 
-  let state ec = ec.success_last
+  let state ec = ec.success_prior
   let sexp_of_t _ _ ec = sexp_of_string (if state ec then "GOOD" else "BAD")
 end
 
@@ -51,50 +51,52 @@ module ToggleN = struct
       fail_alert: ('param -> 'alert);
       final_fail_alert: ('param -> 'alert);
       success_alert: ('param -> 'alert);
-      max_fail_alerts: int;
-      mutable num_fail_alerts: int;
+      max_consecutive_fail_alerts: int;
+      mutable consecutive_fail_alert_count: int;
     }
-  let create ~assertion ~fail_alert ~final_fail_alert ~success_alert ~max_fail_alerts =
+  let create ~assertion ~fail_alert ~final_fail_alert ~success_alert
+    ~max_consecutive_fail_alerts =
     {
       assertion        = assertion;
       fail_alert       = fail_alert;
       final_fail_alert = final_fail_alert;
       success_alert    = success_alert;
-      max_fail_alerts  = max_fail_alerts;
-      num_fail_alerts  = 0;
+      max_consecutive_fail_alerts  = max_consecutive_fail_alerts;
+      consecutive_fail_alert_count  = 0;
     }
 
   let check ec param =
     if ec.assertion param then
       (* assertion succeeded *)
-      if ec.num_fail_alerts = 0 then
+      if ec.consecutive_fail_alert_count = 0 then
         (* and it succeeded last time too -- no change *)
         None
       else
         (* it did not succeed last time -- change to success *)
         begin
-          ec.num_fail_alerts <- 0;
+          ec.consecutive_fail_alert_count <- 0;
           Some (ec.success_alert param)
         end
     else
       (* assertion failed *)
-      if ec.num_fail_alerts = ec.max_fail_alerts then
-        (* we're at max_fail_alerts now *)
+      if ec.consecutive_fail_alert_count = ec.max_consecutive_fail_alerts then
+        (* we're at max_consecutive_fail_alerts now *)
         begin
-          ec.num_fail_alerts <- ec.num_fail_alerts + 1;
+          ec.consecutive_fail_alert_count <- ec.consecutive_fail_alert_count + 1;
           Some (ec.final_fail_alert param)
         end
-      else if ec.num_fail_alerts < ec.max_fail_alerts then
-        (* haven't reached max fail alerts yet *)
+      else
+        if ec.consecutive_fail_alert_count < ec.max_consecutive_fail_alerts then
+        (* haven't reached max_consecutive_fail_alerts yet *)
         begin
-          ec.num_fail_alerts <- ec.num_fail_alerts + 1;
+          ec.consecutive_fail_alert_count <- ec.consecutive_fail_alert_count + 1;
           Some (ec.fail_alert param)
         end
       else
-        (* we're beyond max_fail_alerts *)
+        (* we're beyond max_consecutive_fail_alerts *)
         None
 
-  let state ec = ec.num_fail_alerts = 0
+  let state ec = ec.consecutive_fail_alert_count = 0
   let sexp_of_t _ _ ec = sexp_of_string (if state ec then "GOOD" else "BAD")
 end
 
@@ -104,8 +106,9 @@ module Timer = struct
       assertion: ('param -> bool);
       fail_alert: ('param -> 'alert);
       success_alert: ('param -> 'alert);
+
       min_alert_interval: Time.Span.t;
-      mutable last_fail_alert_time : Time.t option;
+      mutable prior_fail_alert_time : Time.t option;
     }
   let create ~assertion ~fail_alert ~success_alert ~min_alert_interval =
     {
@@ -113,28 +116,29 @@ module Timer = struct
       success_alert = success_alert;
       assertion = assertion;
       min_alert_interval = min_alert_interval;
-      last_fail_alert_time = None;
+      prior_fail_alert_time = None;
     }
   let check ec param now =
     if ec.assertion param then
       (* assertion succeeded *)
-      match ec.last_fail_alert_time with
+      match ec.prior_fail_alert_time with
       | None ->
-          (* and it succeeded last time too -- no change *)
+          (* and it succeeded prior time too -- no change *)
           None
       | Some _ ->
           (* it did not succeed last time -- change to success *)
           begin
-            ec.last_fail_alert_time <- None;
+            ec.prior_fail_alert_time <- None;
             Some (ec.success_alert param)
           end
     else
       (* assertion failed *)
       let fail_alert () =
-        ec.last_fail_alert_time <- Some now;
+        ec.prior_fail_alert_time <- Some now;
         Some (ec.fail_alert param)
       in
-      match ec.last_fail_alert_time with
+
+      match ec.prior_fail_alert_time with
       | None -> fail_alert ()
       | Some t ->
           if Time.abs_diff now t > ec.min_alert_interval then
@@ -142,26 +146,28 @@ module Timer = struct
             fail_alert ()
           else
             None
-  let state ec = ec.last_fail_alert_time = None
+  let state ec = ec.prior_fail_alert_time = None
   let sexp_of_t _ _ ec = sexp_of_string (if state ec then "GOOD" else "BAD")
 end
 
-(* WL OG: ability to "tighten" as well would be nice *)
 module Step = struct
   type ('threshold, 'param, 'alert) t =
     {
       initial_threshold: 'threshold;
       mutable threshold: 'threshold;
-      loosen: ('param -> threshold:'threshold -> 'threshold);
+
+      mutable in_middle_of_cycle : bool;
+      adjust: ('param -> threshold:'threshold -> 'threshold);
       assertion: ('param -> threshold:'threshold -> bool);
       fail_alert: ('param -> 'alert);
       success_alert: ('param -> 'alert);
     }
-  let create ~threshold ~loosen ~assertion ~fail_alert ~success_alert =
+  let create ~threshold ~adjust ~assertion ~fail_alert ~success_alert =
     {
       initial_threshold = threshold;
       threshold = threshold;
-      loosen = loosen;
+      in_middle_of_cycle = false;
+      adjust = adjust;
       fail_alert = fail_alert;
       success_alert = success_alert;
       assertion = assertion;
@@ -169,13 +175,14 @@ module Step = struct
 
   let check ec param =
     if ec.assertion param ~threshold:ec.initial_threshold then (* assertion succeeded *)
-      if ec.threshold = ec.initial_threshold then
+      if not ec.in_middle_of_cycle then
         (* and it succeeded before -- do nothing *)
         None
       else
         (* but it did not succeed before *)
         begin
           ec.threshold <- ec.initial_threshold;
+          ec.in_middle_of_cycle <- false;
           Some (ec.success_alert param)
         end
     else (* assertion failed *)
@@ -185,11 +192,55 @@ module Step = struct
       else
         (* and it's worse than before *)
         begin
-          let loosened = ec.loosen param ~threshold:ec.threshold in
-          assert (loosened <> ec.initial_threshold);
-          ec.threshold <- loosened;
+          let new_threshold = ec.adjust param ~threshold:ec.threshold in
+          ec.in_middle_of_cycle <- true;
+          ec.threshold <- new_threshold;
           Some (ec.fail_alert param)
         end
-  let state ec = ec.threshold = ec.initial_threshold
+  let state ec = not ec.in_middle_of_cycle
   let sexp_of_t _ _ _ ec = sexp_of_string (if state ec then "GOOD" else "BAD")
+end
+
+
+
+module ReportAllFails = struct
+  type ('param, 'alert) t =
+    {
+      assertion: ('param -> bool);
+      fail_alert: ('param -> 'alert);
+      success_alert: ('param -> 'alert);
+      mutable success_prior: bool;
+    }
+  let create ~assertion ~fail_alert ~success_alert =
+    {
+      fail_alert    = fail_alert;
+      success_alert = success_alert;
+      assertion     = assertion;
+      success_prior  = true;
+    }
+
+  let check ec param =
+    if ec.assertion param then
+      (* assertion succeeded *)
+      if ec.success_prior then
+        (* and it succeeded last time too -- no change *)
+        None
+      else
+        (* it did not succeed last time -- change to success *)
+        begin
+          ec.success_prior <- true;
+          Some (ec.success_alert param)
+        end
+    else
+      (* assertion failed *)
+      begin
+        if ec.success_prior then
+          (* but succeeded last time -- change to failure *)
+          ec.success_prior <- false;
+        (* Unlike Toggle, report failure regardless of previous state. *)
+        Some (ec.fail_alert param)
+      end
+
+  let state ec = ec.success_prior
+  let sexp_of_t _ _ ec = sexp_of_string (if state ec then "GOOD" else "BAD")
 end

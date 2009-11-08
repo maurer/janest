@@ -1,10 +1,11 @@
-include Mutex
+(*pp $(pwd)/pp.sh *)
+(*
+#include <unistd.h>
+end-pp-include*)
+include Mutex0
 
-let try_lock = try_lock
-
-let lock m = if try_lock m then () else lock m
-
-let critical_section l ~f = 
-  lock l;
-  Exn.protect ~f ~finally:(fun () -> unlock l);
-;;
+#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS > 0)
+let timedlock mtx time = Unix_ext.mutex_timedlock mtx (Time.to_float time)
+#else
+#warning "POSIX TMO not present; Core_mutex.timedlock unavailable"
+#endif

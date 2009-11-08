@@ -20,25 +20,20 @@ let invariant t =
 
 let create () = { elts = []; length = 0; }
 
-let push t x = t.elts <- x :: t.elts; t.length <- t.length + 1
+(* We always want to set elts and length at the same time.  Having a function
+ * to do so helps us to remember.
+ *)
+let set t elts length = t.elts <- elts; t.length <- length
 
-let pop t =
-  match t.elts with
-  | [] -> None
-  | x :: l -> t.length <- t.length - 1; t.elts <- l; Some x
-;;
+let push t x = set t (x :: t.elts) (t.length + 1)
 
-let pop_exn t = 
+let pop_exn t =
   match t.elts with
   | [] -> raise Empty
-  | x :: l -> t.length <- t.length - 1; t.elts <- l; x
+  | x :: l -> set t l (t.length - 1); x
 ;;
 
-let top t =
-  match t.elts with
-  | [] -> None
-  | x :: _ -> Some x
-;;
+let pop t = try Some (pop_exn t) with Empty -> None
 
 let top_exn t =
   match t.elts with
@@ -46,7 +41,10 @@ let top_exn t =
   | x :: _ -> x
 ;;
 
-let clear t = t.elts <- []
+let top t = try Some (top_exn t) with Empty -> None
+
+
+let clear t = set t [] 0
 
 let copy t = { elts = t.elts; length = t.length; }
 
@@ -79,3 +77,16 @@ let until_empty t f =
   let rec loop () = if t.length > 0 then (f (pop_exn t); loop ()) in
   loop ()
 ;;
+
+let container = {
+  Container.
+  length = length;
+  is_empty = is_empty;
+  iter = iter;
+  fold = fold;
+  exists = exists;
+  for_all = for_all;
+  find = find;
+  to_list = to_list;
+  to_array = to_array;
+}

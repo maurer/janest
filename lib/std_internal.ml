@@ -5,34 +5,28 @@ TYPE_CONV_PATH "Core.Std_internal"
 module Unix = Core_unix
 
 (* original modules *)
-module FSet = MoreLabels.Set
-module FMap = MoreLabels.Map
 module Std_unix = Unix
 
 (* modified modules *)
-module Set = PSet
-module Map = PMap
-include PMap.Infix
-module Array = Core_array 
+module Set = Core_set
+module Map = Core_map
+module Array = Core_array
 include Array.Infix
 module Hashtbl = Core_hashtbl
-include Hashtbl.Infix
-module String = Core_string 
+module String = Core_string
 module List = Core_list
 include List.Infix
 
 module Queue = Core_queue
-  
+
 module Stack = Core_stack
 
-module Sys = struct 
-  include Sys 
-  include Core_sys 
-end
+module Sys = Core_sys
 
 module Char = Core_char
 
 module Int = Core_int
+include Int.Infix
 module Int32 = Core_int32
 module Int64 = Core_int64
 module Nativeint = Core_nativeint
@@ -41,17 +35,14 @@ module Nativeint = Core_nativeint
 include Common
 
 include (Float : Interfaces.Robustly_comparable with type robustly_comparable = float)
-(* CRv2 achlipala: This [include] of [Float] leads to some confusing error messages about
-   [Std_internal.robustly_comparable]. *)
 include String.Infix
-(* XXX overrides of certain Pervasives functions.  We should probably stop opening
- * Pervasives and then we wouldn't have to do this. *)
-(* CRv2 sweeks: What does the above comment mean?  Where is Pervasive opened? *)
 let int_of_float = Float.to_int
 let truncate = Float.truncate
 let round = Float.round
 include Interfaces
 module Sexp = Core_sexp
+include Core_sexp.Sexp_option
+include Core_sexp.Sexp_list
 include Sexplib.Conv
 include Printf
 include Scanf

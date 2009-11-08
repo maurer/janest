@@ -1,12 +1,24 @@
 type t
 
+
 include Binable.S with type binable = t
 include Comparable.S with type comparable = t
 include Hashable.S with type hashable = t
 include Sexpable.S with type sexpable = t
 
-(** [of_string s] accepts three-character abbreviations with any capitalization
-*)
+(** [sexp_of_t_mode] controls how months are converted to strings by [sexp_of_t].
+ *    `Upper       JAN
+ *    `Lower       jan
+ *    `Capitalized Jan
+ *
+ * The default is `Upper
+ *)
+
+val sexp_of_t_mode : [ `Upper | `Lower | `Capitalized ] ref
+
+(**
+ * [of_string s] accepts three-character abbreviations with any capitalization
+ *)
 include Stringable.S with type stringable = t
 
 val invariant : t -> unit
@@ -23,6 +35,9 @@ val sep : t
 val oct : t
 val nov : t
 val dec : t
+
+val all : t list
+
 
 type variant = [ `Jan | `Feb | `Mar | `Apr | `May | `Jun
                | `Jul | `Aug | `Sep | `Oct | `Nov | `Dec ]

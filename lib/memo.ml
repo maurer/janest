@@ -13,18 +13,18 @@ let ident f =
     with
       | Sys.Break as e -> raise e
       | e ->
-	  store := Some (arg,Expt e);
-	  raise e
+          store := Some (arg,Expt e);
+          raise e
   in
   (fun arg ->
      match !store with
        | Some (oldarg,oldrval) ->
-	   if oldarg = arg
-	   then
-	     match oldrval with
-		 Rval rval -> rval
-	       | Expt e -> raise e
-	   else doit arg
+           if oldarg = arg
+           then
+             match oldrval with
+                 Rval rval -> rval
+               | Expt e -> raise e
+           else doit arg
        | None -> doit arg
   )
 
@@ -37,16 +37,17 @@ let general f =
   (fun x ->
      try
        (match Hashtbl.find store x with
-	  | Rval rval -> rval
-	  | Expt e -> raise e )
+          | Rval rval -> rval
+          | Expt e -> raise e )
      with Not_found ->
        try
-	 let rval = f x in
-	 Hashtbl.add store ~key:x ~data:(Rval rval);
-	 rval
+         let rval = f x in
+         Hashtbl.add store ~key:x ~data:(Rval rval);
+         rval
        with
-	 | Sys.Break as e -> raise e
-	 | e ->
-	     Hashtbl.add store ~key:x ~data:(Expt e);
-	     raise e
+         | Sys.Break as e -> raise e
+         | e ->
+             Hashtbl.add store ~key:x ~data:(Expt e);
+             raise e
   )
+

@@ -1,0 +1,90 @@
+OCAML_LIBRARIES = core pcre
+OCAML_LIB_FLAGS += -cclib -lpthread
+
+CFLAGS += $(match $(PROCESSOR), i686, -DUSE_ASM)
+
+INCLUDES += ../lib
+
+LIB_CNAMES = \
+  extended_linux_stubs \
+  extended_unix_stubs \
+  malloc_stubs \
+  ocaml_utils_stubs \
+  syslog_stubs
+
+LIB_MLNAMES[] =
+  cbuffer
+  command
+  container_extended
+  dispatch_arg
+  escaping
+  exception_check
+  extended_common
+  extended_exn
+  extended_float
+  extended_filename
+  extended_gc
+  extended_list
+  extended_array
+  extended_linux
+  extended_result
+  extended_sexp
+  extended_string
+  extended_unix
+  find
+  fold_map
+  int_set
+  iter
+  log
+  logger
+  loggers
+  malloc
+  lru
+  net_utils
+  ocaml_utils
+  pp
+  procfs
+  process
+  prompt
+  readline
+  res_array
+  rw_mutex
+  semaphore
+  sendmail
+  shell
+  syslog
+  rmap
+  hashtree
+  std
+  union_find
+  unix_utils
+  vector
+
+$(addsuffixes $(OCAML_SUFFIXES), extended_common): $(addsuffixes $(OCAML_OBJECTS),extended_unix)
+
+OCamlMakePPDeps($(PA_SEXP_BIN), \
+  cbuffer \
+  extended_linux \
+  int_set \
+  log \
+  process \
+  result \
+  shell \
+  fold_map \
+  process \
+  malloc \
+  res_array \
+  rmap \
+  hashtree \
+  vector \
+)
+
+OCamlMakeLibPackage (core_extended)
+
+OCamlMakeProjDefaults(mycaml)
+#OCamlTop(mycaml, )
+
+InstantiateOCamlEnv()
+
+doc: core_extended $(OCAMLDOC_PP)
+  $(OCamlDocs Core_extended, *.mli *.ml, "Extended core library.")

@@ -13,14 +13,21 @@ external fdatasync : file_descr -> unit = "unix_fdatasync"
 #warning "_POSIX_SYNCHRONIZED_IO not net or <= 0, fdatasync not available"
 #endif
 external dirfd : dir_handle -> file_descr = "unix_dirfd"
-external readdir_ino : dir_handle -> string * int = "unix_readdir_ino_stub"
-external unix_error : int -> string -> string -> 'a = "unix_error_stub"
+
+external readdir_ino :
+  dir_handle -> string * nativeint = "unix_readdir_ino_stub"
+
+
+
+external unix_error : int -> string -> string -> _ = "unix_error_stub"
 external int_of_file_descr : file_descr -> int = "%identity"
 external file_descr_of_int : int -> file_descr = "%identity"
 
-external unsafe_read_assume_nonblocking :
+external exit_immediately : int -> _ = "caml_sys_exit"
+
+external unsafe_read_assume_fd_is_nonblocking :
   file_descr -> string -> pos : int -> len : int -> int
-  = "unix_read_assume_nonblocking_stub"
+    = "unix_read_assume_fd_is_nonblocking_stub"
 
 let check_string_args ~loc str ~pos ~len =
   if pos < 0 then invalid_arg (loc ^ ": pos < 0");
@@ -39,23 +46,23 @@ let get_opt_len str ~pos = function
   | Some len -> len
   | None -> String.length str - pos
 
-let read_assume_nonblocking fd ?pos ?len buf =
-  let loc = "read_assume_nonblocking" in
+let read_assume_fd_is_nonblocking fd ?pos ?len buf =
+  let loc = "read_assume_fd_is_nonblocking" in
   let pos = get_opt_pos ~loc pos in
   let len = get_opt_len buf ~pos len in
   check_string_args ~loc buf ~pos ~len;
-  unsafe_read_assume_nonblocking fd buf ~pos ~len
+  unsafe_read_assume_fd_is_nonblocking fd buf ~pos ~len
 
-external unsafe_write_assume_nonblocking :
+external unsafe_write_assume_fd_is_nonblocking :
   file_descr -> string -> pos : int -> len : int -> int
-  = "unix_write_assume_nonblocking_stub"
+    = "unix_write_assume_fd_is_nonblocking_stub"
 
-let write_assume_nonblocking fd ?pos ?len buf =
-  let loc = "write_assume_nonblocking" in
+let write_assume_fd_is_nonblocking fd ?pos ?len buf =
+  let loc = "write_assume_fd_is_nonblocking" in
   let pos = get_opt_pos ~loc pos in
   let len = get_opt_len buf ~pos len in
   check_string_args ~loc buf ~pos ~len;
-  unsafe_write_assume_nonblocking fd buf ~pos ~len
+  unsafe_write_assume_fd_is_nonblocking fd buf ~pos ~len
 
 
 (* Filesystem functions *)
@@ -67,27 +74,24 @@ let mknod
     ?(file_kind = S_REG) ?(perm = 0o600) ?(major = 0) ?(minor = 0) pathname =
   mknod pathname file_kind perm major minor
 
-
 #if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > -1)
 (* Clock functions *)
-type clock
+module Clock = struct
+  type t
 
-external clock_gettime : clock -> float = "unix_clock_gettime"
-external clock_settime : clock -> float -> unit = "unix_clock_settime"
-external clock_getres : clock -> float = "unix_clock_getres"
-
-external pthread_getcpuclockid :
-  Thread.t -> clock = "unix_pthread_getcpuclockid"
+  external get_time : t -> float = "unix_clock_gettime"
+  external set_time : t -> float -> unit = "unix_clock_settime"
+  external get_resolution : t -> float = "unix_clock_getres"
+  external get : Thread.t -> t = "unix_pthread_getcpuclockid"
+end
 #else
 #warning "POSIX MON not present; clock functions undefined"
 #endif
-
 
 (* Resource limits *)
 
 module RLimit = struct
   type limit = Limit of int64 | Infinity
-
   type t = { cur : limit; max : limit }
 
   type resource =
@@ -98,73 +102,75 @@ module RLimit = struct
     | NOFILE
     | STACK
     | AS
+
+  external get : resource -> t = "unix_getrlimit"
+  external set : resource -> t -> unit = "unix_setrlimit"
 end
 
-external getrlimit : RLimit.resource -> RLimit.t = "unix_getrlimit"
-external setrlimit : RLimit.resource -> RLimit.t -> unit = "unix_setrlimit"
 
-
-(** {2 Resource usage} *)
-module RUsage = struct
+(** {2 Resource usage} -- For details, "man getrusage" *)
+module Resource_usage = struct
   type who = SELF | CHILDREN
 
   type t = {
-    ru_utime : float;
-    ru_stime : float;
-    ru_maxrss : int64;
-    ru_ixrss : int64;
-    ru_idrss : int64;
-    ru_isrss : int64;
-    ru_minflt : int64;
-    ru_majflt : int64;
-    ru_nswap : int64;
-    ru_inblock : int64;
-    ru_oublock : int64;
-    ru_msgsnd : int64;
-    ru_msgrcv : int64;
-    ru_nsignals : int64;
-    ru_nvcsw : int64;
-    ru_nivcsw : int64;
+    utime : float;
+    stime : float;
+    maxrss : int64;
+    ixrss : int64;
+    idrss : int64;
+    isrss : int64;
+    minflt : int64;
+    majflt : int64;
+    nswap : int64;
+    inblock : int64;
+    oublock : int64;
+    msgsnd : int64;
+    msgrcv : int64;
+    nsignals : int64;
+    nvcsw : int64;
+    nivcsw : int64;
   }
 
-  let ru_utime ru = ru.ru_utime
-  let ru_stime ru = ru.ru_stime
-  let ru_maxrss ru = ru.ru_maxrss
-  let ru_ixrss ru = ru.ru_ixrss
-  let ru_idrss ru = ru.ru_idrss
-  let ru_isrss ru = ru.ru_isrss
-  let ru_minflt ru = ru.ru_minflt
-  let ru_majflt ru = ru.ru_majflt
-  let ru_nswap ru = ru.ru_nswap
-  let ru_inblock ru = ru.ru_inblock
-  let ru_oublock ru = ru.ru_oublock
-  let ru_msgsnd ru = ru.ru_msgsnd
-  let ru_msgrcv ru = ru.ru_msgrcv
-  let ru_nsignals ru = ru.ru_nsignals
-  let ru_nvcsw ru = ru.ru_nvcsw
-  let ru_nivcsw ru = ru.ru_nivcsw
+  external getrusage : who -> t = "unix_getrusage"
+  let get who = getrusage who
 
-  let add ru1 ru2 = {
-    ru_utime = ru1.ru_utime +. ru2.ru_utime;
-    ru_stime = ru1.ru_stime +. ru2.ru_stime;
-    ru_maxrss = Int64.add ru1.ru_maxrss ru2.ru_maxrss;
-    ru_ixrss = Int64.add ru1.ru_ixrss ru2.ru_ixrss;
-    ru_idrss = Int64.add ru1.ru_idrss ru2.ru_idrss;
-    ru_isrss = Int64.add ru1.ru_isrss ru2.ru_isrss;
-    ru_minflt = Int64.add ru1.ru_minflt ru2.ru_minflt;
-    ru_majflt = Int64.add ru1.ru_majflt ru2.ru_majflt;
-    ru_nswap = Int64.add ru1.ru_nswap ru2.ru_nswap;
-    ru_inblock = Int64.add ru1.ru_inblock ru2.ru_inblock;
-    ru_oublock = Int64.add ru1.ru_oublock ru2.ru_oublock;
-    ru_msgsnd = Int64.add ru1.ru_msgsnd ru2.ru_msgsnd;
-    ru_msgrcv = Int64.add ru1.ru_msgrcv ru2.ru_msgrcv;
-    ru_nsignals = Int64.add ru1.ru_nsignals ru2.ru_nsignals;
-    ru_nvcsw = Int64.add ru1.ru_nvcsw ru2.ru_nvcsw;
-    ru_nivcsw = Int64.add ru1.ru_nivcsw ru2.ru_nivcsw;
+  let utime t = t.utime
+  let stime t = t.stime
+  let maxrss t = t.maxrss
+  let ixrss t = t.ixrss
+  let idrss t = t.idrss
+  let isrss t = t.isrss
+  let minflt t = t.minflt
+  let majflt t = t.majflt
+  let nswap t = t.nswap
+  let inblock t = t.inblock
+  let oublock t = t.oublock
+  let msgsnd t = t.msgsnd
+  let msgrcv t = t.msgrcv
+  let nsignals t = t.nsignals
+  let nvcsw t = t.nvcsw
+  let nivcsw t = t.nivcsw
+
+  let add t1 t2 = {
+    utime = t1.utime +. t2.utime;
+    stime = t1.stime +. t2.stime;
+    maxrss = Int64.add t1.maxrss t2.maxrss;
+    ixrss = Int64.add t1.ixrss t2.ixrss;
+    idrss = Int64.add t1.idrss t2.idrss;
+    isrss = Int64.add t1.isrss t2.isrss;
+    minflt = Int64.add t1.minflt t2.minflt;
+    majflt = Int64.add t1.majflt t2.majflt;
+    nswap = Int64.add t1.nswap t2.nswap;
+    inblock = Int64.add t1.inblock t2.inblock;
+    oublock = Int64.add t1.oublock t2.oublock;
+    msgsnd = Int64.add t1.msgsnd t2.msgsnd;
+    msgrcv = Int64.add t1.msgrcv t2.msgrcv;
+    nsignals = Int64.add t1.nsignals t2.nsignals;
+    nvcsw = Int64.add t1.nvcsw t2.nvcsw;
+    nivcsw = Int64.add t1.nivcsw t2.nivcsw;
   }
 end
 
-external getrusage : RUsage.who -> RUsage.t = "unix_getrusage"
 
 
 (* System configuration *)
@@ -188,16 +194,18 @@ type sysconf =
 
 external sysconf : sysconf -> int64 = "unix_sysconf"
 
-
-(* POSIX thread functions *)
 #if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS > 0)
+(* POSIX thread functions *)
 external mutex_timedlock : Mutex.t -> float -> bool = "unix_mutex_timedlock"
 #else
-#warning "POSIX TMO not present; mutex_timedlock undefined"
+#warning "POSIX TMO not present; unix_mutex_timedlock undefined"
 #endif
 
 external condition_timedwait :
   Condition.t -> Mutex.t -> float -> bool = "unix_condition_timedwait"
+
+external create_error_checking_mutex :
+  unit -> Mutex.t = "unix_create_error_checking_mutex"
 
 
 (* I/O vectors *)
@@ -272,22 +280,28 @@ module IOVec = struct
     else Int64.to_int n64
 end
 
-external unsafe_writev_assume_nonblocking :
-  file_descr -> string IOVec.t array -> int -> int
-  = "unix_writev_assume_nonblocking_stub"
+let get_iovec_count loc iovecs = function
+  | None -> Array.length iovecs
+  | Some count ->
+      if count < 0 then invalid_arg (loc ^ ": count < 0");
+      let n_iovecs = Array.length iovecs in
+      if count > n_iovecs then invalid_arg (loc ^ ": count > n_iovecs");
+      count
 
-let writev_assume_nonblocking fd ?count iovecs =
-  let count =
-    match count with
-    | None -> Array.length iovecs
-    | Some count ->
-        if count < 0 then invalid_arg "writev_assume_nonblocking: count < 0";
-        let n_iovecs = Array.length iovecs in
-        if count > n_iovecs then
-          invalid_arg "writev_assume_nonblocking: count > n_iovecs";
-        count
-  in
-  unsafe_writev_assume_nonblocking fd iovecs count
+external unsafe_writev_assume_fd_is_nonblocking :
+  file_descr -> string IOVec.t array -> int -> int
+  = "unix_writev_assume_fd_is_nonblocking_stub"
+
+let writev_assume_fd_is_nonblocking fd ?count iovecs =
+  let count = get_iovec_count "writev_assume_fd_is_nonblocking" iovecs count in
+  unsafe_writev_assume_fd_is_nonblocking fd iovecs count
+
+external unsafe_writev :
+  file_descr -> string IOVec.t array -> int -> int = "unix_writev_stub"
+
+let writev fd ?count iovecs =
+  let count = get_iovec_count "writev" iovecs count in
+  unsafe_writev fd iovecs count
 
 external pselect :
   file_descr list -> file_descr list -> file_descr list -> float -> int list ->
@@ -298,14 +312,99 @@ external pselect :
 
 external realpath : string -> string = "unix_realpath"
 
-(* Temp dir creation *)
 
+(* Temporary file and directory creation *)
+
+external mkstemp : string -> string * Unix.file_descr = "unix_mkstemp"
 external mkdtemp : string -> string = "unix_mkdtemp"
+
 
 (* Signal handling *)
 
 external abort : unit -> 'a = "unix_abort" "noalloc"
 
+
 (* User id, group id management *)
 
 external initgroups : string -> int -> unit = "unix_initgroups"
+
+
+(** Globbing and shell word expansion *)
+
+module Fnmatch_flags = struct
+  type internal =
+    | NOESCAPE
+    | PATHNAME
+    | PERIOD
+    | FILE_NAME
+    | LEADING_DIR
+    | CASEFOLD
+
+  type flag = [
+    | `NOESCAPE
+    | `PATHNAME
+    | `PERIOD
+    | `FILE_NAME
+    | `LEADING_DIR
+    | `CASEFOLD
+  ]
+
+  
+  
+  let flag_to_internal = function
+    | `NOESCAPE -> NOESCAPE
+    | `PATHNAME -> PATHNAME
+    | `PERIOD -> PERIOD
+    | `FILE_NAME -> FILE_NAME
+    | `LEADING_DIR -> LEADING_DIR
+    | `CASEFOLD -> CASEFOLD
+
+  type t = int32
+
+  external internal_make : internal array -> t = "unix_fnmatch_make_flags"
+
+  let make flags =
+    internal_make (Array.map flag_to_internal (Array.of_list flags))
+end
+
+external fnmatch :
+  Fnmatch_flags.t -> pat : string -> string -> bool = "unix_fnmatch"
+
+let fnmatch ?(flags = Int32.zero) ~pat fname = fnmatch flags ~pat fname
+
+module Wordexp_flags = struct
+  type internal = NOCMD | SHOWERR | UNDEF
+  type flag = [ `NOCMD | `SHOWERR | `UNDEF ]
+
+  
+  let flag_to_internal = function
+    | `NOCMD -> NOCMD
+    | `SHOWERR -> SHOWERR
+    | `UNDEF -> UNDEF
+
+  type t = int32
+
+  external internal_make : internal array -> t = "unix_wordexp_make_flags"
+
+  let make flags =
+    internal_make (Array.map flag_to_internal (Array.of_list flags))
+end
+
+external wordexp : Wordexp_flags.t -> string -> string array = "unix_wordexp"
+
+let wordexp ?(flags = Int32.zero) str = wordexp flags str
+
+
+#if defined(__linux__)
+(** {2 Additional IP functionality} *)
+
+external if_indextoname : int -> string = "unix_if_indextoname"
+
+external mcast_join :
+  ?ifname : string -> file_descr -> sockaddr -> unit = "unix_mcast_join"
+
+external mcast_leave :
+  ?ifname : string -> file_descr -> sockaddr -> unit = "unix_mcast_leave"
+#else
+#warning "not on linux, multicast stuff not included"
+#endif

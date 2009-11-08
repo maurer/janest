@@ -6,7 +6,9 @@ let rec forever f =
   f ();
   forever f
 
-let to_sorted_list h = List.rev (List.init ~f:(fun _ -> Heap.pop h) (Heap.length h))
+let to_sorted_list h =
+  List.rev (List.init ~f:(fun _ -> Heap.pop_exn h) (Heap.length h))
+
 let random_heap_and_list gen =
   let h = Heap.create compare in
   let random_list = List.init ~f:(fun _ -> gen ()) 9999 in
@@ -39,7 +41,7 @@ let test =
         "copy" >::
           (fun () ->
              let copied = Heap.copy float_heap in
-             "pop" @? (Heap.pop copied = 0.);
+             "pop_exn" @? (Heap.pop_exn copied = 0.);
              "same" @? (Heap.length float_heap = 4);
           );
         "copy2" >::
@@ -48,18 +50,18 @@ let test =
             let copy = Heap.copy heap in
             "same" @? (to_sorted_list heap = to_sorted_list copy)
           );
-        "maybe_top" >::
+        "top" >::
           (fun () ->
             let (h,l) = random_heap_and_list Quickcheck.uig in
-            "foo" @? (match Heap.maybe_top h with
+            "foo" @? (match Heap.top h with
                         None -> false
                       | Some t -> t = List.hd_exn (List.sort ~cmp:compare l));
             "didnaepop" @? (Heap.length h = List.length l)
           );
-        "maybe_pop" >::
+        "pop" >::
           (fun () ->
             let (h,l) = random_heap_and_list Quickcheck.uig in
-            "foo" @? (match Heap.maybe_pop h with
+            "foo" @? (match Heap.pop h with
                         None -> false
                       | Some t -> t = List.hd_exn (List.sort ~cmp:compare l));
             "popped" @? (Heap.length h = List.length l - 1)
@@ -106,8 +108,8 @@ let test =
                begin
                  try forever
                    begin fun () ->
-                     let top  = Heap.pop random_heap in
-                     let next = Heap.top random_heap in
+                     let top  = Heap.pop_exn random_heap in
+                     let next = Heap.top_exn random_heap in
                      if top > next then raise Exit
                    end
                  with
@@ -121,8 +123,8 @@ let test =
                let int_heap = Heap.of_array ~min_size:1 compare [| 0; 1; 2; 3; 4; 5; 6 |] in
                let heap_el = Heap.find_heap_el int_heap 1 in
                Heap.update heap_el 5;
-               let _ = Heap.pop int_heap in
-               let x = Heap.pop int_heap in
+               let _ = Heap.pop_exn int_heap in
+               let x = Heap.pop_exn int_heap in
                x = 2
              )
           );

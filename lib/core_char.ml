@@ -1,13 +1,22 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
+(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
 TYPE_CONV_PATH "Core_char"
 
 module Char = Caml.Char
 
 let failwithf = Core_printf.failwithf
 
-type t = char with sexp
+module T = struct
+  type t = char with bin_io, sexp
 
-type sexpable = t
+  type binable = t
+  type sexpable = t
+
+  let compare = Char.compare
+  let equal (x: t) y = x = y
+  let hash = Hashtbl.hash
+end
+
+include T
 
 let to_int = Char.code
 
@@ -46,6 +55,10 @@ let is_whitespace t = t = ' ' || t = '\n' || t = '\t' || t = '\r'
 
 let is_digit t = '0' <= t && t <= '9'
 
+let is_alpha t = is_lowercase t || is_uppercase t
+
+let is_alphanum t = is_alpha t || is_digit t
+
 let to_string t = String.make 1 t
 
 let get_digit_unsafe t = to_int t - to_int '0'
@@ -53,12 +66,10 @@ let get_digit_unsafe t = to_int t - to_int '0'
 let get_digit_exn t =
   if is_digit t
   then get_digit_unsafe t
-  else failwithf "Char.get_digit_exn (%c): not a digit" t ()
+  else failwithf "Char.get_digit_exn %C: not a digit" t ()
 ;;
 
 let get_digit t = if is_digit t then Some (get_digit_unsafe t) else None
 
-include Comparable.From_compare (struct
-  type t = char
-  let compare = Char.compare
-end)
+include Comparable.Make (T)
+include Hashable.Make (T)

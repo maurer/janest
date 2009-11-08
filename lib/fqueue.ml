@@ -1,7 +1,8 @@
 (** Simple implementation of a polymorphic functional queue *)
 (** push and top and bottom are O(1).  
    pop and take are O(1) amortized.
-   to_list and length are O(n).
+   to_list is O(n).
+   length is O(1).
 *)
 
 (* Invariants:  
@@ -14,9 +15,9 @@ exception Bug of string
 exception Empty
 
 type 'a t = { inlist: 'a list;
-	      outlist: 'a list;
-	      length: int;
-	    }
+              outlist: 'a list;
+              length: int;
+            }
 
 let test_invariants queue = 
   assert (queue.length = (List.length queue.outlist) + (List.length queue.inlist));
@@ -24,22 +25,22 @@ let test_invariants queue =
   assert (if queue.length > 1 then List.length queue.inlist <> 0 else true)
 
 let empty = { inlist = [];
-	      outlist = [];
-	      length = 0;
-	    }
+              outlist = [];
+              length = 0;
+            }
 
 let push el queue =
   let length = queue.length + 1 in
   if queue.outlist = [] then
     if queue.inlist = [] then
       { inlist = [];
-	outlist = [el];
-	length = length;
+        outlist = [el];
+        length = length;
       } 
     else
       { inlist = [el]; 
-	outlist = List.rev queue.inlist;
-	length = length;
+        outlist = List.rev queue.inlist;
+        length = length;
       }
   else
     { inlist = el::queue.inlist;
@@ -112,12 +113,12 @@ let deq = pop
 
 let deq_exn = pop_exn
 
-(* CR rdouglass: either change this to use pop, or rename it to discard_exn *)
 (** returns queue with top removed *)
-let discard queue = 
+let discard_exn queue = 
   let (_,new_q) = pop_exn queue in
     new_q
-      
+
+
 (** converts queue to list, from most to least recently enqueued item *)
 let to_list queue = 
   queue.inlist @ (List.rev (queue.outlist))

@@ -2,16 +2,6 @@
 
 (* Double-ended index-able queue *)
 
-(* the user's index is called the "conceptual" index (variable names are index or i),
-   while the corresponding index into the physical array is called the "physical" index
-   (variable names are pindex or p)
-   the physical length is "Array.length buf.data" (variable name plength) while the
-   conceptual length is buf.length (variable name length)
-   invariant: physical_index = conceptual_index mod physical_length
-   the "front" has smaller indices
-   physical array lengths are always powers of two
-   maybe I should insert dummy values into dropped indices to g.c. junk sooner? *)
-
 open Std_internal
 
 TYPE_CONV_PATH "Dequeue"
@@ -23,6 +13,8 @@ type 'a t = { mutable data: 'a array;
              dummy: 'a;
            }
  with sexp
+
+type 'a sexpable = 'a t
 
 let create ?(never_shrink=false) ?(initial_index=0) ~dummy () =
   { data = Array.create (1 lsl 3) dummy;  (* (1 lsl 3) = 8, must be power of 2! *)
@@ -36,19 +28,20 @@ let length buf = buf.length
 
 let is_empty buf = buf.length = 0
 
-let phys_length buf = Array.length buf.data
-
 let front_index buf = buf.min_index
 
 let back_index buf = buf.min_index + buf.length - 1
 
-let is_full buf = buf.length >= Array.length buf.data
+let is_full buf = buf.length = Array.length buf.data
+
+let invariant buf =
+  assert (buf.length <= Array.length buf.data)
 
 let fast_double x = x lsl 1             (* x * 2 *)
 let fast_half x = x asr 1               (* x / 2 *)
 let fast_quarter x = x asr 2            (* x / 4 *)
 let fast_mod x l = x land (l-1)         (* x % l (works when l is power of 2) *)
-let fast_is_power_2 x = x land (x-1) = 0(* x=2^n for non-negative integer n or x=0 *)
+let fast_is_power_2 x = x land (x-1) = 0(* x=2^n for non-negative integer n or x=0 or -max_int-1*)
 
 let check_index fname buf i =
   if i < buf.min_index || i >= buf.min_index + buf.length
@@ -124,6 +117,7 @@ let maybe_expand buf =
   if is_full buf
   then swap_array buf (fast_double (Array.length buf.data))
 
+
 let maybe_shrink buf =
   if not buf.never_shrink && buf.length < fast_quarter (Array.length buf.data)
   then swap_array buf (fast_half (Array.length buf.data))
@@ -139,20 +133,16 @@ let push_back buf v =
   buf.length <- buf.length + 1;
   set buf (back_index buf) v
 
-let drop_n_front buf n =
-  if n > buf.length || n < 0 then invalid_arg "Dqueue: drop from front";
+let drop_front ?(n=1) buf =
+  if n > buf.length || n < 0 then invalid_arg "Dequeue.drop_front";
   buf.min_index <- buf.min_index + n;
   buf.length <- buf.length - n;
   maybe_shrink buf
 
-let drop_n_back buf n =
-  if n > buf.length || n < 0 then invalid_arg "Dqueue: drop from back";
+let drop_back ?(n=1) buf =
+  if n > buf.length || n < 0 then invalid_arg "Dequeue.drop_back";
   buf.length <- buf.length - n;
   maybe_shrink buf
-
-let drop_front buf = drop_n_front buf 1
-
-let drop_back buf = drop_n_back buf 1
 
 let take_front buf =
   let v = get_front buf in
@@ -165,7 +155,7 @@ let take_back buf =
   v
 
 let drop_indices_less_than buf i =
-  drop_n_front buf (i - buf.min_index)
+  drop_front ~n:(i - buf.min_index) buf
 
 let drop_indices_greater_than buf i =
-  drop_n_back buf (back_index buf - i)
+  drop_back ~n:(back_index buf - i) buf

@@ -2,7 +2,7 @@
 
     * It doesn't require anything (hashable, comparable) of elements in the bag.
     * Duplicates are allowed.
-    * Addition and removal are (amortized) constant time.
+    * Addition and removal are constant time.
 *)
 open Std_internal
 
@@ -23,30 +23,27 @@ val invariant : 'a t -> unit
 (** [create ()] returns an empty bag. *)
 val create : unit -> 'a t
 
-(* CRv2 tvaroquaux: If we do not check for any invariants then [add] and
-   [remove] should run in constant time. I think the "amortized" part
-   of the comment puts us unnecessarily on our guards.
-*)
-(** [add t v] adds [v] to the bag [t], returning an element that can later be
-    removed from the bag.  [add] runs in (amortized) constant time.
+(** [add t v] adds [v] to the bag [t], returning an element that can
+    later be removed from the bag.  [add] runs in constant time.
 *)
 val add : 'a t -> 'a -> 'a Elt.t
 
+
 (** [remove t elt] removes [elt] from the bag [t], raising an exception if [elt]
-    is not in the bag.  [remove] runs in (amortized) constant time.
+    is not in the bag.  [remove] runs in constant time.
 *)
 val remove : 'a t -> 'a Elt.t -> unit
 
 (** [some_elt t] returns some element in the bag. *)
+
 val some_elt : 'a t -> 'a Elt.t option
 
 (** [remove_one t] removes some element from the bag, and returns its value.
-    [remove_one] runs in (amortized) constant time.
+    [remove_one] runs in constant time.
 *)
 val remove_one : 'a t -> 'a option
 
-(** [clear t] removes all elements from the bag.  [clear] runs in O([length t])
-    time. *)
+(** [clear t] removes all elements from the bag.  [clear] runs in O(1) time. *)
 val clear : 'a t -> unit
 
 (** [find_elt t ~f] looks at elements in the bag one-by-one until it finds one

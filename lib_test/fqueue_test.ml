@@ -27,10 +27,10 @@ let test =
            "q3" @? (to_list q3 = [0;1;2;3]);
            "top_exn3" @? (top_exn q3 = 3);
            "bot_exn3" @? (bot_exn q3 = 0);
-           "discard" @? (to_list (discard q0) = to_list q1);
+           "discard_exn" @? (to_list (discard_exn q0) = to_list q1);
            "notempty3" @? not (is_empty q3);
-           "empty3" @? is_empty (discard (discard (discard (discard q3))));
-           "misc" @? (to_list (lpush [2;3] (discard (discard (discard (discard q3))))) = [2;3]);
+           "empty3" @? is_empty (discard_exn (discard_exn (discard_exn (discard_exn q3))));
+           "misc" @? (to_list (lpush [2;3] (discard_exn (discard_exn (discard_exn (discard_exn q3))))) = [2;3]);
         );
       "invariants" >::
         (fun () -> 
@@ -42,7 +42,7 @@ let test =
                              | 1 -> 
                                  (match pop q with
                                   | None -> q | Some (_,q) -> q)
-                             | 2 -> (try discard q with Empty -> q)
+                             | 2 -> (try discard_exn q with Empty -> q)
                              | _ -> q
                            in
                            test_invariants q;

@@ -1,49 +1,46 @@
-type t = bool
+(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
+TYPE_CONV_PATH "bool"
 
-type sexpable = t
-let sexp_of_t = Sexplib.Conv.sexp_of_bool
-let t_of_sexp = Sexplib.Conv.bool_of_sexp
+let invalid_argf = Core_printf.invalid_argf
 
-type stringable = t
-let of_string = bool_of_string
+module T = struct
+  type t = bool with bin_io, sexp
+
+  type binable = t
+  type comparable = t
+  type sexpable = t
+  type stringable = t
+
+  let compare (t : t) t' = compare t t'
+  (* we use physical equality here because for bools it is the same *)
+  let equal (t : t) t' = t == t'
+  let hash x = if x then 1 else 0
+end
+
+include T
+
+let of_string = function
+  | "true" -> true
+  | "false" -> false
+  | s -> invalid_argf "Bool.of_string: expected true or false but got %s" s ()
+;;
+
 let to_string = string_of_bool
 
-type comparable = t
 let min (x : t) y = if x < y then x else y
 let max (x : t) y = if x > y then x else y
-let compare x y = compare (x : t) y
 let ascending = compare
-let descending x y = compare y x 
-
-let equal (x : t) y = x = y
+let descending x y = compare y x
 let ( >= ) (x : t) y = x >= y
 let ( <= ) (x : t) y = x <= y
-let ( = ) (x : t) y = x = y
+let ( = ) = equal
 let ( > ) (x : t) y = x > y
 let ( < ) (x : t) y = x < y
-let ( <> ) (x : t) y = x <> y
+let ( <> ) (x : t) y = x != y
 
 (* Making bool hashable may seem frivolous, but consider an aggregate type with
    a bool in it that needs a custom hash function. *)
-include Hashable.Make (struct
-  type t = bool
-  let equal = equal
-  let hash x = if x then 1 else 0
-  let sexp_of_t = sexp_of_t
-  let t_of_sexp = t_of_sexp
-end)
+include Hashable.Make (T)
+module Set = Core_set.Make (T)
+module Map = Core_map.Make (T)
 
-include Setable.Make (struct
-  type t = bool
-  let compare = compare
-end)
-
-let not = Pervasives.not
-
-let of_int i =
-  match i with
-  | 0 -> false
-  | _ -> true
-;;
-
-let to_int t = if t then 1 else 0

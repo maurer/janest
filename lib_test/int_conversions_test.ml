@@ -1,14 +1,48 @@
 open OUnit;;
 open Core.Std
 
+let () =
+  List.iter [
+    ("1", "1");
+    ("12", "12");
+    ("123", "123");
+    ("1234", "1_234");
+    ("12345", "12_345");
+    ("123456", "123_456");
+    ("1234567", "1_234_567");
+    ("+1", "+1");
+    ("+12", "+12");
+    ("+123", "+123");
+    ("+1234", "+1_234");
+    ("+12345", "+12_345");
+    ("+123456", "+123_456");
+    ("+1234567", "+1_234_567");
+    ("-1", "-1");
+    ("-12", "-12");
+    ("-123", "-123");
+    ("-1234", "-1_234");
+    ("-12345", "-12_345");
+    ("-123456", "-123_456");
+    ("-1234567", "-1_234_567");
+  ]
+    ~f:(fun (input, expected) ->
+      let got =
+        try Core.Int_conversions.prettify_string input
+        with exn ->
+          failwithf "input = %s  exn = %s" input (Exn.to_string exn) ()
+      in
+      if got <> expected then
+        failwithf "input = %s  got = %s  expected = %s" input got expected ())
+    ;;
+
 module Examples (I : Int_intf.S) = struct
   open I
   let two = one + one
 
   let examples =
-    [min_int; min_int + one; min_int + two; div min_int two; neg two; neg one;
+    [min_int; min_int + one; min_int + two; min_int / two; neg two; neg one;
      zero;
-     one; two; div max_int two; max_int - two; max_int - one; max_int;]
+     one; two; max_int / two; max_int - two; max_int - one; max_int;]
   end
 
 module Inverses (X : Int_intf.S) (Y : Int_intf.S)
@@ -21,7 +55,7 @@ module Inverses (X : Int_intf.S) (Y : Int_intf.S)
     let ys = let module E = Examples (Y) in E.examples
     let out_of_range y = assert (y >= x_to_y X.max_int || y <= x_to_y X.min_int)
     let test =
-      "all" >:: (fun () ->
+      "int_conversions" >:: (fun () ->
         List.iter xs ~f:(fun x ->
           let y = x_to_y x in
           match y_to_x y with
@@ -51,7 +85,7 @@ module Inverses' (X : Int_intf.S) (Y : Int_intf.S)
     let y_out_of_range y =
       assert (y >= x_to_y_exn X.max_int || y <= x_to_y_exn X.min_int)
     let test =
-      "all" >:: (fun () ->
+      "int_conversions" >:: (fun () ->
         List.iter xs ~f:(fun x ->
           match x_to_y x with
           | None -> x_out_of_range x

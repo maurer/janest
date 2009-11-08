@@ -3,6 +3,8 @@ TYPE_CONV_PATH "Month"
 
 module Array = Core_array
 module Int = Core_int
+module List = Core_list
+module Sexp = Core_sexp
 module String = Core_string
 
 let failwithf = Core_printf.failwithf
@@ -15,21 +17,21 @@ let invariant t =
   assert (0 <= t && t < num_months);
 ;;
 
+let is_valid_month i = 1 <= i && i <= num_months
+
 let of_int i =
-  if 1 <= i && i <= num_months then
-    Some (i - 1)
-  else
-    None
+  if is_valid_month i then Some (i - 1)
+  else None
 ;;
 
 let of_int_exn i =
-  if 1 <= i && i <= num_months then
-    i - 1
-  else
-    failwithf "Month.of_int_exn %d" i ()
+  if is_valid_month i then i - 1
+  else failwithf "Month.of_int_exn %d" i ()
 ;;
 
 let to_int t = t + 1
+
+let shift t i = (t + i) mod num_months
 
 let jan = 0
 let feb = 1
@@ -44,72 +46,66 @@ let oct = 9
 let nov = 10
 let dec = 11
 
+let all = List.init num_months ~f:Function.ident
+
 type variant = [ `Jan | `Feb | `Mar | `Apr | `May | `Jun
                | `Jul | `Aug | `Sep | `Oct | `Nov | `Dec ]
-
-type rep = {
-  string : string;
-  t : t;
-  variant : variant;
-}
-
-let reps =
-  Array.map  
-    [|("JAN", jan, `Jan);
-      ("FEB", feb, `Feb);
-      ("MAR", mar, `Mar);
-      ("APR", apr, `Apr);
-      ("MAY", may, `May);
-      ("JUN", jun, `Jun);
-      ("JUL", jul, `Jul);
-      ("AUG", aug, `Aug);
-      ("SEP", sep, `Sep);
-      ("OCT", oct, `Oct);
-      ("NOV", nov, `Nov);
-      ("DEC", dec, `Dec)|]
-    ~f:(fun (string, t, variant) ->
-      { string = string; t = t; variant = variant; })
-;;
+with sexp_of
 
 type stringable = t
 
-let to_string t = reps.(t).string
+let create = function
+  | `Jan -> jan
+  | `Feb -> feb
+  | `Mar -> mar
+  | `Apr -> apr
+  | `May -> may
+  | `Jun -> jun
+  | `Jul -> jul
+  | `Aug -> aug
+  | `Sep -> sep
+  | `Oct -> oct
+  | `Nov -> nov
+  | `Dec -> dec
+;;
+
+let all_variants =
+  [| `Jan; `Feb; `Mar; `Apr; `May; `Jun; `Jul; `Aug; `Sep; `Oct; `Nov; `Dec |]
+;;
+
+let all_strings =
+  Array.map all_variants ~f:(fun variant ->
+    Sexp.to_string (sexp_of_variant variant))
+;;
+
+let get t = all_variants.(t)
+
+let to_string t = all_strings.(t)
 
 let of_string =
-  let table =
-    String.Table.of_alist
-      (Array.to_list (Array.map reps ~f:(fun r -> (r.string, r.t))))
-  in
+  let module T = String.Table in
+  let table = T.create num_months in
+  Array.iteri all_strings ~f:(fun t s ->
+    T.replace table ~key:(String.uppercase s) ~data:t);
   fun str ->
-    match String.Table.find table (String.uppercase str) with
+    
+    match T.find table (String.uppercase str) with
     | None -> failwithf "Invalid month: %s" str ()
     | Some x -> x
 ;;
 
+let sexp_of_t_mode = ref `Upper
+
 include Sexpable.Of_stringable (struct
   type stringable = t
   let of_string = of_string
-  let to_string = to_string
+  let to_string t =
+    let s = to_string t in
+    match !sexp_of_t_mode with
+    | `Upper -> s
+    | `Lower -> String.lowercase s
+    | `Capitalized -> String.capitalize s
 end)
-
-let get t = reps.(t).variant
-
-let create = function
-  | `Jan -> 0
-  | `Feb -> 1
-  | `Mar -> 2
-  | `Apr -> 3
-  | `May -> 4
-  | `Jun -> 5
-  | `Jul -> 6
-  | `Aug -> 7
-  | `Sep -> 8
-  | `Oct -> 9
-  | `Nov -> 10
-  | `Dec -> 11
-;;
-
-let shift t i = (t + i) mod num_months
 
 include (Int : sig
   include Binable.S with type binable = t

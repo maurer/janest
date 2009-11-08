@@ -14,3 +14,4 @@ val kbprintf : (Buffer.t -> 'a) -> Buffer.t ->
 (* Extensions *)
 val failwithf :  ('a, unit, string, unit -> _) format4 -> 'a
 val invalid_argf :  ('a, unit, string, unit -> _) format4 -> 'a
+val exitf :  ('a, unit, string, unit -> _) format4 -> 'a

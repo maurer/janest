@@ -1,5 +1,5 @@
-#ifndef JANE_H
-#define JANE_H
+#ifndef JANE_COMMON_H
+#define JANE_COMMON_H
 
 #if __GNUC__ >= 3
 # ifndef inline
@@ -47,4 +47,4 @@
 # endif
 #endif
 
-#endif /* JANE_H */
+#endif /* JANE_COMMON_H */

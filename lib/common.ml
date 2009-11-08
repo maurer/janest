@@ -9,6 +9,9 @@ open Printf
 open Sexplib.Conv
 open Bin_prot
 
+(* we want 64bit file operations as the default *)
+include Pervasives.LargeFile
+
 (** handy types for marking things read-only and read-write *)
 type immutable with bin_io, sexp
 type read_only with bin_io, sexp
@@ -16,28 +19,31 @@ type read_write with bin_io, sexp
 type write_only with bin_io, sexp
 
 let sexp_of_immutable _ = failwith "attempt to convert abstract type immutable"
+let immutable_of_sexp _ = failwith "attempt to convert abstract type immutable"
 let sexp_of_read_only _ = failwith "attempt to convert abstract type read_only"
+let read_only_of_sexp _ = failwith "attempt to convert abstract type read_only"
 let sexp_of_read_write _ = failwith "attempt to convert abstract type read_write"
+let read_write_of_sexp _ = failwith "attempt to convert abstract type read_write"
 let sexp_of_write_only _ = failwith "attempt to convert abstract type write_only"
+let write_only_of_sexp _ = failwith "attempt to convert abstract type write_only"
 
-type 'a set = 'a PSet.t
-type ('a,'b) map = ('a,'b) PMap.t
+type never_returns
+let never_returns (_ : never_returns) = assert false
 
 include (Exn : sig
   exception Finally of exn * exn
 end)
 
-let exn_to_string = Exn.to_string
-let register_exn_converter = Exn.register_converter
-let sexp_of_exn = Exn.sexp_of_t
 let protectx = Exn.protectx
 let protect = Exn.protect
 
-let critical_section = Core_mutex.critical_section
+let critical_section = Mutex0.critical_section
 
-(** Optional function application. The function is only applied if the option has
-    contents (i.e. not [None]). *)
-let opt_map f o = Option.map ~f o
+let (|!) = Function.(|!)
+
+let ident = Function.ident
+let const = Function.const
+
 
 (** [may f (Some x)] applies function [f] to [x]. [may f None] does nothing. *)
 let may f o = Option.iter ~f o
@@ -57,36 +63,33 @@ let read_wrap ?(binary = false) ~f fname =
 (** [write_wrap ~f fname] executes [~f] on the open output channel from
     [fname], and closes it afterwards.  Opens channel in binary mode iff
     [binary] is true. *)
-let write_wrap ?binary ~f fname =
+let write_wrap ?(binary = false) ~f fname =
   let oc =
-    match binary with
-    | None | Some false -> open_out fname
-    | Some true -> open_out_bin fname
+    if binary then
+      open_out_bin fname
+    else
+      open_out fname
   in
   protectx oc ~f ~finally:close_out
 
+let write_lines fname lines =
+  write_wrap fname ~f:(fun oc -> Out_channel.output_lines oc lines)
+
 let input_lines = In_channel.input_lines
+
+let read_lines fname = read_wrap fname ~f:input_lines
 
 (** unwraps an option, throwing [Not_found] if it is [None] *)
 let uw = function Some x -> x | None -> raise Not_found
 
-(** unwraps an option, returning the default value if it is [None] *)
-let uw_default default_value o = Option.value o ~default:default_value
-
-(** [forever f] runs [f ()] until it throws an exception and returns the exception.
-    This function is useful for read_line loops, etc. *)
-let forever f =
-  let rec forever () =
-    f ();
-    forever ()
-  in
-  try forever ()
-  with e -> e
-
-(** identity function *)
-external ident : 'a -> 'a = "%identity"
-
 (** Operators for picking apart tuples *)
+
+let ss_fst = Space_safe_tuple.T2.get1
+let ss_snd = Space_safe_tuple.T2.get2
+
+let ss_fst3 = Space_safe_tuple.T3.get1
+let ss_snd3 = Space_safe_tuple.T3.get2
+let ss_trd3 = Space_safe_tuple.T3.get3
 
 (** Returns the first element of a triple. *)
 let fst3 (x,_,_) = x
@@ -98,7 +101,7 @@ let snd3 (_,y,_) = y
 let trd3 (_,_,z) = z
 
 (** A comparator that returns results in ascending order. *)
-let ascending = compare
+external ascending : 'a -> 'a -> int = "%compare"
 
 (** A comparator that returns results in descending order. *)
 let descending x y = compare y x
@@ -107,45 +110,18 @@ let descending x y = compare y x
 
 open Sexplib.Sexp
 
-let register_pretty_printer = Pretty_printer.register
-
 let failwithf = Core_printf.failwithf
 let invalid_argf = Core_printf.invalid_argf
+let exitf = Core_printf.exitf
+
+let equal = Caml.(=)
+
+let phys_equal = Caml.(==)
+let (==) _ _ = `Consider_using_phys_equal
+let (!=) _ _ = `Consider_using_phys_equal
 
 (** Equivalent to Filename.concat *)
-let ( ^/ ) = Filename.concat
-
-(* CRv2 sweeks: these should be moved into [Core_int]. *)
-(** mod and div operators that have the right behavior on negative numbers,
-  that is, [x % y] always returns a positive int between 0 and y-1.
-    Invariant: [if r = a % b && q = a /% b then q * b + r = a] *)
-let ( % ) x y =
-  if y <= 0 then invalid_arg "% in common.ml: modulus should be positive";
-  let rval = x mod y in
-  if rval < 0
-  then rval + y
-  else rval
-
-let ( /% ) x y =
-  if y <= 0 then invalid_arg "/% in common.ml: modulus should be positive";
-  if x < 0
-  then (x - y + 1) / y
-  else x / y
-
-(** A 'pipe' operator. *)
-let ( |! ) x y = y x
-(* CRv2 / SL/RG: maybe |$ instead? *)
-let ( ^$ ) f x = f x
-
-(** Function composition
-
-    F# uses (>>) and (<<) but (>>) conflicts with anonymous bind...
- *)
-let (||>) f g = fun x -> g (f x)
-let (<||) f g = fun x -> f (g x)
-
-(** float division of integers *)
-let (//) x y = float x /. float y
+let ( ^/ ) = Core_filename.concat
 
 type decimal = float with sexp, bin_io
 let sexp_of_decimal x = Sexplib.Sexp.Atom (sprintf "%.12G" x)
@@ -155,19 +131,13 @@ let decimal_of_sexp = function
       "decimal_of_sexp: Expected Atom, found List" s
 
 type ('a,'b) result = ('a,'b) Result.t = Ok of 'a | Error of 'b
+
 type 'a bound = Incl of 'a | Excl of 'a | Unbounded
 type passfail = Pass | Fail of string
 
-exception Validation_error of string list
-exception Unimplemented of string
-exception Bug of string
-exception Uninitialized_value of string
+exception Validation_error of string list with sexp
+exception Unimplemented of string with sexp
+exception Bug of string with sexp
+exception Uninitialized_value of string with sexp
 
-let () = register_exn_converter (function
-  | Validation_error errors -> Some ("Validation_error " ^ String.concat ~sep:", " errors)
-  | Unimplemented s -> Some ("Unimplemented " ^ s)
-  | Bug s -> Some ("Bug " ^ s)
-  | Uninitialized_value s -> Some ("Uninitialized_value " ^ s)
-  | _ -> None )
-
-(* CR sweeks: override kprintf with `Please_use_ksprintf *)
+let kprintf _ = `Please_use_ksprintf

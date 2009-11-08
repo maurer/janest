@@ -1,4 +1,4 @@
-(** Core_queue is a re-implementation of OCaml's standard Queue module that
+(** Core_queue is a wrapper around OCaml's standard Queue module that
     follows Core idioms and adds some functions.
 
     Differences from the standard module:
@@ -7,20 +7,17 @@
         option rather than raising [Empty].
       [dequeue_exn] is available if you want to raise [Empty].
       [iter] takes a labeled argument.
-      [enqueue] takes the queue argument first.
       [transfer]'s arguments are labeled.
 *)
 
-(* CRv2 sweeks: Eliminate Empty.  People should use the option returning
-   functions, not exception handling, if they want to check for empty.
-*)
+
+
 exception Empty
 
 type 'a t
 
 include Container.S1 with type 'a container = 'a t
-
-val invariant : 'a t -> unit
+include Sexpable.S1 with type 'a sexpable = 'a t
 
 (** [create ()] returns an empty queue. *)
 val create : unit -> 'a t
@@ -52,6 +49,9 @@ val clear : 'a t -> unit
 (** [copy t] returns a copy of [t]. *)
 val copy : 'a t -> 'a t
 
+(** [filter_inplace t ~f] removes all elements of [t] that don't satisfy [f]. *)
+val filter_inplace : 'a t -> f:('a -> bool) -> unit
+
 (** [transfer ~src ~dst] adds all of the elements of [src] to the end of [dst],
     then clears [src]. It is equivalent to the sequence
       [iter ~src ~f:(enqueue dst); clear src]
@@ -62,3 +62,6 @@ val transfer : src:'a t -> dst:'a t -> unit
     order as the elements of [list] (i.e. the first element of [t] is the first
     element of the list). *)
 val of_list : 'a list -> 'a t
+
+(** [partial_iter t ~f] iterates through t until f returns `Stop *)
+val partial_iter : 'a t -> f:('a -> [`Continue | `Stop]) -> unit

@@ -1,11 +1,17 @@
+module List = Core_list
+
 type t = out_channel
+
+let seek = Pervasives.LargeFile.seek_out
+let pos = Pervasives.LargeFile.pos_out
+let length = Pervasives.LargeFile.out_channel_length
 
 let stdout = Pervasives.stdout
 let stderr = Pervasives.stderr
 
 let create ?(binary = false) ?(append = false) ?(perm = 0o644) file =
   let flags = [Open_wronly; Open_creat] in
-  let flags = if binary then Open_binary :: flags else flags in
+  let flags = (if binary then Open_binary else Open_text) :: flags in
   let flags = if append then Open_append :: flags else Open_trunc :: flags in
   Pervasives.open_out_gen flags perm file
 ;;
@@ -24,6 +30,11 @@ let output_byte = Pervasives.output_byte
 let output_binary_int = Pervasives.output_binary_int
 let output_value = Pervasives.output_value
 
-let seek = Pervasives.seek_out
-let pos = Pervasives.pos_out
-let length = Pervasives.out_channel_length
+let newline t = output_string t "\n"
+
+let output_lines t lines =
+  List.iter lines ~f:(fun line ->
+    output_string t line;
+    newline t)
+;;
+

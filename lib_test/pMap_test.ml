@@ -74,7 +74,7 @@ let test =
           "3" @?
             (Map.to_alist (Map.of_alist_exn a) = List.sort ~cmp:ascending a);
           assert_raises
-            (Failure "PMap.of_alist_exn: duplicate key")
+            (Failure "Map.of_alist_exn: duplicate key")
             (fun () -> Map.of_alist_exn a_dup);
         );
       "for_all/exists" >:: (fun () ->

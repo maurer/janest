@@ -4,27 +4,32 @@ type 'a int_spec = {
   max : 'a;
   min : 'a;
   to_string : 'a -> string;
-  
+  compare : 'a -> 'a -> int;
 }
 
 let convert a b a_to_b b_to_a =
   if a.num_bits <= b.num_bits then
     ((fun i -> Some (a_to_b i)), a_to_b)
   else
-    let min = b_to_a b.min in
-    let max = b_to_a b.max in
-    let is_in_range i = min <= i && i <= max in
+    let { min = b_min; max = b_max; name = b_name } = b in
+    let min = b_to_a b_min in
+    let max = b_to_a b_max in
+    let compare = a.compare in
+    let is_in_range i = compare min i <= 0 && compare i max <= 0 in
     let convert i = if is_in_range i then Some (a_to_b i) else None in
+    let { name = a_name; to_string = a_to_string } = a in
     let convert_exn i =
       if is_in_range i then
         a_to_b i
       else
-        failwith (Printf.sprintf
-                     "conversion from %s to %s failed: %s is out of range"
-                     a.name b.name (a.to_string i))
+        Core_printf.failwithf
+          "conversion from %s to %s failed: %s is out of range"
+          a_name b_name (a_to_string i) ()
     in
-    (convert, convert_exn)
+    convert, convert_exn
 ;;
+
+let compare_int (x : int) y = compare x y
 
 let int = {
   name = "int";
@@ -32,6 +37,7 @@ let int = {
   max = max_int;
   min = min_int;
   to_string = string_of_int;
+  compare = compare_int;
 }
 
 let int32 = {
@@ -40,6 +46,7 @@ let int32 = {
   max = Int32.max_int;
   min = Int32.min_int;
   to_string = Int32.to_string;
+  compare = Int32.compare;
 }
 
 let int64 = {
@@ -48,6 +55,7 @@ let int64 = {
   max = Int64.max_int;
   min = Int64.min_int;
   to_string = Int64.to_string;
+  compare = Int64.compare;
 }
 
 let nativeint = {
@@ -56,6 +64,7 @@ let nativeint = {
   max = Nativeint.max_int;
   min = Nativeint.min_int;
   to_string = Nativeint.to_string;
+  compare = Nativeint.compare;
 }
 
 let (int_to_int32, int_to_int32_exn) =
@@ -84,3 +93,39 @@ let (int64_to_nativeint, int64_to_nativeint_exn) =
   convert int64 nativeint Int64.to_nativeint Int64.of_nativeint
 ;;
 let nativeint_to_int64 = Int64.of_nativeint
+
+(**
+   Takes an int represented as a string ((-|+)?[0-9]+) and puts underscores
+   every 3 digits starting from the right.
+*)
+
+let prettify_string input =
+  let chars_per_underscore = 3 in
+  let input_length = String.length input in
+  if input_length <= chars_per_underscore then
+    input
+  else begin
+    let has_sign = match input.[0] with '+' | '-' -> true | _ -> false in
+    let num_digits = if has_sign then input_length - 1 else input_length in
+    let num_underscores = (num_digits - 1) / chars_per_underscore in
+    let output_length = input_length + num_underscores in
+    let output = String.create output_length in
+    let input_pos = ref (input_length - 1) in
+    let output_pos = ref (output_length - 1) in
+    let num_chars_until_underscore = ref chars_per_underscore in
+    let first_digit_pos = if has_sign then 1 else 0 in
+    while !input_pos >= first_digit_pos do
+      if !num_chars_until_underscore = 0 then begin
+        output.[!output_pos] <- '_';
+        decr output_pos;
+        num_chars_until_underscore := chars_per_underscore;
+      end;
+      output.[!output_pos] <- input.[!input_pos];
+      decr input_pos;
+      decr output_pos;
+      decr num_chars_until_underscore;
+    done;
+    if has_sign then output.[0] <- input.[0];
+    output;
+  end
+;;

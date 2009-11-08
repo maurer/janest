@@ -1,9 +1,9 @@
 open OUnit;;
 open Core.Std
 
-let test = 
+let test =
   "common" >:::
-    [ "% and /%" >:: 
+    [ "% and /%" >::
         (fun () ->
            let gen_int_pair () = (Quickcheck.uig (), abs (Quickcheck.uig ())) in
            let modulus_invariant (a, b) =
@@ -41,11 +41,11 @@ let test =
         );
 
       "round" >::
-        (fun () -> 
-          "zero" @? (round 0.2 = 0);
-          "negative zero" @? (round (-0.2) = 0);
-          "positive" @? (round 3.4 = 3);
-          "negative" @? (round (-3.4) = -3);
+        (fun () ->
+          "zero" @? (Float.iround_exn 0.2 = 0);
+          "negative zero" @? (Float.iround_exn (-0.2) = 0);
+          "positive" @? (Float.iround_exn 3.4 = 3);
+          "negative" @? (Float.iround_exn (-3.4) = -3);
         );
 
     ]

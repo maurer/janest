@@ -3,18 +3,18 @@ TYPE_CONV_PATH "Bucket"
 
 open Std_internal
 
-module type ContentsType =
+module type Contents =
 sig
   type t
   include Sexpable with type sexpable = t
   include Binable with type binable = t
   include Comparable with type comparable = t
   val zero : t
-  val add : t -> t -> t
-  val sub : t -> t -> t
+  val (+) : t -> t -> t
+  val (-) : t -> t -> t
 end
 
-(* Bucket-style datastucture
+(** Bucket-style datastucture
 
    [make ~size ~init_level]
    Create a new bucket. Fails if init_level is not within bounds [zero;size].
@@ -42,6 +42,7 @@ module type S =
     include Sexpable with type sexpable = t
     include Binable with type binable = t
 
+    
     val make : size:contents -> init_level:contents -> t
     val level : t -> contents
     val take : t -> contents -> [ `Taken | `Unable ]
@@ -49,7 +50,7 @@ module type S =
     val fill : t -> contents -> contents
   end
 
-module Make(C: ContentsType): (S with type contents = C.t) =
+module Make (C: Contents): (S with type contents = C.t) =
   struct
     type contents = C.t
     with sexp, bin_io
@@ -61,32 +62,44 @@ module Make(C: ContentsType): (S with type contents = C.t) =
     type binable = t
 
     let make ~size ~init_level =
-      if not (C.(<=) C.zero init_level)
-      then failwith "Bucket.make: init_level not positive or zero";
-      if not (C.(<=) init_level size)
-      then failwith "Bucket.make: init_level above bucket size";
+      let error msg =
+        failwithf "Bucket.make ~size:%s ~init_level:%s: %s"
+          (Sexp.to_string (C.sexp_of_t size))
+          (Sexp.to_string (C.sexp_of_t init_level))
+          msg ();
+      in
+      if C.(<) init_level C.zero then error "init_level negative";
+      if C.(>) init_level size then error "init_level above bucket size";
       { level = init_level; size = size }
+    ;;
 
     let level t = t.level
 
+    let assert_positive name x =
+      if C.(<) x C.zero
+      then invalid_argf "Bucket.%s %s < 0" name (Sexp.to_string (C.sexp_of_t x)) ()
+
     let take t x =
-      let new_level = C.sub t.level x in
-      if C.(<=) C.zero new_level
-      then begin
+      assert_positive "take" x;
+      let new_level = C.(-) t.level x in
+      if C.(<) new_level C.zero then
+        `Unable
+      else begin
         t.level <- new_level;
         `Taken
       end
-      else `Unable
 
     let take_at_most t x =
+      assert_positive "take_at_most" x;
       let old_level = t.level in
-      t.level <- C.max C.zero (C.sub old_level x);
-      C.sub old_level t.level
+      t.level <- C.max C.zero (C.(-) old_level x);
+      C.(-) old_level t.level
 
     let fill t x =
+      assert_positive "fill" x;
       let old_level = t.level in
-      t.level <- C.min t.size (C.add old_level x);
-      C.sub t.level old_level
+      t.level <- C.min t.size (C.(+) old_level x);
+      C.(-) t.level old_level
   end
 
 module Int = Make (Int)

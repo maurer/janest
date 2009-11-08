@@ -38,15 +38,23 @@ val to_string : ?pos : int -> ?len : int -> t -> string
     @param pos default = 0
     @param len default = [length bstr - pos]
 
-    @raise [Invalid_argument] if the string would exceed runtime limits.
+    @raise Invalid_argument if the string would exceed runtime limits.
 *)
 
 
 (** {6 Checking} *)
 
-val check_args : loc : string -> t -> pos : int -> len : int -> unit
+val check_args : loc : string -> pos : int -> len : int -> t -> unit
+(** [check_args ~loc ~pos ~len bstr] checks the position and length
+    arguments [pos] and [len] for bigstrings [bstr].  @raise
+    Invalid_argument if these arguments are illegal for the given
+    bigstring using [loc] to indicate the calling context. *)
 
 val get_opt_len : t -> pos : int -> int option -> int
+(** [get_opt_len bstr ~pos opt_len] @return the length of a subbigstring
+    in [bstr] starting at position [pos] and given optional length
+    [opt_len].  This function does not check the validity of its
+    arguments.  Use {!check_args} for that purpose. *)
 
 
 (** {6 Accessors} *)
@@ -54,12 +62,23 @@ val get_opt_len : t -> pos : int -> int option -> int
 val length : t -> int
 (** [length bstr] @return the length of bigstring [bstr]. *)
 
-(* CRv2 sweeks: [sub] may be a misleading name because it does not make a copy of
-   the substring, unlike [Array.sub] and [String.sub]. 
+
+val sub_copy : ?pos : int -> ?len : int -> t -> t
+(** [sub_copy ?pos ?len bstr] @return the sub-bigstring in [bstr]
+    that starts at position [pos] and has length [len].  The sub-bigstring
+    is a unique copy of the memory region, i.e. modifying it will not
+    modify the original bigstring.
+
+    @param pos default = 0
+    @param len default = [Bigstring.length bstr - pos]
 *)
-val sub : ?pos : int -> ?len : int -> t -> t
-(** [sub ?pos ?len bstr] @return the sub-bigstring in [bstr] that start
-    at position [pos] and has length [len].
+
+val sub_shared : ?pos : int -> ?len : int -> t -> t
+(** [sub_shared ?pos ?len bstr] @return the sub-bigstring in [bstr]
+    that starts at position [pos] and has length [len].  The sub-bigstring
+    shares the same memory region, i.e. modifying it will modify the
+    original bigstring.  Holding on to the sub-bigstring will also keep
+    the (usually bigger) original one around.
 
     @param pos default = 0
     @param len default = [Bigstring.length bstr - pos]
@@ -71,39 +90,31 @@ external is_mmapped : t -> bool = "bigstring_is_mmapped_stub" "noalloc"
 
 (** {6 Blitting} *)
 
-val blit : ?src_pos : int -> src : t -> ?dst_pos : int -> dst : t -> int -> unit
-(** [blit ?src_pos ~src ?dst_pos ~dst len] blits [len] characters from
+val blit :
+  src : t -> src_pos : int -> dst : t -> dst_pos : int -> len : int -> unit
+(** [blit ~src ~src_pos ~dst ~dst_pos ~len] blits [len] characters from
     bigstring [src] starting at position [src_pos] to bigstring [dst]
     at position [dst_pos].
 
-    @raise [Invalid_argument] if the designated ranges are out of bounds.
-
-    @param src_pos default = 0
-    @param dst_pos default = 0
+    @raise Invalid_argument if the designated ranges are out of bounds.
 *)
 
 val blit_string_bigstring :
-  ?src_pos : int -> string -> ?dst_pos : int -> t -> len : int -> unit
-(** [blit_string_bigstring ?src_pos str ?dst_pos bstr ~len] blits [len]
-    characters from string [str] starting at position [src_pos] to
-    bigstring [bstr] at position [dst_pos].
+  src : string -> src_pos : int -> dst : t -> dst_pos : int -> len : int -> unit
+(** [blit_string_bigstring ~src ~src_pos ~dst ~dst_pos ~len] blits [len]
+    characters from string [src] starting at position [src_pos] to
+    bigstring [dst] at position [dst_pos].
 
-    @raise [Invalid_argument] if the designated ranges are out of bounds.
-
-    @param src_pos default = 0
-    @param dst_pos default = 0
+    @raise Invalid_argument if the designated ranges are out of bounds.
 *)
 
 val blit_bigstring_string :
-  ?src_pos : int -> t -> ?dst_pos : int -> string -> len : int -> unit
-(** [blit_bigstring_string ?src_pos bstr ?dst_pos str ~len] blits [len]
-    characters from bigstring [bstr] starting at position [src_pos]
-    to string [str] at position [dst_pos].
+  src : t -> src_pos : int -> dst : string -> dst_pos : int -> len : int -> unit
+(** [blit_bigstring_string ~src ~src_pos ~dst ~dst_pos ~len] blits [len]
+    characters from bigstring [src] starting at position [src_pos]
+    to string [dst] at position [dst_pos].
 
-    @raise [Invalid_argument] if the designated ranges are out of bounds.
-
-    @param src_pos default = 0
-    @param dst_pos default = 0
+    @raise Invalid_argument if the designated ranges are out of bounds.
 *)
 
 
@@ -119,9 +130,9 @@ val read : ?min_len : int -> file_descr -> ?pos : int -> ?len : int -> t -> int
     NOTE: even if [len] is zero, there may still be errors when reading
     from the descriptor!
 
-    @raise [Invalid_argument] if the designated ranges are out of bounds.
+    @raise Invalid_argument if the designated ranges are out of bounds.
 
-    @raise [IOError] in the case of input errors, or on EOF if the
+    @raise IOError in the case of input errors, or on EOF if the
     minimum length could not be read.
 
     @param pos default = 0
@@ -133,8 +144,8 @@ val really_read : file_descr -> ?pos : int -> ?len : int -> t -> unit
 (** [really_read fd ?pos ?len bstr] reads [len] bytes from file descriptor
     [fd], and writes them to bigstring [bstr] starting at position [pos].
 
-    @raise [Invalid_argument] if the designated range is out of bounds.
-    @raise [IOError] in the case of input errors, or on EOF.
+    @raise Invalid_argument if the designated range is out of bounds.
+    @raise IOError in the case of input errors, or on EOF.
 
     @param pos default = 0
     @param len default = [length bstr - pos]
@@ -146,21 +157,22 @@ val really_recv : file_descr -> ?pos : int -> ?len : int -> t -> unit
     [pos].  If [len] is zero, the function returns immediately without
     performing the underlying system call.
 
-    @raise [Invalid_argument] if the designated range is out of bounds.
-    @raise [IOError] in the case of input errors, or on EOF.
+    @raise Invalid_argument if the designated range is out of bounds.
+    @raise IOError in the case of input errors, or on EOF.
 
     @param pos default = 0
     @param len default = [length bstr - pos]
 *)
 
-val read_assume_nonblocking : file_descr -> ?pos : int -> ?len : int -> t -> int
-(** [read_assume_nonblocking fd ?pos ?len bstr] reads up to [len] bytes
-    into bigstring [bstr] starting at position [pos] from file descriptor
-    [fd] without yielding to other OCaml-threads.  @return the number
-    of bytes actually read.
+val read_assume_fd_is_nonblocking :
+  file_descr -> ?pos : int -> ?len : int -> t -> int
+(** [read_assume_fd_is_nonblocking fd ?pos ?len bstr] reads up to
+    [len] bytes into bigstring [bstr] starting at position [pos] from
+    file descriptor [fd] without yielding to other OCaml-threads.
+    @return the number of bytes actually read.
 
-    @raise [Unix_error] in the case of input errors.
-    @raise [Invalid_argument] if the designated range is out of bounds.
+    @raise Unix_error in the case of input errors.
+    @raise Invalid_argument if the designated range is out of bounds.
 
     @param pos default = 0
     @param len default = [length bstr - pos]
@@ -183,8 +195,8 @@ val input : ?min_len : int -> in_channel -> ?pos : int -> ?len : int -> t -> int
     channel buffer.  Otherwise data will be read until at least [min_len]
     characters are available.
 
-    @raise [Invalid_argument] if the designated range is out of bounds.
-    @raise [IOError] in the case of input errors, or on premature EOF.
+    @raise Invalid_argument if the designated range is out of bounds.
+    @raise IOError in the case of input errors, or on premature EOF.
 
     @param pos default = 0
     @param min_len default = 0
@@ -196,8 +208,8 @@ val really_input : in_channel -> ?pos : int -> ?len : int -> t -> unit
     input channel [ic], and writes them to bigstring [bstr] starting at
     position [pos].
 
-    @raise [Invalid_argument] if the designated range is out of bounds.
-    @raise [IOError] in the case of input errors, or on premature EOF.
+    @raise Invalid_argument if the designated range is out of bounds.
+    @raise IOError in the case of input errors, or on premature EOF.
 
     @param pos default = 0
     @param len default = [length bstr - pos]
@@ -210,8 +222,8 @@ val really_write : file_descr -> ?pos : int -> ?len : int -> t -> unit
 (** [really_write fd ?pos ?len bstr] writes [len] bytes in bigstring
     [bstr] starting at position [pos] to file descriptor [fd].
 
-    @raise [Invalid_argument] if the designated range is out of bounds.
-    @raise [IOError] in the case of output errors.
+    @raise Invalid_argument if the designated range is out of bounds.
+    @raise IOError in the case of output errors.
 
     @param pos default = 0
     @param len default = [length bstr - pos]
@@ -223,41 +235,28 @@ val really_send_no_sigpipe : file_descr -> ?pos : int -> ?len : int -> t -> unit
     bigstring [bstr] starting at position [pos] to socket [sock] without
     blocking and ignoring [SIGPIPE].
 
-    @raise [Invalid_argument] if the designated range is out of bounds.
-    @raise [IOError] in the case of output errors.
+    @raise Invalid_argument if the designated range is out of bounds.
+    @raise IOError in the case of output errors.
 
     @param pos default = 0
     @param len default = [length bstr - pos]
-*)
-
-#else
-#warning "MSG_NOSIGNAL not defined; really_send_no_sigpipe"
-#warning "not implemented."
-#warning "Try compiling on Linux?"
-#endif
-
-#if defined(MSG_NOSIGNAL)
-(* CRv2 sweeks for MM: It would be clearer to return a variant rather than using [-1] to
-   indicate blocking.
 *)
 
 val send_nonblocking_no_sigpipe :
   file_descr -> ?pos : int -> ?len : int -> t -> int option
 (** [send_nonblocking_no_sigpipe sock ?pos ?len bstr] tries to send
     [len] bytes in bigstring [bstr] starting at position [pos] to socket
-    [sock].  @return [Some bytes_sent] with the actual number of bytes
-    sent, or [None] if the operation would have blocked.
+    [sock].  @return [Some bytes_written], or [None] if the operation
+    would have blocked.
 
-    @raise [Invalid_argument] if the designated range is out of bounds.
-    @raise [Unix_error] in the case of output errors.
+    @raise Invalid_argument if the designated range is out of bounds.
+    @raise Unix_error in the case of output errors.
 
     @param pos default = 0
     @param len default = [length bstr - pos]
 *)
 #else
-#warning "MSG_NOSIGNAL not defined; send_nonblocking_no_sigpipe"
-#warning "not implemented."
-#warning "Try compiling on Linux?"
+#warning "MSG_NOSIGNAL not defined; send_nonblocking_no_sigpipe, really_send_no_sigpipe not implemented."
 #endif
 
 val write : file_descr -> ?pos : int -> ?len : int -> t -> int
@@ -265,22 +264,22 @@ val write : file_descr -> ?pos : int -> ?len : int -> t -> int
     bytes in bigstring [bstr] starting at position [pos] to file
     descriptor [fd].  @return the number of bytes actually written.
 
-    @raise [Unix_error] in the case of output errors.
-    @raise [Invalid_argument] if the designated range is out of bounds.
+    @raise Unix_error in the case of output errors.
+    @raise Invalid_argument if the designated range is out of bounds.
 
     @param pos default = 0
     @param len default = [length bstr - pos]
 *)
 
-val write_assume_nonblocking :
+val write_assume_fd_is_nonblocking :
   file_descr -> ?pos : int -> ?len : int -> t -> int
-(** [write_assume_nonblocking fd ?pos ?len bstr] writes [len]
+(** [write_assume_fd_is_nonblocking fd ?pos ?len bstr] writes [len]
     bytes in bigstring [bstr] starting at position [pos] to file
     descriptor [fd] without yielding to other OCaml-threads.  @return the
     number of bytes actually written.
 
-    @raise [Unix_error] in the case of output errors.
-    @raise [Invalid_argument] if the designated range is out of bounds.
+    @raise Unix_error in the case of output errors.
+    @raise Invalid_argument if the designated range is out of bounds.
 
     @param pos default = 0
     @param len default = [length bstr - pos]
@@ -292,23 +291,41 @@ val writev :
     bigstrings to file descriptor [fd].  @return the number of bytes
     written.
 
-    @raise [Unix_error] in the case of output errors.
-    @raise [Invalid_argument] if count is out of range.
+    @raise Unix_error in the case of output errors.
+    @raise Invalid_argument if count is out of range.
 
     @param count default = [Array.length iovecs]
 *)
 
-val writev_assume_nonblocking :
+val writev_assume_fd_is_nonblocking :
   file_descr -> ?count : int -> t Unix_ext.IOVec.t array -> int
-(** [writev_assume_nonblocking fd ?count iovecs] writes [count]
+(** [writev_assume_fd_is_nonblocking fd ?count iovecs] writes [count]
     [iovecs] of bigstrings to file descriptor [fd] without yielding to
     other OCaml-threads.  @return the number of bytes actually written.
 
-    @raise [Unix_error] in the case of output errors.
-    @raise [Invalid_argument] if the designated range is out of bounds.
+    @raise Unix_error in the case of output errors.
+    @raise Invalid_argument if the designated range is out of bounds.
 
     @param count default = [Array.length iovecs]
 *)
+
+#if defined(MSG_NOSIGNAL)
+val sendmsg_nonblocking_no_sigpipe :
+  file_descr -> ?count : int -> t Unix_ext.IOVec.t array -> int option
+(** [sendmsg_nonblocking_no_sigpipe sock ?count iovecs] sends
+    [count] [iovecs] of bigstrings to socket [sock].  @return [Some
+    bytes_written], or [None] if the operation would have blocked.
+    This system call will not cause signal [SIGPIPE] if an attempt is
+    made to write to a socket that was closed by the other side.
+
+    @raise Unix_error in the case of output errors.
+    @raise Invalid_argument if [count] is out of range.
+
+    @param count default = [Array.length iovecs]
+*)
+#else
+#warning "MSG_NOSIGNAL not defined; sendmsg_nonblocking_no_sigpipe not implemented."
+#endif
 
 val output :
   ?min_len : int -> out_channel -> ?pos : int -> ?len : int -> t -> int
@@ -325,9 +342,9 @@ val output :
     they will be buffered.  Otherwise writes will be attempted until at
     least [min_len] characters have been sent.
 
-    @raise [Invalid_argument] if the designated range is out of bounds.
+    @raise Invalid_argument if the designated range is out of bounds.
 
-    @raise [IOError] in the case of output errors.  The [IOError]-argument
+    @raise IOError in the case of output errors.  The [IOError]-argument
     counting the number of successful bytes includes those that have
     been transferred to the channel buffer before the error.
 
@@ -342,9 +359,9 @@ val really_output :
     bytes from bigstring [bstr] starting at position [pos] to output
     channel [oc].
 
-    @raise [Invalid_argument] if the designated range is out of bounds.
+    @raise Invalid_argument if the designated range is out of bounds.
 
-    @raise [IOError] in the case of output errors.  The [IOError]-argument
+    @raise IOError in the case of output errors.  The [IOError]-argument
     counting the number of successful bytes includes those that have
     been transferred to the channel buffer before the error.
 
@@ -361,69 +378,36 @@ val map_file : shared : bool -> file_descr -> int -> t
     [true], all changes to the bigstring will be reflected in the file. *)
 
 
-(** {6 File I/O}} *)
-
-val load_file : ?pos : int -> ?len : int -> string -> t
-(** [load_file ?pos ?len fname] loads [len] bytes of of file [fname]
-    into a bigstring starting at position [pos].
-
-    @raise [Invalid_argument] if the designated range is out of bounds.
-
-    @param pos default = 0
-    @param len default = [file_size - pos]
-*)
-
-val store_file :
-      ?create : bool -> ?exclusive : bool -> ?append : bool -> ?perm : int ->
-      string -> ?pos : int -> ?len : int -> t -> unit
-(** [store_file ?create ?exclusive ?append ?perm fname ?pos ?len bstr]
-    store [len] bytes starting at position [pos] of bigstring [bstr]
-    in file [fname] using the appropriate flags for opening (creation,
-    exclusivity, appending, permissions).
-
-    @param create default = [true]
-    @param exclusive default = [true]
-    @param append default = [true]
-    @param perm default = 0o600
-    @param pos default = 0
-    @param len default = [length bstr - pos]
-*)
-
-
 (** {6 Unsafe functions} *)
 
-(* CRv2 sweeks: Why do we need to expose any of these?  Is there any situation
-   where the performance of the bounds checks matters? 
-   CRv2 mmottl: at least for blitting it seems worthwhile to expose the
-   unsafe function.
-*)
+
 
 external unsafe_blit :
-  src_pos : int -> src : t -> dst_pos : int -> dst : t -> len : int -> unit
+  src : t -> src_pos : int -> dst : t -> dst_pos : int -> len : int -> unit
   = "bigstring_blit_stub"
-(** [unsafe_blit ~src_pos ~src ~dst_pos ~dst ~len] similar to
+(** [unsafe_blit ~src ~src_pos ~dst ~dst_pos ~len] similar to
     {!Bigstring.blit}, but does not perform any bounds checks.  Will crash
     on bounds errors! *)
 
 external unsafe_blit_string_bigstring :
-  src_pos : int -> string -> dst_pos : int -> t -> len : int -> unit
+  src : string -> src_pos : int -> dst : t -> dst_pos : int -> len : int -> unit
   = "bigstring_blit_string_bigstring_stub" "noalloc"
-(** [unsafe_blit_string_bigstring_stub ~src_pos str ~dst_pos bstr ~len]
+(** [unsafe_blit_string_bigstring ~src ~src_pos ~dst ~dst_pos ~len]
     similar to {!Bigstring.blit_string_bigstring}, but does not perform
     any bounds checks.  Will crash on bounds errors! *)
 
 external unsafe_blit_bigstring_string :
-  src_pos : int -> t -> dst_pos : int -> string -> len : int -> unit
+  src : t -> src_pos : int -> dst : string -> dst_pos : int -> len : int -> unit
   = "bigstring_blit_bigstring_string_stub" "noalloc"
-(** [unsafe_blit_bigstring_string ~src_pos bstr ~dst_pos str ~len]
+(** [unsafe_blit_bigstring_string ~src ~src_pos ~dst ~dst_pos ~len]
     similar to {!Bigstring.blit_bigstring_string}, but does not perform
     any bounds checks.  Will crash on bounds errors! *)
 
-external unsafe_read_assume_nonblocking :
+external unsafe_read_assume_fd_is_nonblocking :
   file_descr -> pos : int -> len : int -> t -> int
-  = "bigstring_read_assume_nonblocking_stub"
-(** [unsafe_read_assume_nonblocking fd ~pos ~len bstr]
-    similar to {!Bigstring.read_assume_nonblocking}, but does
+  = "bigstring_read_assume_fd_is_nonblocking_stub"
+(** [unsafe_read_assume_fd_is_nonblocking fd ~pos ~len bstr]
+    similar to {!Bigstring.read_assume_fd_is_nonblocking}, but does
     not perform any bounds checks.  Will crash on bounds errors! *)
 
 external unsafe_write :
@@ -433,11 +417,11 @@ external unsafe_write :
     {!Bigstring.write}, but does not perform any bounds checks.
     Will crash on bounds errors! *)
 
-external unsafe_write_assume_nonblocking :
+external unsafe_write_assume_fd_is_nonblocking :
   file_descr -> pos : int -> len : int -> t -> int
-  = "bigstring_write_assume_nonblocking_stub"
-(** [unsafe_write_assume_nonblocking fd ~pos ~len bstr]
-    similar to {!Bigstring.write_assume_nonblocking}, but does
+  = "bigstring_write_assume_fd_is_nonblocking_stub"
+(** [unsafe_write_assume_fd_is_nonblocking fd ~pos ~len bstr]
+    similar to {!Bigstring.write_assume_fd_is_nonblocking}, but does
     not perform any bounds checks.  Will crash on bounds errors! *)
 
 external unsafe_read :
@@ -476,17 +460,13 @@ external unsafe_really_send_no_sigpipe :
     similar to {!Bigstring.send}, but does not perform any
     bounds checks.  Will crash on bounds errors! *)
 
-external unsafe_send_nonblocking_no_sigpipe :
+val unsafe_send_nonblocking_no_sigpipe :
   file_descr -> pos : int -> len : int -> t -> int option
-  = "bigstring_send_nonblocking_no_sigpipe_stub"
 (** [unsafe_send_nonblocking_no_sigpipe sock ~pos ~len bstr] similar to
     {!Bigstring.send_nonblocking_no_sigpipe}, but does not perform any
     bounds checks.  Will crash on bounds errors! *)
-
 #else
-#warning "MSG_NOSIGNAL not defined; bigstring_send{,msg}_noblocking_no_sigpipe"
-#warning "not implemented."
-#warning "Try compiling on Linux?"
+#warning "MSG_NOSIGNAL not defined; send{,msg}_noblocking_no_sigpipe unavailable."
 #endif
 
 external unsafe_output :
@@ -504,27 +484,33 @@ external unsafe_writev :
     Will crash on bounds errors! *)
 
 #if defined(MSG_NOSIGNAL)
-external unsafe_sendmsg_nonblocking_no_sigpipe :
-  file_descr -> t Unix_ext.IOVec.t array -> int -> int
-  = "bigstring_sendmsg_nonblocking_no_sigpipe_stub"
+val unsafe_sendmsg_nonblocking_no_sigpipe :
+  file_descr -> t Unix_ext.IOVec.t array -> int -> int option
 (** [unsafe_sendmsg_nonblocking_no_sigpipe fd iovecs count]
     similar to {!Bigstring.sendmsg_nonblocking_no_sigpipe}, but
     does not perform any bounds checks.  Will crash on bounds errors! *)
 
-
-val sendmsg_nonblocking_no_sigpipe :
-  file_descr -> ?count : int -> t Unix_ext.IOVec.t array -> int
-(** [sendmsg_nonblocking_no_sigpipe sock ?count iovecs] sends
-    [count] [iovecs] of bigstrings to socket [sock] .  @return the
-    number of bytes written.
-
-    @raise [Unix_error] in the case of output errors.
-    @raise [Invalid_argument] if count is out of range.
-
-    @param count default = [Array.length iovecs]
-*)
 #else
-#warning "MSG_NOSIGNAL not defined; bigstring_send{,msg}_noblocking_no_sigpipe"
-#warning "not implemented."
-#warning "Try compiling on Linux?"
+#warning "MSG_NOSIGNAL not defined; unsafe_sendmsg_nonblocking_no_sigpipe unavailable."
 #endif
+
+(** {6 Destruction} *)
+
+external unsafe_destroy : t -> unit = "bigstring_destroy_stub"
+(** [unsafe_destroy bstr] destroys the bigstring by deallocating its
+    associated data or, if memory-mapped, unmapping the corresponding
+    file, and setting all dimensions to zero.  This effectively frees
+    the associated memory or address-space resources instantaneously.
+    This feature helps working around a bug in the current OCaml runtime,
+    which does not correctly estimate how aggressively to reclaim such
+    resources.
+
+    This operation is safe unless you have passed the bigstring to
+    another thread that is performing operations on it at the same time.
+    Access to the bigstring after this operation will yield array bounds
+    exceptions.
+
+    @raise Failure if the bigstring has already been deallocated (or
+    deemed "external", which is treated equivalently), or if it has
+    proxies, i.e. other bigstrings referring to the same data.
+*)

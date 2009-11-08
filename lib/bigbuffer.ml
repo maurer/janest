@@ -25,6 +25,10 @@ type t =
     init : Bigstring.t;
   }
 
+let invariant t =
+  assert (t.len == Bigstring.length t.bstr);
+;;
+
 let create n =
   let n = max 1 n in
   let bstr = Bigstring.create n in
@@ -38,10 +42,7 @@ let create n =
 let contents buf = Bigstring.to_string buf.bstr ~len:buf.pos
 
 let big_contents buf =
-  let len = buf.pos in
-  let res = Bigstring.create len in
-  Bigstring.blit ~src:buf.bstr ~dst:res len;
-  res
+  sub_copy ~len:buf.pos buf.bstr
 
 let sub buf pos len =
   if pos < 0 || len < 0 || pos > buf.pos - len
@@ -65,7 +66,7 @@ let resize buf more =
   let min_len = buf.len + more in
   let new_len = min_len + min_len in
   let new_buf = Bigstring.create new_len in
-  Bigstring.blit ~src:buf.bstr ~dst:new_buf buf.pos;
+  Bigstring.blit ~src:buf.bstr ~src_pos:0 ~dst:new_buf ~dst_pos:0 ~len:buf.pos;
   buf.bstr <- new_buf;
   buf.len <- new_len
 
@@ -75,19 +76,19 @@ let add_char buf c =
   buf.bstr.{pos} <- c;
   buf.pos <- pos + 1
 
-let add_substring buf str src_pos len =
-  if src_pos < 0 || len < 0 || src_pos > String.length str - len
+let add_substring buf src src_pos len =
+  if src_pos < 0 || len < 0 || src_pos > String.length src - len
   then invalid_arg "Bigbuffer.add_substring";
   let new_pos = buf.pos + len in
   if new_pos > buf.len then resize buf len;
-  blit_string_bigstring ~src_pos str ~dst_pos:buf.pos buf.bstr ~len;
+  blit_string_bigstring ~src ~src_pos ~dst:buf.bstr ~dst_pos:buf.pos ~len;
   buf.pos <- new_pos
 
-let add_string buf str =
-  let len = String.length str in
+let add_string buf src =
+  let len = String.length src in
   let new_pos = buf.pos + len in
   if new_pos > buf.len then resize buf len;
-  blit_string_bigstring str ~dst_pos:buf.pos buf.bstr ~len;
+  blit_string_bigstring ~src ~src_pos:0 ~dst:buf.bstr ~dst_pos:buf.pos ~len;
   buf.pos <- new_pos
 
 let add_buffer buf_dst buf_src =
@@ -95,7 +96,7 @@ let add_buffer buf_dst buf_src =
   let dst_pos = buf_dst.pos in
   let new_pos = dst_pos + len in
   if new_pos > buf_dst.len then resize buf_dst len;
-  Bigstring.blit ~src:buf_src.bstr ~dst_pos ~dst:buf_dst.bstr len;
+  Bigstring.blit ~src:buf_src.bstr ~src_pos:0 ~dst:buf_dst.bstr ~dst_pos ~len;
   buf_dst.pos <- new_pos
 
 let add_channel buf ic len =
@@ -164,11 +165,12 @@ let add_substitute buf f s =
          let ident, next_i = find_ident s (i + 1) in
          add_string buf (f ident);
          subst ' ' next_i
-      | current when previous == '\\' ->
+      | current when previous = '\\' ->
          add_char buf '\\';
          add_char buf current;
          subst current (i + 1)
       | '\\' as current ->
+         
          subst current (i + 1)
       | current ->
          add_char buf current;

@@ -11,7 +11,7 @@ let raises_exception f =
   with _ -> true
 
 let test = 
-  "jane_list" >:::
+  "core_list" >:::
     [ "append" >:: 
         (fun () -> 
            "simple" @? (append [1;2;3] [4;5;6] = [1;2;3;4;5;6]);
@@ -77,16 +77,16 @@ let test =
         );
       "last" >::
         (fun () ->
-          "simple" @? (last [1;2;3] = 3);
-          "single" @? (last [1] = 1);
-          "tailre" @? (last long1 = 999999);
+          "simple" @? (last_exn [1;2;3] = 3);
+          "single" @? (last_exn [1] = 1);
+          "tailre" @? (last_exn long1 = 999999);
         );
       "split_n" >:: 
         (fun () -> 
           "mid" @? (split_n [1;2;3;4;5;6] 3 = ([1;2;3],[4;5;6]));
           "big" @? (split_n [1;2;3;4;5;6] 100 = ([1;2;3;4;5;6],[]));
           "zero" @? (split_n [1;2;3;4;5;6] 0 = ([],[1;2;3;4;5;6]));
-          "neg" @? (split_n [1;2;3;4;5;6] (-5)= ([],[1;2;3;4;5;6]));
+          "neg" @? ((try split_n [1;2;3;4;5;6] (-5) with Invalid_argument _ -> ([],[])) = ([],[]));
         );
       "flatten" >:: 
         (fun () -> 
@@ -96,15 +96,6 @@ let test =
           "single multi" @? (List.flatten [[1;2;3;4]] = [1;2;3;4]);
           "multi multi" @? (List.flatten [[1;2;3;4];[5;6;7];[8;9;10];[];[11;12]] = 
               [1;2;3;4;5;6;7;8;9;10;11;12]);
-        );
-      "fold_left_term" >::
-        (fun () -> 
-          "simple" @? (List.fold_left_term ~init:0 ~f:(fun x y -> (true,x+y))
-                          [1;2;3;4;5] = 15);
-          "term" @? (List.fold_left_term ~init:0 ~f:(fun x y -> (y <> 3,x+y))
-                          [1;2;3;4;5] = 6);
-          "false" @? (List.fold_left_term ~init:0 ~f:(fun x y -> (y <> 1,x+y))
-                          [1;2;3;4;5] = 1);
         );
       "rev_map_append" >::
         (fun () -> 
@@ -125,8 +116,32 @@ let test =
           "multi no dup" @? (List.find_a_dup [3;5;4;6;12] = None);
           "multi single dup" @? (List.find_a_dup [3;5;4;5;12] = Some 5);
           "multi multi dups" @? (List.find_a_dup [3;5;12;5;12] = Some 5);
-        )
-
+        );
+      "is_sorted" >::
+        (fun () ->
+          (* needed because Core_list redefines compare *)
+          let compare = Pervasives.compare in
+          "yes1" @? List.is_sorted [] ~compare;
+          "yes2" @? List.is_sorted [1] ~compare;
+          "yes3" @? List.is_sorted [1; 2; 3; 4] ~compare;
+          "no1" @? not (List.is_sorted [2; 1] ~compare);
+          "no2" @? not (List.is_sorted [1; 3; 2] ~compare);
+        );
+      "group" >::
+        (fun () ->
+          let input = ['M';'i';'s';'s';'i';'s';'s';'i';'p';'p';'i'] in
+          let output = [['M'];['i'];['s';'s'];['i'];['s';'s'];['i'];['p';'p'];['i']] in
+          "base" @? (List.group ~break:(<>) input = output);
+          let input = ['M';'i';'s';'s';'i';'s';'s';'i';'p';'p';'i'] in
+          let output = [['M';'i';'s';'s';'i';'s';'s';'i';'p';'p';'i']] in
+          "sublist ordering" @? (List.group ~break:(fun _ _ -> false) input = output)
+        );
+      "groupi" >::
+        (fun () ->
+          let input = ['M';'i';'s';'s';'i';'s';'s';'i';'p';'p';'i'] in
+          let output = [['M'; 'i'; 's']; ['s'; 'i'; 's']; ['s'; 'i'; 'p']; ['p'; 'i']] in
+          "triples" @? (List.groupi ~break:(fun i _ _ -> i mod 3 = 0) input = output)
+        );
     ]
 
 (*

@@ -10,17 +10,20 @@ let is_none = function None -> true | _ -> false
 
 let is_some = function Some _ -> true | _ -> false
 
+let value_map o ~default ~f =
+  match o with
+  | Some x -> f x
+  | None   -> default
+
 let iter o ~f =
   match o with
   | None -> ()
   | Some a -> f a
 
-(* CRv2 tvaroquaux This is shadowed by the monad's map and should probably be
-   removed*)
-let map o ~f =
-  match o with
-  | None -> None
-  | Some a -> Some (f a)
+let map2 o1 o2 ~f =
+  match o1, o2 with
+  | Some a1, Some a2 -> Some (f a1 a2)
+  | _ -> None
 
 let call x ~f =
   match f with
@@ -42,6 +45,12 @@ let value_exn t =
   match t with
   | Some x -> x
   | None -> failwith "Option.value_exn None"
+;;
+
+let value_exn_message message t =
+  match t with
+  | Some x -> x
+  | None -> failwith message
 ;;
 
 let to_array t =
@@ -94,6 +103,16 @@ let equal f t t' =
   | Some x, Some x' -> f x x'
   | _ -> false
 
+let some x = Some x
+
+let both x y =
+  match x,y with
+  | Some a, Some b -> Some (a,b)
+  | _ -> None
+
+let wrap_exn f = (); fun x -> try Some (f x) with | _ -> None
+
+
 include Monad.Make (struct
   type 'a t = 'a option
   let return x = Some x
@@ -104,3 +123,15 @@ include Monad.Make (struct
   let failwith e = failwith e
 end)
 
+let container = {
+  Container.
+  length = length;
+  is_empty = is_empty;
+  iter = iter;
+  fold = fold;
+  exists = exists;
+  for_all = for_all;
+  find = find;
+  to_list = to_list;
+  to_array = to_array;
+}

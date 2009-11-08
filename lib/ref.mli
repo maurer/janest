@@ -14,7 +14,3 @@ val swap : 'a t -> 'a t -> unit
 
 (** [replace t f] is [t := f !t] *)
 val replace : 'a t -> ('a -> 'a) -> unit
-
-(** [with_set t x f] sets [t] to [x] and runs [f x], returning [t] to its
-    original value once [f ()] completes. *)
-val with_set : 'a t -> 'a -> (unit -> 'b) -> 'b

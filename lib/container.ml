@@ -1,16 +1,32 @@
-(* This file has generic signatures for container data structures, with standard
+ (* This file has generic signatures for container data structures, with standard
    functions (iter, fold, exists, for_all, ...) that one would expect to find in
    any container.  The idea is to include [Container.S0] or [Container.S1] in
    the signature for every container-like data structure (Array, List, String,
    ...) to ensure a consistent interface.
 *)
- 
-(* CRv2 SW: Make the following modules meet S0.
-   Bigstring
-*)
-module type S0 = sig
+
+
+type ('elt, 't) type_class = {
+  length : 't -> int;
+  is_empty : 't -> bool;
+  iter : 't -> f:('elt -> unit) -> unit;
+  fold : 'b. 't -> init:'b -> f:('b -> 'elt -> 'b) -> 'b;
+  exists : 't -> f:('elt -> bool) -> bool;
+  for_all : 't -> f:('elt -> bool) -> bool;
+  find : 't -> f:('elt -> bool) -> 'elt option;
+  to_list : 't -> 'elt list;
+  to_array : 't -> 'elt array;
+  (* compare : 't -> 't -> cmp:('elt -> 'elt -> int) -> int *)
+}
+
+
+
+(* Signature for monomorphic container, e.g., string *)
+module type S0_noclass = sig
   type container
   type elt
+
+  
   val length : container -> int
   val is_empty : container -> bool
   val iter : container -> f:(elt -> unit) -> unit
@@ -20,9 +36,15 @@ module type S0 = sig
   val find : container -> f:(elt -> bool) -> elt option
   val to_list : container -> elt list
   val to_array : container -> elt array
+  (* val compare : container -> container -> cmp:(elt -> elt -> int) -> int *)
 end
 
-module type S0_phantom = sig
+module type S0 = sig
+  include S0_noclass
+  val container : (elt, container) type_class
+end
+
+module type S0_phantom_noclass = sig
   type elt
   type 'a container
   val length : 'a container -> int
@@ -34,15 +56,17 @@ module type S0_phantom = sig
   val find : 'a container -> f:(elt -> bool) -> elt option
   val to_list : 'a container -> elt list
   val to_array : 'a container -> elt array
+  (* val compare : 'a container -> 'a container -> cmp:(elt -> elt -> int) -> int *)
 end
 
-(* CRv2 sweeks: Make the following modules meet S1.
-   Core_queue
-   Fqueue
-   Heap
-   PSet
-*)
-module type S1 = sig
+module type S0_phantom = sig
+  include S0_phantom_noclass
+  val container : (elt, 'a container) type_class
+end
+
+
+(* Signature for polymorphic container, e.g., 'a list or 'a array *)
+module type S1_noclass = sig
   type 'a container
   val length : 'a container -> int
   val is_empty : 'a container -> bool
@@ -53,6 +77,13 @@ module type S1 = sig
   val find : 'a container -> f:('a -> bool) -> 'a option
   val to_list : 'a container -> 'a list
   val to_array : 'a container -> 'a array
+  (* val compare : 'a container -> 'a container -> cmp:('a -> 'a -> int) -> int *)
+end
+
+module type S1 = sig
+  include S1_noclass
+
+  val container : ('elt, 'elt container) type_class
 end
 
 (* The following functors exist as a consistency check among all the various
@@ -70,8 +101,10 @@ end) (M : sig
   val exists : 'a container -> f:('a elt -> bool) -> bool
   val for_all : 'a container -> f:('a elt -> bool) -> bool
   val find : 'a container -> f:('a elt -> bool) -> 'a elt option
+  
   val to_list : 'a container -> 'a elt list
   val to_array : 'a container -> 'a elt array
+  (* val compare : 'a container -> 'a container -> cmp:('a elt -> 'a elt -> int) -> int *)
 end) = struct end
 
 module Check_S0 (M : S0) =

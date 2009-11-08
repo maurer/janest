@@ -1,9 +1,14 @@
 (*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
+
+(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
 TYPE_CONV_PATH "Fast_hashtbl"
+
+(* Hashtbl with a faster replace operation, but with the cost of an extra reference
+   for every entry. *)
 
 module Hashtbl = MoreLabels.Hashtbl
 
-type ('key,'value) t = ('key,'value ref) Hashtbl.t with sexp_of
+type ('key,'data) t = ('key,'data ref) Hashtbl.t with sexp_of
 
 let create n = Hashtbl.create n
 let clear = Hashtbl.clear

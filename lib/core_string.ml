@@ -1,26 +1,41 @@
 (*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
 TYPE_CONV_PATH "Core_string"
 
+
+
+
 module Array = Caml.ArrayLabels
 module Char = Core_char
 module String = Caml.StringLabels
 
+let phys_equal = Caml.(==)
+
 let invalid_argf = Core_printf.invalid_argf
 
-type t = string with sexp, bin_io
+module T = struct
+  type t = string with sexp, bin_io
+
+  type binable = t
+  type sexpable = t
+
+  let compare = String.compare
+  (* = on two strings avoids calling compare_val, which is what happens
+     with String.compare *)
+  let equal (x : string) y = x = y
+end
+
+include T
 
 type elt = char
-  
-type binable = t
+
 type container = t
-type sexpable = t
 type stringable = t
 
 (* Standard functions *)
 let blit = String.blit
 let capitalize = String.capitalize
 let compare = String.compare
-let concat = String.concat
+let concat ?(sep="") l = String.concat ~sep l
 let contains = String.contains
 let contains_from = String.contains_from
 let copy = String.copy
@@ -58,10 +73,11 @@ let init n ~f =
 ;;
 
 (** See {!Core_array.normalize} for the following 4 functions. *)
-let normalize =
-  Ordered_collection_common.normalize ~length_fun:String.length
-let slice =
+let normalize s i =
+  Ordered_collection_common.normalize ~length_fun:String.length s i
+let slice start stop s =
   Ordered_collection_common.slice ~length_fun:String.length ~sub_fun:String.sub
+  start stop s
 
 let nget x i =
   x.[normalize x i]
@@ -70,144 +86,57 @@ let nset x i v =
 
 let invalid_argf = Core_printf.invalid_argf
 
-(**
-   Inverse operation of [String.escaped]
-*)
-exception Unescape_error of bool*int*string
+let to_list s =
+  let rec loop acc i =
+    if i < 0 then
+      acc
+    else
+      loop (s.[i] :: acc) (i-1)
+  in
+  loop [] (String.length s - 1)
 
-(* CRv2 tvaroquaux the stdlib's escaped does a lot of fancy wazoo magic to avoid
-   using a buffer:
-   It works in two passes, the first one calculates the length of the string to
-   allocate and the second one does the actual escaping.
-
-   This would be more cumbersome to do here but might be worth the hassle if
-   performance ever gets to be an issue *)
-let unescaped' ?(strict=true) s =
+let to_list_rev s =
   let len = String.length s in
-  let pos = ref 0 in
-  let error ?(fatal=false) message =
-    raise (Unescape_error (fatal,!pos,message))
+  let rec loop acc i =
+    if i = len then
+      acc
+    else
+      loop (s.[i] :: acc) (i+1)
   in
-  let consume () =
-    let i = !pos in
-    if i = len then error "unexpectedly reached end of string";
-    let c = s.[i] in
-    pos := i + 1;
-    c
-  in
-  let res = Buffer.create len in
-  let emit c = Buffer.add_char res c in
-  let emit_code code =
-    match Char.of_int code with
-    | Some c -> emit c
-    | None -> error ~fatal:true
-        (Printf.sprintf "got invalid escape code %d" code)
-  in
-  let rec loop () =
-    if !pos < len then begin
-      let c = consume () in
-      if c <> '\\' then
-        emit c
-      else begin
-        let mark = !pos in
-        try
-          let c = consume () in
-          match c with
-          | '\\' | '\"' -> emit c
-          | 'b' -> emit '\b'
-          | 'n' -> emit '\n'
-          | 'r' -> emit '\r'
-          | 't' -> emit '\t'
-          | 'x' ->
-              let c2hex c =
-                if (c >= 'A') && (c <= 'Z' ) then
-                  (Char.to_int c) + 10 - Char.to_int 'A'
-                else if (c >= 'a') && (c <= 'z' ) then
-                  (Char.to_int c) + 10 - Char.to_int 'a'
-                else if (c >= '0') && (c <= '9') then
-                  (Char.to_int c) - Char.to_int '0'
-                else
-                  error (Printf.sprintf "expected hex digit, got: %c" c);
-              in
-              let c1 = consume () in
-              let c2 = consume () in
-              emit_code (16 * c2hex c1 + c2hex c2);
-          | c when Char.is_digit c ->
-              let char_to_num c =
-                match Char.get_digit c with
-                | None -> error (Printf.sprintf "expected digit,got: %c" c);
-                | Some i -> i
-              in
-              let i1 = char_to_num c in
-              let i2 = char_to_num (consume ()) in
-              let i3 = char_to_num (consume ()) in
-              emit_code (100 * i1 + 10 * i2 + i3);
-          | c -> error (Printf.sprintf "got invalid escape character: %c" c);
-        with Unescape_error (false,_,_) when not strict ->
-          emit '\\';
-          pos := mark
-      end;
-      loop ()
-    end else
-      Buffer.contents res;
-  in
-  loop ();
-;;
+  loop [] 0
 
-let unescaped ?strict s =
-  try
-    unescaped' ?strict s
-  with Unescape_error (_,pos,message) ->
-    invalid_argf "String.unescaped error at position %d of %s: %s"
-      pos s message ()
+(** Efficient string splitting *)
 
-let unescaped_res ?strict s =
-  try
-    Result.Ok (unescaped' ?strict s)
-  with Unescape_error (_,pos,message) ->
-    Result.Error (pos,message)
-
-(** if [string] contains the character [char], then [split2_exn string char]
-    returns a pair containing [string] split around the first appearance of
-    [char] (from the left)
-    @raise Not_found When [char] cannot be found in [string]
-*)
-let split2_exn line delim =
+let lsplit2_exn line ~on:delim =
   let pos = String.index line delim in
   (String.sub line ~pos:0 ~len:pos,
    String.sub line ~pos:(pos+1) ~len:(String.length line - pos - 1)
   )
 
-  (** if [string] contains the character [char], then [rsplit2_exn string char]
-      returns a pair containing [string] split around the first appearance of
-      [char] (from the right)
-      @raise Not_found When [char] cannot be found in [string]
-  *)
-let rsplit2_exn line delim =
+let rsplit2_exn line ~on:delim =
   let pos = String.rindex line delim in
   (String.sub line ~pos:0 ~len:pos,
    String.sub line ~pos:(pos+1) ~len:(String.length line - pos - 1)
   )
 
-  (** [split2 line delim] optionally returns [line] split into two strings around the
-      first appearance of [delim] from the left *)
-let split2 line delim =
-  try Some (split2_exn line delim) with Not_found -> None
+let lsplit2 line ~on =
+  try Some (lsplit2_exn line ~on) with Not_found -> None
 
-  (** [rsplit2 line delim] optionally returns [line] split into two strings around the
-      first appearance of [delim] from the right *)
-let rsplit2 line delim =
-  try Some (rsplit2_exn line delim) with Not_found -> None
+let rsplit2 line ~on =
+  try Some (rsplit2_exn line ~on) with Not_found -> None
 
-(** Efficient string splitting *)
-
-let split_on_char str c =
+let split_gen str ~on =
+  let is_delim on c =
+    match on with
+    | `char c' -> c = c'
+    | `chars s -> Char.Set.mem s c
+  in
   let len = String.length str in
   let rec loop acc last_pos pos =
     if pos = -1 then
       String.sub str ~pos:0 ~len:last_pos :: acc
     else
-      if str.[pos] = c then
+      if is_delim on str.[pos] then
         let pos1 = pos + 1 in
         let sub_str = String.sub str ~pos:pos1 ~len:(last_pos - pos1) in
         loop (sub_str :: acc) pos (pos - 1)
@@ -216,68 +145,48 @@ let split_on_char str c =
   loop [] len (len - 1)
 ;;
 
-(* convinience functions, because it covers the majority of our use of the above
-    function  *)
-let split_on_pipe str = split_on_char str '|';;
-let split_on_dot str = split_on_char str '.';;
-let split_on_comma str = split_on_char str ',';;
-let split_on_slash str = split_on_char str '/';;
+let split str ~on = split_gen str ~on:(`char on) ;;
 
-let split_on_chars str chars =
-  let len = String.length str in
-  let chars = PSet.of_list chars in
-  let rec loop acc current_start pos =
-    let update_acc () =
-      match current_start with
-      | None -> acc
-      | Some s -> (String.sub str ~pos:s ~len:(pos - s)) :: acc      
-    in
-    if pos = len then List.rev (update_acc ())
-    else if PSet.mem chars str.[pos] then loop (update_acc ()) None (pos + 1)
-    else
-      match current_start with
-      | None -> loop acc (Some pos) (pos + 1)
-      | Some _ -> loop acc current_start (pos + 1)
-  in
-  loop [] None 0
+let split_on_chars str ~on:chars =
+  
+  let chars = Char.Set.of_list chars in
+  split_gen str ~on:(`chars chars)
 ;;
 
+(* [is_suffix s ~suff] returns [true] if the string [s] ends with the suffix [suff] *)
+let is_suffix s ~suffix =
+  let len_suff = String.length suffix in
+  let len_s = String.length s in
+  len_s >= len_suff
+  && (let rec loop i =
+        i = len_suff || (suffix.[len_suff - 1 - i] = s.[len_s - 1 - i] && loop (i + 1))
+      in
+      loop 0)
 
-
-(* [check_suffix s suff] returns [true] if the string [s] ends with the suffix [suff] *)
-let check_suffix name suff =
-  let len_name = String.length name in
-  let len_suff = String.length suff in
-  if len_name < len_suff then false
-  else
-    try
-      for i = 1 to len_suff do
-        if suff.[len_suff - i] <> name.[len_name - i] then raise Exit
-      done;
-      true
-    with Exit -> false
-
-(* CRv2 ogunden: why is this different in style than check_suffix?  It would be easier
-   to think about if we decided on a style and stuck with it, here. *)
-(* sweeks: I agree, but am v2'ing this since it's not a bug.  The code for
-   [check_prefix] has been reformatted in main, and I think we should change
-   [check_suffix] there to match.
-*)
-let check_prefix s pref =
-  let len_pref = String.length pref in
+let is_prefix s ~prefix =
+  let len_pref = String.length prefix in
   String.length s >= len_pref
   && (let rec loop i =
-        i = len_pref || (pref.[i] = s.[i] && loop (i + 1)) 
+        i = len_pref || (prefix.[i] = s.[i] && loop (i + 1))
       in
       loop 0)
 ;;
 
-let drop_prefix_n t n = sub t ~pos:n ~len:(length t - n)
-let drop_suffix_n t n = sub t ~pos:0 ~len:(length t - n)
-let keep_prefix_n t n = sub t ~pos:0 ~len:n
-let keep_suffix_n t n = sub t ~pos:(length t - n) ~len:n
+let wrap_sub_n t n ~name ~pos ~len ~on_error =
+  if n < 0 then
+    raise (Invalid_argument (name ^ " expecting nonnegative argument"))
+  else
+    try
+      sub t ~pos ~len
+    with _ ->
+      on_error
+      
+let drop_prefix t n = wrap_sub_n ~name:"drop_prefix" t n ~pos:n ~len:(length t - n) ~on_error:""
+let drop_suffix t n = wrap_sub_n ~name:"drop_suffix" t n ~pos:0 ~len:(length t - n) ~on_error:""
+let prefix t n = wrap_sub_n ~name:"prefix" t n ~pos:0 ~len:n ~on_error:t
+let suffix t n = wrap_sub_n ~name:"suffix" t n ~pos:(length t - n) ~len:n ~on_error:t
 
-let findi t ~f =
+let lfindi t ~f =
   let n = length t in
   let rec loop i =
     if i = n then None
@@ -287,7 +196,9 @@ let findi t ~f =
   loop 0
 ;;
 
-let find t ~f = Option.map (findi t ~f:(fun _ c -> f c)) ~f:(fun i -> t.[i])
+let find t ~f =
+  match lfindi t ~f:(fun _ c -> f c) with
+  | None -> None | Some i -> Some t.[i]
 
 let rfindi t ~f =
   let rec loop i =
@@ -306,46 +217,54 @@ let last_non_whitespace t = rfindi t ~f:(fun _ c -> not (Char.is_whitespace c))
 let rstrip t =
   match last_non_whitespace t with
   | None -> ""
-  | Some i -> keep_prefix_n t (i + 1)
+  | Some i ->
+      if i = length t - 1
+      then t
+      else prefix t (i + 1)
 ;;
 
-let first_non_whitespace t = findi t ~f:(fun _ c -> not (Char.is_whitespace c))
+let first_non_whitespace t = lfindi t ~f:(fun _ c -> not (Char.is_whitespace c))
 
 let lstrip t =
   match first_non_whitespace t with
   | None -> ""
-  | Some n -> drop_prefix_n t n
+  | Some 0 -> t
+  | Some n -> drop_prefix t n
 ;;
 
+(* [strip t] could be implemented as [lstrip (rstrip t)].  The implementatiom
+   below saves (at least) a factor of two allocation, by only allocating the
+   final result.  This also saves some amount of time. *)
 let strip t =
-  match first_non_whitespace t with
-  | None -> ""
-  | Some first ->
-      match last_non_whitespace t with
-      | None -> assert false
-      | Some last -> String.sub t ~pos:first ~len:(last - first + 1)
+  let length = length t in
+  if length = 0
+    || not (Char.is_whitespace t.[0] || Char.is_whitespace t.[length - 1])
+  then t
+  else
+    match first_non_whitespace t with
+    | None -> ""
+    | Some first ->
+        match last_non_whitespace t with
+        | None -> assert false
+        | Some last -> sub t ~pos:first ~len:(last - first + 1)
 ;;
 
 let map ~f s =
-  let s' = String.create (String.length s) in
-  for i = 0 to String.length s - 1 do
+  let l = String.length s in
+  let s' = String.create l in
+  for i = 0 to l - 1 do
     s'.[i] <- f s.[i]
   done;
   s'
 
 let to_array s = Array.init (String.length s) ~f:(fun i -> s.[i])
 
-let to_list t =
-  let rec loop i ac =
-    if i = 0 then ac
-    else
-      let i = i - 1 in
-      loop i (t.[i] :: ac)
-  in
-  loop (length t) []
-;;
+let tr ~target ~replacement s = map ~f:(fun c -> if c = target then replacement else c) s
 
-let tr ~target ~replacement = map ~f:(fun c -> if c = target then replacement else c)
+let tr_inplace ~target ~replacement s = (* destructive version of tr *)
+  for i = 0 to String.length s - 1 do
+    if s.[i] = target then s.[i] <- replacement
+  done
 
 let exists s ~f =
   let rec loop i = i > 0 && (let i = i - 1 in f s.[i] || loop i) in
@@ -363,27 +282,65 @@ let fold t ~init ~f =
   loop 0 init
 ;;
 
-let is_empty t = 0 = String.length t
+let is_empty t =
+  String.length t = 0
+;;
 
-let concat_array ~sep ar = String.concat ~sep (Array.to_list ar)
+let concat_array ?sep ar = concat ?sep (Array.to_list ar)
 
-let translate ~f s = concat_array ~sep:"" (Array.map (to_array s) ~f)
+(* Maybe we'll add this later ... *)
+(* let tc_concat tc ~sep c = *)
+(*   let module C = Container in *)
+(*   if tc.C.is_empty c then "" *)
+(*   else begin *)
+(*     let sep_len = String.length sep in *)
+(*     let len = *)
+(*       tc.C.fold ~init:(- sep_len) c ~f:(fun len s -> *)
+(*         len + length s + sep_len) *)
+(*     in *)
+(*     let dst = create len in *)
+(*     ignore *)
+(*       (tc.C.fold ~init:0 c ~f:(fun dst_pos src -> *)
+(*         let dst_pos = *)
+(*           if dst_pos = 0 then 0 *)
+(*           else begin *)
+(*             blit ~src:sep ~src_pos:0 ~dst_pos ~len:sep_len ~dst; *)
+(*             dst_pos + sep_len *)
+(*           end *)
+(*         in *)
+(*         let src_len = String.length src in *)
+(*         blit ~src ~src_pos:0 ~len:src_len ~dst_pos ~dst; *)
+(*         dst_pos + src_len)); *)
+(*     dst *)
+(*   end *)
 
-(*
-  CRv2 tvaroquaux should we name those `drop_*` and not follow the standard of
-  filename.ml?
-*)
-let chop_prefix s pref =
-  if not (check_prefix s pref) then
-    raise (Invalid_argument
-             (Printf.sprintf "Core_string.chop_prefix %s %s" s pref));
-  drop_prefix_n s (String.length pref)
+ let concat_map ?sep s ~f = concat_array ?sep (Array.map (to_array s) ~f)
 
-let chop_suffix s suff =
-  if not (check_suffix s suff) then
-    raise (Invalid_argument
-             (Printf.sprintf "Core_string.chop_suffix %s %s" s suff));
-  drop_suffix_n s (String.length suff)
+let chop_prefix_opt s ~prefix =
+  if is_prefix s ~prefix then
+    Some (drop_prefix s (String.length prefix))
+  else
+    None
+
+let chop_prefix s ~prefix =
+  match chop_prefix_opt s ~prefix with
+  | Some str -> str
+  | None ->
+      raise (Invalid_argument
+               (Printf.sprintf "Core_string.chop_prefix %S %S" s prefix))
+
+let chop_suffix_opt s ~suffix =
+  if is_suffix s ~suffix then
+    Some (drop_suffix s (String.length suffix))
+  else
+    None
+
+let chop_suffix s ~suffix =
+  match chop_suffix_opt s ~suffix with
+  | Some str -> str
+  | None ->
+      raise (Invalid_argument
+               (Printf.sprintf "Core_string.chop_suffix %S %S" s suffix))
 
 (* The following function returns exactly the same results than
    the standard hash function on strings (it performs exactly the
@@ -403,30 +360,16 @@ let hash s =
     done;
     !res land 0x3FFFFFFF
 
-(* = on two string avoids calling compare_val, which is what happens
-   with String.compare *)
-(* CRv2 | PZ: with OCaml 3.10, we can remove the physical equality test, as it is now also
-   checked in the standard library *)
-let equal (x : string) y = x == y || x = y
-
-
 module Infix = struct
   let ( </> ) str (start,stop) = slice str start stop
 end
 
-
-include Hashable.Make (struct
-  type t = string
+include Hashable.Make_binable (struct
+  include T
   let hash = hash
-  let equal = equal
-  let sexp_of_t = sexp_of_t
-  let t_of_sexp = t_of_sexp
 end)
-
-include Setable.Make (struct
-  type t = string
-  let compare = String.compare
-end)
+module Map = Core_map.Make (T)
+module Set = Core_set.Make (T)
 
 (* for interactive top-levels -- modules deriving from String should have String's pretty
    printer. *)
@@ -465,7 +408,6 @@ let max (x : t) y = if x > y then x else y
 let compare (x : t) y = compare x y
 let ascending = compare
 let descending x y = compare y x
-(* let equal x y = (x : t) = y *) (* already provided in String *)
 let ( >= ) x y = (x : t) >= y
 let ( <= ) x y = (x : t) <= y
 let ( = ) x y = (x : t) = y
@@ -474,3 +416,16 @@ let ( < ) x y = (x : t) < y
 let ( <> ) x y = (x : t) <> y
 
 let of_char c = String.make 1 c
+
+let container = {
+  Container.
+  length = length;
+  is_empty = is_empty;
+  iter = iter;
+  fold = fold;
+  exists = exists;
+  for_all = for_all;
+  find = find;
+  to_list = to_list;
+  to_array = to_array;
+}

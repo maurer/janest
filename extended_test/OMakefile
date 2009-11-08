@@ -1,0 +1,20 @@
+OCAML_LIBRARIES = core core_extended oUnit qtest_lib
+
+TARGETS = test_runner.exe yes.exe readline_test.exe sexp_pp.exe qtest.exe
+FOO =
+
+OCamlPreprocess($(PA_CPP), test bigstring_test)
+
+OCamlMakeProjDefaults($(TARGETS))
+OCamlTop(mycaml,$(FOO))
+
+local_runtest: $(TARGETS)
+	./test_runner.exe
+
+runtest: $(TARGETS) # test_mycaml
+	./test_runner.exe
+
+qtest: $(TARGETS)
+	./qtest.exe
+
+InstantiateOCamlEnv()
