@@ -9,16 +9,18 @@ Signed-off-by: Stephane Glondu <steph@glondu.net>
  1 files changed, 1 insertions(+), 1 deletions(-)
 
 diff --git a/lib/META b/lib/META
-index 1ef96f6..bcce6af 100644
+index 60ca7f9..63258b5 100644
 --- a/lib/META
 +++ b/lib/META
 @@ -2,7 +2,7 @@ name = "core"
- version = "0.5.3"
+ version = "0.6.0"
  description = "Core - Jane Street Capital's standard library overlay"
  
--requires = "bigarray, res, sexplib, bin_prot, threads"
-+requires = "bigarray, res, sexplib, bin_prot, unix, threads"
+-requires = "bigarray, res, sexplib, bin_prot, threads, fieldslib"
++requires = "bigarray, unix, res, sexplib, bin_prot, threads, fieldslib"
  
  archive(byte) = "core.cma"
  archive(native) = "core.cmxa"
 -- 
+1.6.5.2
+
