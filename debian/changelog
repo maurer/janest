@@ -1,6 +1,8 @@
 janest-core (0.6.0-1) UNRELEASED; urgency=low
 
-  * Non-maintainer upload.
+  * New upstream release
+  * debian/patches/: refresh patches:
+    - 0002-extra-targets-to-enable-compilation-of-byte-code-onl
 
  -- Stefano Zacchiroli <zack@debian.org>  Sun, 08 Nov 2009 23:20:44 +0100
 
