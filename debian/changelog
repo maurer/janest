@@ -5,6 +5,7 @@ janest-core (0.6.0-1) UNRELEASED; urgency=low
     - 0002-extra-targets-to-enable-compilation-of-byte-code-onl
     - patches/0003-add-missing-META-dep-on-unix
     - patches/0004-Fix-build-on-kfreebsd
+  * debian/control: add (new) build-dep on libfields-camlp4-dev
 
  -- Stefano Zacchiroli <zack@debian.org>  Sun, 08 Nov 2009 23:20:44 +0100
 

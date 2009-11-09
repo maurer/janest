@@ -17,6 +17,7 @@ Build-Depends:
  libbin-prot-camlp4-dev (>= 1.2.10),
  libsexplib-camlp4-dev (>= 4.2.6-3),
  libres-ocaml-dev (>= 3.1.1),
+ lifields-camlp4-dev,
  libounit-ocaml-dev
 Standards-Version: 3.8.3
 Vcs-Browser: http://git.debian.org/?p=pkg-ocaml-maint/packages/janest-core.git
