@@ -1,15 +1,14 @@
-From: Stephane Glondu <steph@glondu.net>
-Date: Sun, 30 Aug 2009 01:01:48 +0200
+From 8af6797262e6a3c5296b0935f807fc585e8cd6c2 Mon Sep 17 00:00:00 2001
+From: Stefano Zacchiroli <zack@upsilon.cc>
+Date: Mon, 9 Nov 2009 13:23:05 +0100
 Subject: [PATCH] Fix build on kfreebsd
 
-Signed-off-by: Stephane Glondu <steph@glondu.net>
 ---
- lib/Makefile      |    6 +++++-
- lib_test/Makefile |    6 ++++--
- 2 files changed, 9 insertions(+), 3 deletions(-)
+ lib/Makefile |    6 +++++-
+ 1 files changed, 5 insertions(+), 1 deletions(-)
 
 diff --git a/lib/Makefile b/lib/Makefile
-index b15a5ad..5630ea9 100644
+index ab1c8d8..741f697 100644
 --- a/lib/Makefile
 +++ b/lib/Makefile
 @@ -1,9 +1,13 @@
@@ -20,29 +19,13 @@ index b15a5ad..5630ea9 100644
 +
 +ifeq ($(SYSTEM), Linux)
    LINUX_EXT_STUBS_C = linux_ext_stubs.c
-   LINUX_EXT_ML = linux_ext.ml
- 	CLIBS = rt
+   LINUX_EXT_ML = linux_ext.mli linux_ext.ml
+ 	CLIBS += rt
 +else if ($(SYSTEM), GNU/kFreeBSD)
 +  CLIBS = rt
  endif
  
  SOURCES = \
-diff --git a/lib_test/Makefile b/lib_test/Makefile
-index 4f36640..3191755 100644
---- a/lib_test/Makefile
-+++ b/lib_test/Makefile
-@@ -7,9 +7,11 @@ export PACKS = bigarray oUnit type-conv sexplib bin_prot res
- export THREADS = yes
- ANNOTATE = true
- 
--ifeq ($(shell uname -s), Darwin)
-+SYSTEM = $(shell uname -s)
-+
-+ifeq ($(SYSTEM), Darwin)
-   export DARWIN = true
--else
-+else ifeq ($(SYSTEM), Linux)
-   LINUX_EXT_TEST = linux_ext_test.ml
-   export LINUX = true
- endif
 -- 
+1.6.5.2
+
