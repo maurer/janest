@@ -17,7 +17,7 @@ Build-Depends:
  libbin-prot-camlp4-dev (>= 1.2.10),
  libsexplib-camlp4-dev (>= 4.2.6-3),
  libres-ocaml-dev (>= 3.1.1),
- lifields-camlp4-dev,
+ libfields-camlp4-dev,
  libounit-ocaml-dev
 Standards-Version: 3.8.3
 Vcs-Browser: http://git.debian.org/?p=pkg-ocaml-maint/packages/janest-core.git
@@ -27,14 +27,11 @@ Homepage: http://www.janestcapital.com/ocaml/
 Package: libcore-ocaml-dev
 Architecture: any
 Depends:
- ocaml-nox-${F:OCamlABI},
  ocaml-findlib,
- libcore-ocaml (= ${binary:Version}),
- ${F:OCamlArchDeps},
- libsexplib-camlp4-dev,
- libres-ocaml-dev,
+ ${ocaml:Depends},
  ${shlibs:Depends},
  ${misc:Depends}
+Provides: ${ocaml:Provides}
 Description: Jane Street Capital's alternative standard library for OCaml
  Core is Jane Street Capital's alternative standard library for OCaml.
  .
@@ -54,10 +51,11 @@ Description: Jane Street Capital's alternative standard library for OCaml
 Package: libcore-ocaml
 Architecture: any
 Depends:
- ocaml-nox-${F:OCamlABI},
  ocaml-findlib,
+ ${ocaml:Depends},
  ${shlibs:Depends},
  ${misc:Depends}
+Provides: ${ocaml:Provides}
 Description: Jane Street Capital's core library for OCaml (runtime)
  Core is Jane Street Capital's alternative standard library for OCaml.
  .

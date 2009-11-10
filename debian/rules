@@ -1,15 +1,14 @@
 #!/usr/bin/make -f
+include /usr/share/cdbs/1/rules/ocaml.mk
 include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/rules/patchsys-quilt.mk
 include /usr/share/cdbs/1/class/makefile.mk
-include /usr/share/cdbs/1/rules/ocaml.mk
 
 LIB_NAME = core
 DLL_PKG_NAME = lib$(LIB_NAME)-ocaml
 DEV_PKG_NAME = lib$(LIB_NAME)-ocaml-dev
 DEST_DIR = $(CURDIR)/debian/$(DEV_PKG_NAME)$(OCAML_STDLIB_DIR)
 DEST_DLL_DIR = $(CURDIR)/debian/$(DLL_PKG_NAME)$(OCAML_DLL_DIR)
-DEB_DH_GENCONTROL_ARGS += -VF:OCamlArchDeps="libbin-prot-camlp4-dev"
 
 ifeq ($(OCAML_HAVE_OCAMLOPT),yes)
 DEB_MAKE_BUILD_TARGET = all
