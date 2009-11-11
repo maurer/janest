@@ -13,6 +13,9 @@ janest-core (0.6.0-1) UNRELEASED; urgency=low
     - revamp Description (mention Core vs Core_extended difference)
   * debian/rules: switch {debhelper,ocaml}.mk to avoid *.log leftovers
   * switch packaging to dh-ocaml
+  * debian/copyright:
+    - bump copyright years
+    - add MLton license, which applies to extended/union_find.ml
 
  -- Stefano Zacchiroli <zack@debian.org>  Sun, 08 Nov 2009 23:20:44 +0100
 
