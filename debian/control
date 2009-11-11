@@ -96,6 +96,7 @@ Package: libcore-extended-ocaml-dev
 Architecture: any
 Depends:
  ocaml-findlib,
+ libcore-ocaml-dev,
  ${ocaml:Depends},
  ${shlibs:Depends},
  ${misc:Depends}
@@ -130,6 +131,7 @@ Package: libcore-extended-ocaml
 Architecture: any
 Depends:
  ocaml-findlib,
+ libcore-ocaml,
  ${ocaml:Depends},
  ${shlibs:Depends},
  ${misc:Depends}
