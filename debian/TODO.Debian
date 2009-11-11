@@ -1,3 +1,5 @@
 - ship ocamldoc documentation
 - split packages for Core_extended?
 - compare dependencies with pre-dh-ocaml packages
+- ship all *.mli in Core
+- ship all *.mli in Core_extended
