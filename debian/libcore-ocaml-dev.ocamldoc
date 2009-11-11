@@ -1,0 +1,5 @@
+-syntax camlp4o
+-package bin_prot.syntax
+-package fieldslib.syntax
+-package sexplib.syntax
+-package type-conv.syntax

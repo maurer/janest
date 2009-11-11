@@ -16,6 +16,7 @@ janest-core (0.6.0-1) UNRELEASED; urgency=low
   * debian/copyright:
     - bump copyright years
     - add MLton license, which applies to extended/union_find.ml
+  * enable generation of ocamldoc documentation (using dh_ocamldoc)
 
  -- Stefano Zacchiroli <zack@debian.org>  Sun, 08 Nov 2009 23:20:44 +0100
 
