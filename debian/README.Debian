@@ -2,19 +2,13 @@
 ocamldoc API reference
 ======================
 
-The -dev packages of Core do not contain ocamldoc API reference in HTML format
-(as usually happens with OCaml -dev packages) since there is no clear document
-generation process at the moment (see debian/TODO.Debian in the Core source
-package for more details).
-
-Jane Street Capital have made available such an API reference on the web at
+The -dev packages of Core contains ocamldoc API reference in HTML format as
+usual. Additionally, Jane Street Capital have made available an integrated API
+reference with Core and all its other libraries on the web at:
 
   http://www.janestreet.com/ocaml/janestreet-ocamldocs/
 
-the same documentation is available for offline usage from the non-free section
-of the Debian acrhive in the "libcore-ocaml-doc" package.
-
- -- Stefano Zacchiroli <zack@debian.org>, Thu, 12 Nov 2009 11:46:37 +0100
+ -- Stefano Zacchiroli <zack@debian.org>, Thu, 12 Nov 2009 16:39:07 +0100
 
 Thread support with ocamlc and ocaml
 ====================================
