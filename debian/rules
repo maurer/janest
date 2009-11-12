@@ -52,15 +52,13 @@ clean::
 build/$(DOC_PKG):: ocamldoc-pp-stamp $(DEST_DIR)
 build/$(DOC_PKG):: install-arch common-binary-post-install-arch
 binary-install/$(DEV_PKG)::
-	dh_installdirs -p$(DOC_PKG) \
-		/usr/share/doc/$(DEV_PKG)/html /usr/share/doc-base
+	dh_installdirs -p$(DOC_PKG)
 	mv debian/$(DEV_PKG)/usr/share/doc/$(DEV_PKG)/html/api \
 		debian/$(DOC_PKG)/usr/share/doc/$(DEV_PKG)/html/api
 	mv debian/$(DEV_PKG)/usr/share/doc-base/* \
 		debian/$(DOC_PKG)/usr/share/doc-base/
 binary-install/$(EXT_PKG)::
-	dh_installdirs -p$(DOC_PKG) \
-		/usr/share/doc/$(EXT_PKG)/html /usr/share/doc-base
+	dh_installdirs -p$(DOC_PKG)
 	mv debian/$(EXT_PKG)/usr/share/doc/$(EXT_PKG)/html/api \
 		debian/$(DOC_PKG)/usr/share/doc/$(EXT_PKG)/html/api
 	mv debian/$(EXT_PKG)/usr/share/doc-base/* \
