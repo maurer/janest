@@ -23,12 +23,9 @@ janest-core (0.6.0-1) unstable; urgency=low
 
   [ Mehdi Dogguy ]
   * enable generation of ocamldoc documentation (using dh_ocamldoc)
-    - Some files need to be pre-processed to get the documentation
-      generated.
-    - Pass "-I lib -I +threads" to ocamldoc for core lib.
-    - Pass "-I extended -I +threads -package res" to ocamldoc for core
-      extended.
-  * Add myself to uploaders
+    - pre-processed some files just after build to avoid markup errors
+    - set up appropriates falgs in debian/*.ocamldoc files
+  * add myself to uploaders
 
  -- Mehdi Dogguy <mehdi@debian.org>  Thu, 12 Nov 2009 15:02:01 +0100
 

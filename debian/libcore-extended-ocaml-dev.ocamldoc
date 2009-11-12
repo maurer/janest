@@ -1,7 +1,7 @@
--I extended -I lib -I +threads
--syntax camlp4o
--package res
--package bin_prot.syntax
--package fieldslib.syntax
--package sexplib.syntax
--package type-conv.syntax
+ -I extended -I lib -I +threads
+ -syntax camlp4o
+ -package res
+ -package bin_prot.syntax
+ -package fieldslib.syntax
+ -package sexplib.syntax
+ -package type-conv.syntax

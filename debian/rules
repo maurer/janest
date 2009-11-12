@@ -6,6 +6,12 @@ include /usr/share/cdbs/1/rules/ocaml.mk
 
 DEST_DIR = $(CURDIR)/debian/tmp
 
+PP_FILES = \
+	lib/bigstring.mli \
+	lib/core_mutex.mli \
+	lib/unix_ext.mli \
+	$(NULL)
+
 ifeq ($(OCAML_HAVE_OCAMLOPT),yes)
 DEB_MAKE_BUILD_TARGET = all
 DEB_MAKE_INSTALL_TARGET = install OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
@@ -14,15 +20,15 @@ DEB_MAKE_BUILD_TARGET = byte
 DEB_MAKE_INSTALL_TARGET = libinstall-byte-code OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
 endif
 
-pre-build::
-	for file in lib/bigstring.mli lib/core_mutex.mli lib/unix_ext.mli; do \
-		cp $$file $$file.debian; \
-		sed -i '/^#/d' $$file; \
+build/libcore-ocaml-dev::
+	for file in $(PP_FILES) ; do \
+		cp $$file $$file.debian ; \
+		sed -i '/^#/d' $$file ; \
 	done
 
 clean::
-	for file in lib/bigstring.mli lib/core_mutex.mli lib/unix_ext.mli; do \
-		[ ! -f $$file.debian ] || mv $$file.debian $$file; \
+	for file in $(PP_FILES) ; do \
+		[ ! -f $$file.debian ] || mv $$file.debian $$file ; \
 	done
 
 build/libcore-ocaml-dev::
