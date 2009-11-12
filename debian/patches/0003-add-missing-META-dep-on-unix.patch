@@ -22,5 +22,3 @@ index 60ca7f9..63258b5 100644
  archive(byte) = "core.cma"
  archive(native) = "core.cmxa"
 -- 
-1.6.5.2
-

@@ -1,4 +1,3 @@
-From 8af6797262e6a3c5296b0935f807fc585e8cd6c2 Mon Sep 17 00:00:00 2001
 From: Stefano Zacchiroli <zack@upsilon.cc>
 Date: Mon, 9 Nov 2009 13:23:05 +0100
 Subject: [PATCH] Fix build on kfreebsd
@@ -8,7 +7,7 @@ Subject: [PATCH] Fix build on kfreebsd
  1 files changed, 5 insertions(+), 1 deletions(-)
 
 diff --git a/lib/Makefile b/lib/Makefile
-index ab1c8d8..741f697 100644
+index d2af679..40eabae 100644
 --- a/lib/Makefile
 +++ b/lib/Makefile
 @@ -1,9 +1,13 @@
@@ -27,5 +26,3 @@ index ab1c8d8..741f697 100644
  
  SOURCES = \
 -- 
-1.6.5.2
-
