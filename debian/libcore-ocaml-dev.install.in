@@ -2,6 +2,7 @@ debian/tmp/core/*.a		@OCamlStdlibDir@/core/
 debian/tmp/core/*.cma		@OCamlStdlibDir@/core/
 debian/tmp/core/*.cmi		@OCamlStdlibDir@/core/
 OPT: debian/tmp/core/*.cmxa	@OCamlStdlibDir@/core/
+debian/tmp/core/META		@OCamlStdlibDir@/core/
 
 lib/*.mli			@OCamlStdlibDir@/core/
 lib/*able.ml			@OCamlStdlibDir@/core/
