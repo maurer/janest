@@ -14,5 +14,16 @@ DEB_MAKE_BUILD_TARGET = byte
 DEB_MAKE_INSTALL_TARGET = libinstall-byte-code OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
 endif
 
+pre-build::
+	for file in lib/bigstring.mli lib/core_mutex.mli lib/unix_ext.mli; do \
+		cp $$file $$file.debian; \
+		sed -i '/^#/d' $$file; \
+	done
+
+clean::
+	for file in lib/bigstring.mli lib/core_mutex.mli lib/unix_ext.mli; do \
+		[ ! -f $$file.debian ] || mv $$file.debian $$file; \
+	done
+
 build/libcore-ocaml-dev::
 	mkdir -p $(DEST_DIR)

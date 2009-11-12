@@ -1,5 +1,6 @@
 janest-core (0.6.0-1) unstable; urgency=low
 
+  [ Stefano Zacchiroli ]
   * New upstream release
   * refresh patches from debian/patches/:
     - 0002-extra-targets-to-enable-compilation-of-byte-code-onl
@@ -20,7 +21,15 @@ janest-core (0.6.0-1) unstable; urgency=low
     - document how to use thread support with Core (for newbies)
     - add a pointer to the online ocamldoc API reference
 
- -- Stefano Zacchiroli <zack@debian.org>  Thu, 12 Nov 2009 11:00:38 +0100
+  [ Mehdi Dogguy ]
+  * enable generation of ocamldoc documentation (using dh_ocamldoc)
+    - Some files need to be pre-processed to get the documentation
+      generated.
+    - Pass "-I lib -I +threads" to ocamldoc for core lib.
+    - Pass "-I extended -I +threads -package res" to ocamldoc for core
+      extended.
+
+ -- Mehdi Dogguy <mehdi@debian.org>  Thu, 12 Nov 2009 14:38:09 +0100
 
 janest-core (0.5.3-1) unstable; urgency=low
 
@@ -101,4 +110,3 @@ janest-core (0.5.0-1) experimental; urgency=low
   * Initial release (Closes: #479152)
 
  -- Stefano Zacchiroli <zack@debian.org>  Sat, 03 May 2008 10:55:27 +0200
-
