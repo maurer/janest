@@ -1,12 +1,1 @@
-* generate ocamldoc HTML API ref
-** tried in the past, but several issues remain
-*** a lot of syntax extensions are used
-    here is a draft list of flags to be put in *.ocamldoc files:
-      -syntax camlp4o
-      -package bin_prot.syntax
-      -package fieldslib.syntax
-      -package sexplib.syntax
-      -package type-conv.syntax
-*** different source files are pre-processed in different ways
-    not necessarily all camlp4-based (check for (*pp ...*) directive at the
-    beginning of each source file
+* fix build here with bytecode only compiler

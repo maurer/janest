@@ -8,8 +8,10 @@ janest-core (0.6.0-1) UNRELEASED; urgency=low
     - 0004-Fix-build-on-kfreebsd
   * debian/control:
     - add (new) build-dep on libfields-camlp4-dev
-    - split 2 new binary packages: libcore-extended-ocaml{,-dev} that
-      contain Core_extended (rationale: large, more deps)
+    - split 3 new binary packages:
+      + libcore-extended-ocaml{,-dev} that contain Core_extended
+        (rationale: large, more deps)
+      + libcore-ocaml-doc that contains the ocamldoc HTML API reference
     - add build-dep on libpcre-ocaml-dev, required to build Core_extended
     - revamp Description (mention Core vs Core_extended difference)
   * debian/rules: switch {debhelper,ocaml}.mk to avoid *.log leftovers

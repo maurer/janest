@@ -5,6 +5,9 @@ include /usr/share/cdbs/1/class/makefile.mk
 include /usr/share/cdbs/1/rules/ocaml.mk
 
 DEST_DIR = $(CURDIR)/debian/tmp
+DOC_PKG = libcore-ocaml-doc
+DEV_PKG = libcore-ocaml-dev
+EXT_PKG = libcore-extended-ocaml-dev
 
 # files that need to be pre-processed to remove #if* directives before feeding
 # them into ocamldoc
@@ -12,6 +15,8 @@ PP_FILES = \
 	lib/bigstring.mli \
 	lib/core_mutex.mli \
 	lib/unix_ext.mli \
+	lib/std.ml \
+	extended/std.ml \
 	$(NULL)
 
 ifeq ($(OCAML_HAVE_OCAMLOPT),yes)
@@ -22,16 +27,42 @@ DEB_MAKE_BUILD_TARGET = byte
 DEB_MAKE_INSTALL_TARGET = libinstall-byte-code OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
 endif
 
-build/libcore-ocaml-dev::
-	for file in $(PP_FILES) ; do \
-		cp $$file $$file.debian ; \
-		sed -i '/^#/d' $$file ; \
+# pre-process files that need so, before feeding them to ocamldoc
+build/$(DEV_PKG):: ocamldoc-pp-stamp
+ocamldoc-pp-stamp:
+	for f in $(PP_FILES) ; do \
+		cp $$f $$f.debian ; \
+		sed -i '/^#/d' $$f ; \
 	done
+	touch $@
+
+build/$(DEV_PKG):: $(DEST_DIR)
+$(DEST_DIR):
+	test -d $@ || mkdir -p $@
 
 clean::
-	for file in $(PP_FILES) ; do \
-		[ ! -f $$file.debian ] || mv $$file.debian $$file ; \
+	for f in $(PP_FILES) ; do \
+		[ ! -f $$f.debian ] || mv $$f.debian $$f ; \
 	done
+	rm -f ocamldoc-pp-stamp
 
-build/libcore-ocaml-dev::
-	mkdir -p $(DEST_DIR)
+# Move ocamldoc API ref from Core{,_extended) to -doc package.
+# Rationale: the documentation must be generated in two different stages (one
+# for Core and one for Core_extended), that's not easy with current dh_ocamldoc
+build/$(DOC_PKG):: ocamldoc-pp-stamp $(DEST_DIR)
+build/$(DOC_PKG):: install-arch common-binary-post-install-arch
+binary-install/$(DEV_PKG)::
+	dh_installdirs -p$(DOC_PKG) \
+		/usr/share/doc/$(DEV_PKG)/html /usr/share/doc-base
+	mv debian/$(DEV_PKG)/usr/share/doc/$(DEV_PKG)/html/api \
+		debian/$(DOC_PKG)/usr/share/doc/$(DEV_PKG)/html/api
+	mv debian/$(DEV_PKG)/usr/share/doc-base/* \
+		debian/$(DOC_PKG)/usr/share/doc-base/
+binary-install/$(EXT_PKG)::
+	dh_installdirs -p$(DOC_PKG) \
+		/usr/share/doc/$(EXT_PKG)/html /usr/share/doc-base
+	mv debian/$(EXT_PKG)/usr/share/doc/$(EXT_PKG)/html/api \
+		debian/$(DOC_PKG)/usr/share/doc/$(EXT_PKG)/html/api
+	mv debian/$(EXT_PKG)/usr/share/doc-base/* \
+		debian/$(DOC_PKG)/usr/share/doc-base/
+

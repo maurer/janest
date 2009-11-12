@@ -33,6 +33,7 @@ Depends:
  ${ocaml:Depends},
  ${shlibs:Depends},
  ${misc:Depends}
+Recommends: libcore-ocaml-doc
 Provides: ${ocaml:Provides}
 Description: Jane Street's standard library for OCaml
  Core is an alternative to the OCaml standard library developed by
@@ -100,6 +101,7 @@ Depends:
  ${ocaml:Depends},
  ${shlibs:Depends},
  ${misc:Depends}
+Recommends: libcore-ocaml-doc
 Provides: ${ocaml:Provides}
 Description: Jane Street's standard library for OCaml - extensions
  Core is an alternative to the OCaml standard library developed by
@@ -159,3 +161,34 @@ Description: Jane Street's standard library for OCaml - extensions (runtime)
  .
  This package contains the runtime stuff you need to run programs using
  Core_extended.
+
+Package: libcore-ocaml-doc
+Section: doc
+Architecture: all
+Enhances:
+ libcore-ocaml-dev,
+ libcore-extended-ocaml-dev
+Description: Jane Street's standard library for OCaml - documentation
+ Core is an alternative to the OCaml standard library developed by
+ Jane Street Capital.
+ .
+ Core does a number of things:
+ .
+  * provides tail recursive versions of non tail recursive functions in
+    the standard library;
+  * changes the signature of many of the standard modules to enforce
+    consistent naming conventions;
+  * includes generic serialization for most types;
+  * adds some new modules as well as new functionality to existing
+    modules.
+ .
+ Beware that Core extends some functionality of the legacy standard
+ library, and outright changes or replaces other; backward compatibility
+ .
+ The code of Core is routinely reviewed within Jane Street Capital
+ according to their quality assurance requirements. The extra library
+ called Core_extended adds new functionalities on top of Core, but is
+ only reviewed on an ad-hoc basis.
+ .
+ This package contains the ocamldoc API reference in HTML format for both
+ Core and Core_extended.
