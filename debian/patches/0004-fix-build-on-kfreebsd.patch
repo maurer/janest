@@ -1,6 +1,6 @@
 From: Stefano Zacchiroli <zack@upsilon.cc>
 Date: Mon, 9 Nov 2009 13:23:05 +0100
-Subject: [PATCH] Fix build on kfreebsd
+Subject: [PATCH] fix build on kfreebsd
 
 ---
  lib/Makefile |    6 +++++-

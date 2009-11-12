@@ -1,11 +1,12 @@
-janest-core (0.6.0-1) UNRELEASED; urgency=low
+janest-core (0.6.0-1) unstable; urgency=low
 
   [ Stefano Zacchiroli ]
   * New upstream release
-  * refresh patches from debian/patches/:
+  * refresh and rename patches from debian/patches/:
+    - 0001-bug-fix-libinstall-byte-code-should-not-depend-on-na
     - 0002-extra-targets-to-enable-compilation-of-byte-code-onl
     - 0003-add-missing-META-dep-on-unix
-    - 0004-Fix-build-on-kfreebsd
+    - 0004-fix-build-on-kfreebsd
   * debian/control:
     - add (new) build-dep on libfields-camlp4-dev
     - split 3 new binary packages:
@@ -26,10 +27,10 @@ janest-core (0.6.0-1) UNRELEASED; urgency=low
   [ Mehdi Dogguy ]
   * enable generation of ocamldoc documentation (using dh_ocamldoc)
     - pre-processed some files just after build to avoid markup errors
-    - set up appropriates falgs in debian/*.ocamldoc files
+    - set up appropriates flags in debian/*.ocamldoc files
   * add myself to uploaders
 
- -- Mehdi Dogguy <mehdi@debian.org>  Thu, 12 Nov 2009 15:02:01 +0100
+ -- Stefano Zacchiroli <zack@debian.org>  Fri, 13 Nov 2009 00:12:41 +0100
 
 janest-core (0.5.3-1) unstable; urgency=low
 

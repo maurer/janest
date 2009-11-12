@@ -1,6 +1,6 @@
 From: Stefano Zacchiroli <zack@upsilon.cc>
 Date: Sat, 3 May 2008 22:39:34 +0200
-Subject: [PATCH] extra targets to enable compilation of byte code only
+Subject: [PATCH] make targets to enable bytecode only compilation
 
 Signed-off-by: Stefano Zacchiroli <zack@upsilon.cc>
 ---
