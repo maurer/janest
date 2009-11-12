@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: Debian OCaml Maintainers <debian-ocaml-maint@lists.debian.org>
 Uploaders:
  Stefano Zacchiroli <zack@debian.org>,
+ Mehdi Dogguy <mehdi@debian.org>,
  Stéphane Glondu <glondu@debian.org>
 Build-Depends:
  cdbs,

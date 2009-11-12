@@ -28,8 +28,9 @@ janest-core (0.6.0-1) unstable; urgency=low
     - Pass "-I lib -I +threads" to ocamldoc for core lib.
     - Pass "-I extended -I +threads -package res" to ocamldoc for core
       extended.
+  * Add myself to uploaders
 
- -- Mehdi Dogguy <mehdi@debian.org>  Thu, 12 Nov 2009 14:38:09 +0100
+ -- Mehdi Dogguy <mehdi@debian.org>  Thu, 12 Nov 2009 15:02:01 +0100
 
 janest-core (0.5.3-1) unstable; urgency=low
 
