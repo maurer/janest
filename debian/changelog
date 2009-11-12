@@ -1,4 +1,4 @@
-janest-core (0.6.0-1) UNRELEASED; urgency=low
+janest-core (0.6.0-1) unstable; urgency=low
 
   * New upstream release
   * refresh patches from debian/patches/:
@@ -17,7 +17,7 @@ janest-core (0.6.0-1) UNRELEASED; urgency=low
     - bump copyright years
     - add MLton license, which applies to extended/union_find.ml
 
- -- Stefano Zacchiroli <zack@debian.org>  Sun, 08 Nov 2009 23:20:44 +0100
+ -- Stefano Zacchiroli <zack@debian.org>  Thu, 12 Nov 2009 11:00:38 +0100
 
 janest-core (0.5.3-1) unstable; urgency=low
 

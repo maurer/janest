@@ -10,5 +10,3 @@
 *** different source files are pre-processed in different ways
     not necessarily all camlp4-based (check for (*pp ...*) directive at the
     beginning of each source file
-
-* compare dependencies with pre-dh-ocaml packages
