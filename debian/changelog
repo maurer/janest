@@ -16,6 +16,8 @@ janest-core (0.6.0-1) unstable; urgency=low
   * debian/copyright:
     - bump copyright years
     - add MLton license, which applies to extended/union_find.ml
+  * debian/README.Debian: document the need of and how to use thread
+    support with Core (for newbies)
 
  -- Stefano Zacchiroli <zack@debian.org>  Thu, 12 Nov 2009 11:00:38 +0100
 
