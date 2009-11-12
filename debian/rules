@@ -6,6 +6,8 @@ include /usr/share/cdbs/1/rules/ocaml.mk
 
 DEST_DIR = $(CURDIR)/debian/tmp
 
+# files that need to be pre-processed to remove #if* directives before feeding
+# them into ocamldoc
 PP_FILES = \
 	lib/bigstring.mli \
 	lib/core_mutex.mli \
