@@ -2,3 +2,4 @@
 0002-make-targets-to-enable-bytecode-only-compilation.patch
 0003-add-missing-META-dep-on-unix.patch
 0004-fix-build-on-kfreebsd.patch
+0005-create-destdir-upon-install.patch

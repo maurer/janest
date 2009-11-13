@@ -1,0 +1,29 @@
+From: Stefano Zacchiroli <zack@upsilon.cc>
+Date: Fri, 13 Nov 2009 11:34:03 +0100
+Subject: [PATCH] create destdir upon install
+
+---
+ Makefile |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 746dca2..f3af42b 100644
+--- a/Makefile
++++ b/Makefile
+@@ -5,6 +5,7 @@ all:
+ 
+ .PHONY:	install
+ install:
++	if [ -n "$(DESTDIR)" ] ; then mkdir -p "$(DESTDIR)" ; fi
+ 	@cd lib && $(MAKE) $@
+ 	@cd extended && $(MAKE) $@
+ 
+@@ -26,6 +27,7 @@ byte:
+ 
+ .PHONY:	libinstall-byte-code
+ libinstall-byte-code:
++	if [ -n "$(DESTDIR)" ] ; then mkdir -p "$(DESTDIR)" ; fi
+ 	@cd lib && $(MAKE) $@
+ 	@cd extended && $(MAKE) $@
+ 
+-- 

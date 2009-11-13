@@ -29,10 +29,10 @@ PP_FILES = \
 
 ifeq ($(OCAML_HAVE_OCAMLOPT),yes)
 DEB_MAKE_BUILD_TARGET = all
-DEB_MAKE_INSTALL_TARGET = install OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
+DEB_MAKE_INSTALL_TARGET = install DESTDIR=$(DEST_DIR) OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
 else
 DEB_MAKE_BUILD_TARGET = byte
-DEB_MAKE_INSTALL_TARGET = libinstall-byte-code OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
+DEB_MAKE_INSTALL_TARGET = libinstall-byte-code DESTDIR=$(DEST_DIR) OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
 endif
 
 # pre-process files that need so, before feeding them to ocamldoc
