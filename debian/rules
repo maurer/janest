@@ -1,13 +1,21 @@
 #!/usr/bin/make -f
-include /usr/share/cdbs/1/rules/patchsys-quilt.mk
-include /usr/share/cdbs/1/rules/debhelper.mk
-include /usr/share/cdbs/1/class/makefile.mk
-include /usr/share/cdbs/1/rules/ocaml.mk
-
 DEST_DIR = $(CURDIR)/debian/tmp
 DOC_PKG = libcore-ocaml-doc
 DEV_PKG = libcore-ocaml-dev
 EXT_PKG = libcore-extended-ocaml-dev
+
+# Ensure -dev packages are installed when dh_ocamldoc is invoked on the -doc
+# package.  Rationale: to avoid "dup interface" errors we should invoke
+# ocamldoc on the actually installed .mli-s (and not on lib/,extended/). The
+# dep should be binary to install (instead of build to install) to ensure when
+# arch packages are installed we are under fakeroot.
+binary/$(DOC_PKG):: ocamldoc-pp-stamp $(DEST_DIR)
+binary/$(DOC_PKG):: install-arch common-binary-post-install-arch
+
+include /usr/share/cdbs/1/rules/patchsys-quilt.mk
+include /usr/share/cdbs/1/rules/debhelper.mk
+include /usr/share/cdbs/1/class/makefile.mk
+include /usr/share/cdbs/1/rules/ocaml.mk
 
 # files that need to be pre-processed to remove #if* directives before feeding
 # them into ocamldoc
@@ -45,22 +53,4 @@ clean::
 		[ ! -f $$f.debian ] || mv $$f.debian $$f ; \
 	done
 	rm -f ocamldoc-pp-stamp
-
-# Move ocamldoc API ref from Core{,_extended) to -doc package.
-# Rationale: the documentation must be generated in two different stages (one
-# for Core and one for Core_extended), that's not easy with current dh_ocamldoc
-build/$(DOC_PKG):: ocamldoc-pp-stamp $(DEST_DIR)
-build/$(DOC_PKG):: install-arch common-binary-post-install-arch
-binary-install/$(DEV_PKG)::
-	dh_installdirs -p$(DOC_PKG)
-	mv debian/$(DEV_PKG)/usr/share/doc/$(DEV_PKG)/html/api \
-		debian/$(DOC_PKG)/usr/share/doc/$(DEV_PKG)/html/api
-	mv debian/$(DEV_PKG)/usr/share/doc-base/* \
-		debian/$(DOC_PKG)/usr/share/doc-base/
-binary-install/$(EXT_PKG)::
-	dh_installdirs -p$(DOC_PKG)
-	mv debian/$(EXT_PKG)/usr/share/doc/$(EXT_PKG)/html/api \
-		debian/$(DOC_PKG)/usr/share/doc/$(EXT_PKG)/html/api
-	mv debian/$(EXT_PKG)/usr/share/doc-base/* \
-		debian/$(DOC_PKG)/usr/share/doc-base/
 
