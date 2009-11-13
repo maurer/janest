@@ -167,7 +167,8 @@ Section: doc
 Architecture: all
 Enhances:
  libcore-ocaml-dev,
- libcore-extended-ocaml-dev
+ libcore-extended-ocaml-dev,
+ ${misc:Depends}
 Description: Jane Street's standard library for OCaml - documentation
  Core is an alternative to the OCaml standard library developed by
  Jane Street Capital.
