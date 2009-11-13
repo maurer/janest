@@ -1,4 +1,7 @@
- -I lib -I +threads
+--include debian/libcore-ocaml-dev/@OCamlStdlibDir@/core
+ -d html/core-api
+ -I lib
+ -I +threads
  -syntax camlp4o
  -package bin_prot.syntax
  -package fieldslib.syntax
