@@ -9,7 +9,7 @@ EXT_PKG = libcore-extended-ocaml-dev
 # ocamldoc on the actually installed .mli-s (and not on lib/,extended/). The
 # dep should be binary to install (instead of build to install) to ensure when
 # arch packages are installed we are under fakeroot.
-binary/$(DOC_PKG):: ocamldoc-pp-stamp $(DEST_DIR)
+binary/$(DOC_PKG):: ocamldoc-pp-stamp
 binary/$(DOC_PKG):: install-arch common-binary-post-install-arch
 
 include /usr/share/cdbs/1/rules/patchsys-quilt.mk
@@ -43,10 +43,6 @@ ocamldoc-pp-stamp:
 		sed -i '/^#/d' $$f ; \
 	done
 	touch $@
-
-build/$(DEV_PKG):: $(DEST_DIR)
-$(DEST_DIR):
-	test -d $@ || mkdir -p $@
 
 clean::
 	for f in $(PP_FILES) ; do \
