@@ -1,9 +1,5 @@
---include debian/libcore-ocaml-dev/@OCamlStdlibDir@/core
+--include debian/libcore-ocaml-dev@OCamlStdlibDir@/core
+ -pp "sh debian/dpp.sh"
  -d html/core-api
  -I lib
  -I +threads
- -syntax camlp4o
- -package bin_prot.syntax
- -package fieldslib.syntax
- -package sexplib.syntax
- -package type-conv.syntax

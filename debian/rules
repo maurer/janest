@@ -9,23 +9,12 @@ EXT_PKG = libcore-extended-ocaml-dev
 # ocamldoc on the actually installed .mli-s (and not on lib/,extended/). The
 # dep should be binary to install (instead of build to install) to ensure when
 # arch packages are installed we are under fakeroot.
-binary/$(DOC_PKG):: ocamldoc-pp-stamp
 binary/$(DOC_PKG):: install-arch common-binary-post-install-arch
 
 include /usr/share/cdbs/1/rules/patchsys-quilt.mk
 include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/class/makefile.mk
 include /usr/share/cdbs/1/rules/ocaml.mk
-
-# files that need to be pre-processed to remove #if* directives before feeding
-# them into ocamldoc
-PP_FILES = \
-	lib/bigstring.mli \
-	lib/core_mutex.mli \
-	lib/unix_ext.mli \
-	lib/std.ml \
-	extended/std.ml \
-	$(NULL)
 
 ifeq ($(OCAML_HAVE_OCAMLOPT),yes)
 DEB_MAKE_BUILD_TARGET = all
@@ -34,19 +23,3 @@ else
 DEB_MAKE_BUILD_TARGET = byte
 DEB_MAKE_INSTALL_TARGET = libinstall-byte-code DESTDIR=$(DEST_DIR) OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
 endif
-
-# pre-process files that need so, before feeding them to ocamldoc
-build/$(DEV_PKG):: ocamldoc-pp-stamp
-ocamldoc-pp-stamp:
-	for f in $(PP_FILES) ; do \
-		cp $$f $$f.debian ; \
-		sed -i '/^#/d' $$f ; \
-	done
-	touch $@
-
-clean::
-	for f in $(PP_FILES) ; do \
-		[ ! -f $$f.debian ] || mv $$f.debian $$f ; \
-	done
-	rm -f ocamldoc-pp-stamp
-
