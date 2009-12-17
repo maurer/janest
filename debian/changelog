@@ -1,9 +1,9 @@
-janest-core (0.6.0-2) UNRELEASED; urgency=low
+janest-core (0.6.0-2) unstable; urgency=low
 
   * Fix FTBFS on non-Linux platforms: Do not blindly remove lines starting
     with '#' but use upstream's "lib/pp.sh" and camlp4o.
 
- -- Mehdi Dogguy <mehdi@debian.org>  Wed, 16 Dec 2009 22:06:37 +0100
+ -- Mehdi Dogguy <mehdi@debian.org>  Thu, 17 Dec 2009 13:36:17 +0100
 
 janest-core (0.6.0-1) unstable; urgency=low
 
