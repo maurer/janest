@@ -1,25 +1,36 @@
 #!/usr/bin/make -f
-DEST_DIR = $(CURDIR)/debian/tmp
-DOC_PKG = libcore-ocaml-doc
-DEV_PKG = libcore-ocaml-dev
-EXT_PKG = libcore-extended-ocaml-dev
 
-# Ensure -dev packages are installed when dh_ocamldoc is invoked on the -doc
-# package.  Rationale: to avoid "dup interface" errors we should invoke
-# ocamldoc on the actually installed .mli-s (and not on lib/,extended/). The
-# dep should be binary to install (instead of build to install) to ensure when
-# arch packages are installed we are under fakeroot.
-binary/$(DOC_PKG):: install-arch common-binary-post-install-arch
+DESTDIR=$(CURDIR)/debian/tmp
 
-include /usr/share/cdbs/1/rules/patchsys-quilt.mk
-include /usr/share/cdbs/1/rules/debhelper.mk
-include /usr/share/cdbs/1/class/makefile.mk
-include /usr/share/cdbs/1/rules/ocaml.mk
+include /usr/share/ocaml/ocamlvars.mk
 
-ifeq ($(OCAML_HAVE_OCAMLOPT),yes)
-DEB_MAKE_BUILD_TARGET = all
-DEB_MAKE_INSTALL_TARGET = install DESTDIR=$(DEST_DIR) OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
-else
-DEB_MAKE_BUILD_TARGET = byte
-DEB_MAKE_INSTALL_TARGET = libinstall-byte-code DESTDIR=$(DEST_DIR) OCAMLFIND_INSTFLAGS="-destdir $(DEST_DIR) -ldconf ignore"
-endif
+export OCAML_DLL_DIR
+export OCAML_HAVE_OCAMLOPT
+export OCAMLFIND_DESTDIR=$(DESTDIR)/$(OCAML_STDLIB_DIR)
+
+%:
+	dh $@ --with ocaml
+
+.PHONY: override_dh_auto_configure
+override_dh_auto_configure:
+	ocaml setup.ml -configure --prefix /usr --destdir '$(DESTDIR)' --docdir /usr/share/doc/libcore-ocaml-doc/html/api
+
+.PHONY: override_dh_auto_build
+override_dh_auto_build:
+	ocaml setup.ml -build
+	ocaml setup.ml -doc
+
+.PHONY: override_dh_auto_test
+override_dh_auto_test:
+	ocaml setup.ml -test
+
+.PHONY: override_dh_auto_install
+override_dh_auto_install:
+	mkdir -p '$(OCAMLFIND_DESTDIR)'
+	mkdir -p '$(DESTDIR)$(OCAML_DLL_DIR)'
+	ocaml setup.ml -install
+	rm -f '$(DESTDIR)$(OCAML_DLL_DIR)'/*.so.owner
+
+.PHONY: override_dh_auto_clean
+override_dh_auto_clean:
+	ocaml setup.ml -distclean
