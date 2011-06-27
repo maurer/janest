@@ -6,7 +6,7 @@ Uploaders:
  Mehdi Dogguy <mehdi@debian.org>,
  Stéphane Glondu <glondu@debian.org>
 Build-Depends:
- debhelper (>= 7),
+ debhelper (>= 8),
  ocaml-nox,
  dh-ocaml,
  camlp4,
