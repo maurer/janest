@@ -1,3 +1,10 @@
+janest-core (0.6.0-4) UNRELEASED; urgency=low
+
+  [ Stefano Zacchiroli ]
+  * remove myself from Uploaders
+
+ -- Stefano Zacchiroli <zack@debian.org>  Sat, 08 Oct 2011 17:27:50 +0200
+
 janest-core (0.6.0-3) unstable; urgency=low
 
   * Fix FTBFS with OCaml 3.12 (Closes: #585460)
