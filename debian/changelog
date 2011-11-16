@@ -1,12 +1,19 @@
-janest-core (107.01-4) UNRELEASED; urgency=low
+janest-core (107.01-4) unstable; urgency=low
 
   [ Stéphane Glondu ]
-  * New upstream release
+  * New upstream release (Closes: #588095, #630670, #634565)
+    - remove obsolete patches and debian/README.* files
+    - remove references to core-extended (it is now distributed
+      separately)
+  * Switch source package format to 3.0 (quilt)
+  * Switch to dh with overrides, bump debhelper compat level to 8
+  * Bump Standards-Version to 3.9.2
+  * Update debian/watch
 
   [ Stefano Zacchiroli ]
   * remove myself from Uploaders
 
- -- Stefano Zacchiroli <zack@debian.org>  Sat, 08 Oct 2011 17:27:50 +0200
+ -- Stéphane Glondu <glondu@debian.org>  Wed, 16 Nov 2011 20:39:20 +0100
 
 janest-core (0.6.0-3) unstable; urgency=low
 
