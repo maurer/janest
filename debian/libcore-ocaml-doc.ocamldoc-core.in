@@ -1,5 +1,0 @@
---include debian/libcore-ocaml-dev@OCamlStdlibDir@/core
- -pp "sh debian/dpp.sh"
- -d html/core-api
- -I lib
- -I +threads

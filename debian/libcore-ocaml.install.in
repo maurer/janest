@@ -1,1 +1,1 @@
-debian/tmp/core/*.so			@OCamlDllDir@
+@OCamlDllDir@/*.so
