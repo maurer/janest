@@ -1,4 +1,7 @@
-janest-core (0.6.0-4) UNRELEASED; urgency=low
+janest-core (107.01-4) UNRELEASED; urgency=low
+
+  [ Stéphane Glondu ]
+  * New upstream release
 
   [ Stefano Zacchiroli ]
   * remove myself from Uploaders
