@@ -1,7 +1,0 @@
-debian/tmp/core_extended/*.a		@OCamlStdlibDir@/core_extended/
-debian/tmp/core_extended/*.cma		@OCamlStdlibDir@/core_extended/
-debian/tmp/core_extended/*.cmi		@OCamlStdlibDir@/core_extended/
-OPT: debian/tmp/core_extended/*.cmxa	@OCamlStdlibDir@/core_extended/
-debian/tmp/core_extended/META		@OCamlStdlibDir@/core_extended/
-
-extended/*.mli				@OCamlStdlibDir@/core_extended/
