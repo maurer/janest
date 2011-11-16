@@ -1,2 +1,2 @@
 version=3
-http://ocaml.janestreet.com/?q=node/13 .*/core-(.*)\.tgz
+http://ocaml.janestreet.com/?q=node/13 .*/core-(.*)\.t(?:ar\.)gz
