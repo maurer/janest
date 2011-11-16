@@ -1,32 +1,68 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-TYPE_CONV_PATH "Core_gc"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This file is derived from source code of the Ocaml compiler.               *
+ * which has additional copyrights:                                           *
+ *                                                                            *
+ *    Damien Doligez, projet Cristal, INRIA Rocquencourt                      *
+ *                                                                            *
+ *    Copyright 1996 Institut National de Recherche en Informatique et        *
+ *    en Automatique.                                                         *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
+open Sexplib.Std
+open Bin_prot.Std
 include Caml.Gc
 
 module Int = Core_int
 module Sexp = Sexplib.Sexp
 let sprintf = Printf.sprintf
 
-
 let read_finaliser_queue, write_finaliser_queue =
-  Thread_safe_queue.one_reader_one_writer ()
+  Thread_safe_queue.create' ()
 ;;
 
-let start_finaliser_thread_promise = lazy (
-  ignore (
-    Thread.create (fun () -> Function.forever (fun () ->
+let maybe_start_finaliser_thread =
+  let mutex = Core_mutex.create () in
+  let started = ref false in
+  let start_finaliser_thread () =
+    ignore (Thread.create (fun () -> Fn.forever (fun () ->
       match read_finaliser_queue () with
       | None -> Thread.delay 1.0
-      | Some f ->
-          Exn.handle_uncaught ~exit:false f))
-      () ))
+      | Some f -> Exn.handle_uncaught ~exit:false f)) ())
+  in
+  (fun () ->
+    if not !started then (* performance hack! *)
+      Core_mutex.critical_section mutex ~f:(fun () ->
+        if not !started then
+          (started := true; start_finaliser_thread ())))
 ;;
 
 (* Ocaml permits finalisers to be run in any thread and at any time after the object
  * becomes unreachable -- they are essentially concurrent.  This changes forces all
  * finaliser code to run sequentially and in a fixed thread. *)
 let finalise f x =
-  Lazy.force start_finaliser_thread_promise;
+  maybe_start_finaliser_thread ();
   let finaliser v = write_finaliser_queue (fun () -> f v) in
   Caml.Gc.finalise finaliser x
 ;;
@@ -35,25 +71,23 @@ module Stat = struct
   type pretty_float = float with bin_io, sexp
   let sexp_of_pretty_float f = Sexp.Atom (sprintf "%.2e" f)
 
-  type pretty_int = int with bin_io, sexp
-  let sexp_of_pretty_int i = Sexp.Atom (Core_int.to_string_hum i)
-
   type t = Caml.Gc.stat = {
     minor_words : pretty_float;
     promoted_words : pretty_float;
     major_words : pretty_float;
-    minor_collections : pretty_int;
-    major_collections : pretty_int;
-    heap_words : pretty_int;
-    heap_chunks : pretty_int;
-    live_words : pretty_int;
-    live_blocks : pretty_int;
-    free_words : pretty_int;
-    free_blocks : pretty_int;
-    largest_free : pretty_int;
-    fragments : pretty_int;
-    compactions : pretty_int;
-    top_heap_words : pretty_int;
+    minor_collections : int;
+    major_collections : int;
+    heap_words : int;
+    heap_chunks : int;
+    live_words : int;
+    live_blocks : int;
+    free_words : int;
+    free_blocks : int;
+    largest_free : int;
+    fragments : int;
+    compactions : int;
+    top_heap_words : int;
+    stack_size : int
   } with bin_io, sexp
   type binable = t
   type sexpable = t
@@ -87,58 +121,33 @@ module Control = struct
   type sexpable = t
 end
 
+let tune__field logger ?(fmt = ("%d" : (_, _, _) format)) name arg current =
+  match arg with
+  | None -> current
+  | Some v ->
+      Option.iter logger
+        ~f:(fun f -> Printf.ksprintf f "Gc.Control.%s: %(%d%) -> %(%d%)"
+              name fmt current fmt v);
+      v
+;;
 
+
+(*
+  *\(.*\) -> \1 = f "\1" \1 c.\1;
+*)
 let tune ?logger ?minor_heap_size ?major_heap_increment ?space_overhead
     ?verbose ?max_overhead ?stack_limit ?allocation_policy () =
   let c = get () in
+  let f = tune__field logger in
   set {
-    minor_heap_size = (match minor_heap_size with
-    | None -> c.minor_heap_size
-    | Some n ->
-        Option.iter logger ~f:(fun f -> f
-          (Printf.sprintf "Gc.Control.minor_heap_size: %d -> %d"
-              c.minor_heap_size n));
-        n);
-    major_heap_increment = (match major_heap_increment with
-    | None -> c.major_heap_increment
-    | Some n ->
-        Option.iter logger ~f:(fun f -> f
-          (Printf.sprintf "Gc.Control.major_heap_increment: %d -> %d"
-              c.major_heap_increment n));
-        n);
-    space_overhead = (match space_overhead with
-    | None -> c.space_overhead
-    | Some n ->
-        Option.iter logger ~f:(fun f -> f
-          (Printf.sprintf "Gc.Control.space_overhead: %d -> %d"
-              c.space_overhead n));
-        n);
-    verbose = (match verbose with
-    | None -> c.verbose
-    | Some n ->
-        Option.iter logger ~f:(fun f -> f
-          (Printf.sprintf "Gc.Control.verbose: 0x%x -> 0x%x"
-              c.verbose n));
-        n);
-    max_overhead = (match max_overhead with
-    | None -> c.max_overhead
-    | Some n ->
-        Option.iter logger ~f:(fun f -> f
-          (Printf.sprintf "Gc.Control.max_overhead: %d -> %d"
-              c.max_overhead n));
-        n);
-    stack_limit = (match stack_limit with
-    | None -> c.stack_limit
-    | Some n ->
-        Option.iter logger ~f:(fun f -> f
-          (Printf.sprintf "Gc.Control.stack_limit: %d -> %d"
-              c.stack_limit n));
-        n);
-    allocation_policy = (match allocation_policy with
-    | None -> c.allocation_policy
-    | Some n ->
-        Option.iter logger ~f:(fun f -> f
-          (Printf.sprintf "Gc.Control.allocation_policy: %d -> %d"
-              c.allocation_policy n));
-        n);
+    minor_heap_size = f "minor_heap_size" minor_heap_size c.minor_heap_size;
+    major_heap_increment = f "major_heap_increment" major_heap_increment
+      c.major_heap_increment;
+    space_overhead = f "space_overhead" space_overhead c.space_overhead;
+    verbose = f "verbose" ~fmt:"0x%x" verbose c.verbose;
+    max_overhead = f "max_overhead" max_overhead c.max_overhead;
+    stack_limit = f "stack_limit" stack_limit c.stack_limit;
+    allocation_policy = f "allocation_policy" allocation_policy
+      c.allocation_policy
   }
+;;

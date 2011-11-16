@@ -1,17 +1,46 @@
-(*pp $(pwd)/pp.sh *)
-(*
-#include <unistd.h>
-#include <netinet/in.h>
-#undef SEEK_SET
-end-pp-include*)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
+INCLUDE "config.mlh"
 open Printf
 open Unix
 open Bigarray
 open Common
+open Sexplib.Std
 
-type t = (char, int8_unsigned_elt, c_layout) Array1.t
+module Z : sig
+  type t = (char, int8_unsigned_elt, c_layout) Array1.t
+  include Binable.S with type binable = t
+end = struct
+  type bigstring = (char, int8_unsigned_elt, c_layout) Array1.t
+  include Bin_prot.Std
+  type t = bigstring with bin_io
+  type binable = t
+end
+include Z
 
-exception IOError of int * exn
+exception IOError of int * exn with sexp
 
 external init : unit -> unit = "bigstring_init_stub"
 
@@ -84,11 +113,14 @@ let blit ~src ~src_pos ~dst ~dst_pos ~len =
     ~blit:unsafe_blit
     ~src ~src_pos ~dst ~dst_pos ~len
 
-let sub_copy ?(pos = 0) ?len bstr =
+let sub ?(pos = 0) ?len bstr =
   let len = get_opt_len bstr ~pos len in
   let dst = create len in
-  blit ~src:bstr ~src_pos:0 ~dst ~dst_pos:0 ~len;
+  blit ~src:bstr ~src_pos:pos ~dst ~dst_pos:0 ~len;
   dst
+
+
+let get bstr pos = Array1.get bstr pos
 
 external unsafe_blit_string_bigstring :
   src : string -> src_pos : int -> dst : t -> dst_pos : int -> len : int -> unit
@@ -156,6 +188,15 @@ let really_recv sock ?(pos = 0) ?len bstr =
   check_args ~loc:"really_recv" ~pos ~len bstr;
   unsafe_really_recv sock ~pos ~len bstr
 
+external unsafe_recvfrom_assume_fd_is_nonblocking :
+  file_descr -> pos : int -> len : int -> t -> int * sockaddr
+  = "bigstring_recvfrom_assume_fd_is_nonblocking_stub"
+
+let recvfrom_assume_fd_is_nonblocking sock ?(pos = 0) ?len bstr =
+  let len = get_opt_len bstr ~pos len in
+  check_args ~loc:"recvfrom_assume_fd_is_nonblocking" ~pos ~len bstr;
+  unsafe_recvfrom_assume_fd_is_nonblocking sock ~pos ~len bstr
+
 external unsafe_read_assume_fd_is_nonblocking :
   file_descr -> pos : int -> len : int -> t -> int
   = "bigstring_read_assume_fd_is_nonblocking_stub"
@@ -209,7 +250,7 @@ let really_write fd ?(pos = 0) ?len bstr =
   check_args ~loc:"really_write" ~pos ~len bstr;
   unsafe_really_write fd ~pos ~len bstr
 
-#if defined(MSG_NOSIGNAL)
+IFDEF MSG_NOSIGNAL THEN
 external unsafe_really_send_no_sigpipe :
   file_descr -> pos : int -> len : int -> t -> unit
   = "bigstring_really_send_no_sigpipe_stub"
@@ -233,11 +274,21 @@ let send_nonblocking_no_sigpipe fd ?(pos = 0) ?len bstr =
   check_args ~loc:"send_nonblocking_no_sigpipe" ~pos ~len bstr;
   unsafe_send_nonblocking_no_sigpipe fd ~pos ~len bstr
 
-  #else
-#warning "MSG_NOSIGNAL not defined; really_send_no_sigpipe and friends"
-#warning "not implemented."
-#warning "Try compiling on Linux?"
-#endif
+external unsafe_sendto_nonblocking_no_sigpipe :
+  file_descr -> pos : int -> len : int -> t -> sockaddr -> int
+  = "bigstring_sendto_nonblocking_no_sigpipe_stub"
+
+let unsafe_sendto_nonblocking_no_sigpipe fd ~pos ~len buf sockaddr =
+  let res = unsafe_sendto_nonblocking_no_sigpipe fd ~pos ~len buf sockaddr in
+  if res = -1 then None
+  else Some res
+
+let sendto_nonblocking_no_sigpipe fd ?(pos = 0) ?len bstr sockaddr =
+  let len = get_opt_len bstr ~pos len in
+  check_args ~loc:"sendto_nonblocking_no_sigpipe" ~pos ~len bstr;
+  unsafe_sendto_nonblocking_no_sigpipe fd ~pos ~len bstr sockaddr
+ENDIF
+
 
 external unsafe_write :
   file_descr -> pos : int -> len : int -> t -> int = "bigstring_write_stub"
@@ -257,7 +308,7 @@ let write_assume_fd_is_nonblocking fd ?(pos = 0) ?len bstr =
   unsafe_write_assume_fd_is_nonblocking fd ~pos ~len bstr
 
 external unsafe_writev :
-  file_descr -> t Unix_ext.IOVec.t array -> int -> int
+  file_descr -> t Core_unix.IOVec.t array -> int -> int
   = "bigstring_writev_stub"
 
 let get_iovec_count loc iovecs = function
@@ -273,7 +324,7 @@ let writev fd ?count iovecs =
   unsafe_writev fd iovecs count
 
 external unsafe_writev_assume_fd_is_nonblocking :
-  file_descr -> t Unix_ext.IOVec.t array -> int -> int
+  file_descr -> t Core_unix.IOVec.t array -> int -> int
   = "bigstring_writev_assume_fd_is_nonblocking_stub"
 
 let writev_assume_fd_is_nonblocking fd ?count iovecs =
@@ -286,11 +337,11 @@ let writev_assume_fd_is_nonblocking fd ?count iovecs =
 let map_file ~shared fd n = Array1.map_file fd Bigarray.char c_layout shared n
 
 
-#if defined(MSG_NOSIGNAL)
+IFDEF MSG_NOSIGNAL THEN
 (* Input and output, linux only *)
 
 external unsafe_sendmsg_nonblocking_no_sigpipe :
-  file_descr -> t Unix_ext.IOVec.t array -> int -> int
+  file_descr -> t Core_unix.IOVec.t array -> int -> int
   = "bigstring_sendmsg_nonblocking_no_sigpipe_stub"
 
 let unsafe_sendmsg_nonblocking_no_sigpipe fd iovecs count =
@@ -301,13 +352,18 @@ let unsafe_sendmsg_nonblocking_no_sigpipe fd iovecs count =
 let sendmsg_nonblocking_no_sigpipe fd ?count iovecs =
   let count = get_iovec_count "sendmsg_nonblocking_no_sigpipe" iovecs count in
   unsafe_sendmsg_nonblocking_no_sigpipe fd iovecs count
-#else
-#warning "MSG_NOSIGNAL not defined; bigstring_send{,msg}_noblocking_no_sigpipe"
-#warning "not implemented."
-#warning "Try compiling on Linux?"
-#endif
+ENDIF
+(* Search *)
 
+external unsafe_find : t -> char -> pos:int -> len:int -> int = "bigstring_find"
+let find ?(pos = 0) ?len chr bstr =
+  let len = get_opt_len bstr ~pos len in
+  check_args ~loc:"find" ~pos ~len bstr;
+  let res = unsafe_find bstr chr ~pos ~len in
+  if res < 0 then None else Some res
 
 (* Destruction *)
 
 external unsafe_destroy : t -> unit = "bigstring_destroy_stub"
+
+(* vim: set filetype=ocaml : *)

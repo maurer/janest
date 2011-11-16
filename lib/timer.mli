@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 (** Timed events
 
     This implementation uses a priority queue (heap) for efficient
@@ -5,6 +29,8 @@
     is supposed to be run or when the set of watched events changes.
     The timer can handle more than a million scheduled events.
     Timed events can also be efficiently removed (in O(log(n))).
+
+    This interface is thread-safe.
 *)
 
 
@@ -17,7 +43,7 @@ type t
 type event
 
 (** Type of intervals for repeated events *)
-type interval =
+type interval = private
   (** No repetition of events *)
   | INone
   (** Regular repetition of events.  [span] is greater than zero.
@@ -25,11 +51,11 @@ type interval =
       the timer and hence not correspond to exact periods of time.
       This means that e.g. if the process is put to sleep, it will not
       experience repetitive calls for intermediate events. *)
-  | INormal of Time.Span.t
+  | INormal of Span.t
   (** Randomized repetition of events.  [span] is greater than zero.
       The float specifies the maximum ratio with which [span] will be
       multiplied and added to itself, and is in the range \[0.0, 1.0\]. *)
-  | IRandom of Time.Span.t * float
+  | IRandom of Span.t * float
 
 (** [create ?min_size ()] creates a new timer.  The minimum size of the
     heap used by the timer is [min_size].
@@ -39,6 +65,10 @@ type interval =
     @param min_size default = 1000
 *)
 val create : ?min_size : int -> unit -> t
+
+(** [size timer] returns the number of events in a timer's heap. Repeating events only
+    count once. *)
+val size : t -> int
 
 (** [deactivate timer] deactives a timer.  No scheduled event
     will get executed after this function returns. *)
@@ -73,8 +103,8 @@ val add :
   t ->
   (event -> Time.t -> unit) ->
   ?randomize : float ->
-  ?interval : Time.Span.t ->
-  Time.Span.t -> event
+  ?interval : Span.t ->
+  Span.t -> event
 
 (** [add_abs timer handler ?randomize ?interval time] same as {!add}, but
     takes an absolute time [time] for scheduling the event rather than
@@ -86,7 +116,7 @@ val add_abs :
   t ->
   (event -> Time.t -> unit) ->
   ?randomize : float ->
-  ?interval : Time.Span.t ->
+  ?interval : Span.t ->
   Time.t -> event
 
 (** [remove event] removes [event] from its associated timer.
@@ -113,8 +143,8 @@ val remove : event -> unit
 val reschedule :
   event ->
   ?randomize : float ->
-  ?interval : Time.Span.t ->
-  Time.Span.t -> unit
+  ?interval : Span.t ->
+  Span.t -> unit
 
 (** [get_timer event] @return timer associated with [event]. *)
 val get_timer : event -> t

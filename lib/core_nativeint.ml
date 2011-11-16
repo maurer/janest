@@ -1,5 +1,29 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-TYPE_CONV_PATH "Core_nativeint"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
+open Sexplib.Std
+open Bin_prot.Std
 
 open Nativeint
 
@@ -8,12 +32,16 @@ module T = struct
 
   type binable = t
   type floatable = t
+  type intable = t
   type sexpable = t
   type stringable = t
 
   let compare (x : t) y = compare x y
   let equal (x : t) y = x = y
   let hash (x : t) = Hashtbl.hash x
+
+  let to_string = to_string
+  let of_string = of_string
 end
 
 include T
@@ -27,8 +55,8 @@ let bit_not = lognot
 let bit_xor = logxor
 let bit_or = logor
 let bit_and = logand
-let min_int = min_int
-let max_int = max_int
+let min_value = min_int
+let max_value = max_int
 let abs = abs
 let pred = pred
 let succ = succ
@@ -39,8 +67,6 @@ let one = one
 let zero = zero
 let to_float = to_float
 let of_float = of_float
-let to_string = to_string
-let of_string = of_string
 
 type comparable = t
 let ascending = compare
@@ -84,3 +110,4 @@ let of_int64 = Conv.int64_to_nativeint
 let of_int64_exn = Conv.int64_to_nativeint_exn
 let to_int64 = Conv.nativeint_to_int64
 
+include Conv.Make (T)

@@ -1,15 +1,36 @@
-(***********************************************************************)
-(*                                                                     *)
-(*                           Objective Caml                            *)
-(*                                                                     *)
-(*            Xavier Leroy, projet Cristal, INRIA Rocquencourt         *)
-(*                                                                     *)
-(*  Copyright 1996 Institut National de Recherche en Informatique et   *)
-(*  en Automatique.  All rights reserved.  This file is distributed    *)
-(*  under the terms of the GNU Library General Public License, with    *)
-(*  the special exception on linking described in file ../LICENSE.     *)
-(*                                                                     *)
-(***********************************************************************)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This file is derived from source code of the Ocaml compiler.               *
+ * which has additional copyrights:                                           *
+ *                                                                            *
+ *    Xavier Leroy, projet Cristal, INRIA Rocquencourt                        *
+ *                                                                            *
+ *    Copyright 1999 Institut National de Recherche en Informatique et        *
+ *    en Automatique.                                                         *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
+
 
 open Sexplib
 
@@ -37,18 +58,34 @@ module Gen (T : Types) = struct
     val empty: ('k, 'v) t
 
     (** map with one key, data pair *)
+    
     val singleton: 'k key -> 'v -> ('k, 'v) t
 
-    val is_empty: ('k, 'v) t -> bool
     (** Test whether a map is empty or not. *)
+    val is_empty: ('k, 'v) t -> bool
 
     
-    val cardinal : ('k, 'v) t -> int
     (** [cardinal map] @return number of elements in [map]. *)
+    val cardinal : ('k, 'v) t -> int
 
     (** returns a new map with the specified new binding;
         if the key was already bound, its previous binding disappears. *)
+    
     val add: key:'k key -> data:'v -> ('k, 'v) t -> ('k, 'v) t
+
+    (** if key is not present then add a singleton list, otherwise, cons data
+        on the head of the existing list. *)
+    val add_multi: key:'k key -> data:'v -> ('k, 'v list) t -> ('k, 'v list) t
+
+    (** [change map key f] updates the given map by changing the value stored
+        under [key] according to [f].  Thus, for example, one might write:
+
+        {[change m k (function None -> Some 0 | Some x -> Some (x + 1))]}
+
+        to produce a new map where the integer stored under key [k] is
+        incremented by one (treating an unknown key as zero) *)
+    
+    val change : ('k, 'v) t -> 'k key -> ('v option -> 'v option) -> ('k,'v) t
 
     
 
@@ -58,14 +95,13 @@ module Gen (T : Types) = struct
 
     val find: ('k, 'v) t -> 'k key -> 'v option
 
-    
-
     (** returns a new map with any binding for the key in question removed *)
     val remove: ('k, 'v) t -> 'k key -> ('k, 'v) t
 
     (** [mem key map] tests whether [map] contains a binding for [key] *)
     val mem: ('k, 'v) t -> 'k key -> bool
 
+    
     (** iterator for map *)
     val iter: f:(key:'k key -> data:'v -> unit) -> ('k, 'v) t -> unit
 
@@ -79,6 +115,10 @@ module Gen (T : Types) = struct
     val fold:
       f:(key:'k key -> data:'v -> 'a -> 'a) -> ('k, 'v) t -> init:'a -> 'a
 
+    (** folds over keys and data in map in reverse order *)
+    val fold_right:
+      f:(key:'k key -> data:'v -> 'a -> 'a) -> ('k, 'v) t -> init:'a -> 'a
+
     (** filter for map *)
     val filter: f:(key:'k key -> data:'v -> bool) -> ('k, 'v) t -> ('k, 'v) t
 
@@ -90,15 +130,15 @@ module Gen (T : Types) = struct
     val filter_mapi:
       f:(key:'k key -> data:'v1 -> 'v2 option) -> ('k, 'v1) t -> ('k, 'v2) t
 
-    val compare: ('v -> 'v -> int) -> ('k, 'v) t -> ('k, 'v) t -> int
     (** Total ordering between maps.  The first argument is a total ordering
         used to compare data associated with equal keys in the two maps. *)
+    val compare: ('v -> 'v -> int) -> ('k, 'v) t -> ('k, 'v) t -> int
 
-    val equal: ('v -> 'v -> bool) -> ('k, 'v) t -> ('k, 'v) t -> bool
     (** [equal cmp m1 m2] tests whether the maps [m1] and [m2] are
         equal, that is, contain equal keys and associate them with
         equal data.  [cmp] is the equality predicate used to compare
         the data associated with the keys. *)
+    val equal: ('v -> 'v -> bool) -> ('k, 'v) t -> ('k, 'v) t -> bool
 
     (** returns list of keys in map *)
     val keys: ('k, 'v) t -> 'k key list
@@ -137,25 +177,49 @@ module Gen (T : Types) = struct
       f:(key:'k key -> 'v1 option -> 'v2 option -> 'v3 option)
       -> ('k, 'v1) t -> ('k, 'v2) t -> ('k, 'v3) t
 
-    val min_elt : ('k, 'v) t -> ('k key * 'v) option
     (** [min_elt map] @return Some [(key, data)] pair corresponding to the
         minimum key in [map], None if empty. *)
+    val min_elt : ('k, 'v) t -> ('k key * 'v) option
 
-    val min_elt_exn : ('k, 'v) t -> 'k key * 'v
     (** [min_elt_exn map] @return the [(key, data)] pair corresponding to the
         minimum key in [map], raises [Not_found] if [map] is empty. *)
+    val min_elt_exn : ('k, 'v) t -> 'k key * 'v
 
-    val max_elt : ('k, 'v) t -> ('k key * 'v) option
     (** [max_elt map] @return Some [(key, data)] pair corresponding to the
         maximum key in [map], and None if [map] is empty. *)
+    val max_elt : ('k, 'v) t -> ('k key * 'v) option
 
-    val max_elt_exn : ('k, 'v) t -> 'k key * 'v
     (** [max_elt_exn map] @return the [(key, data)] pair corresponding to the
         maximum key in [map], raises an exception if [map] is empty. *)
+    val max_elt_exn : ('k, 'v) t -> 'k key * 'v
 
     (** same semantics as similar functions in List *)
+    
     val for_all : f:('v -> bool) -> ('k, 'v) t -> bool
-    val exists : f:('v -> bool) -> ('k, 'v) t -> bool
+    val exists  : f:('v -> bool) -> ('k, 'v) t -> bool
+
+    (** [fold_range_inclusive t ~min ~max ~init ~f]
+        folds f (with initial value ~init) over all keys (and their associated values)
+        that are in the range [min, max] (inclusive)
+    *)
+    val fold_range_inclusive :
+      ('k, 'v) t -> min:'k key -> max:'k key -> init:'a
+      -> f:(key:'k key -> data:'v -> 'a -> 'a) -> 'a
+
+    (** [range_to_alist t ~min ~max] returns an associative list of the elements whose
+        keys lie in [min, max] (inclusive), with the smallest key being at the head of the
+        list
+    *)
+    val range_to_alist : ('k, 'v) t -> min:'k key -> max:'k key -> ('k key * 'v) list
+
+    
+    (** [prev_key t k] returns the largest key in t less than k *)
+    val prev_key : ('k, 'v) t -> 'k key -> 'k key option
+    (** [next_key t k] returns the smallest key in t greater than k *)
+    val next_key : ('k, 'v) t -> 'k key -> 'k key option
+    (** [rank t k] if k is in t, returns the number of keys strictly less than k in t,
+        otherwise None *)
+    val rank : ('k, 'v) t -> 'k key -> int option
   end
 end
 
@@ -171,6 +235,8 @@ module type S = sig
   val is_empty: 'a t -> bool
   val cardinal : 'a t -> int
   val add: key:key -> data:'a -> 'a t -> 'a t
+  val add_multi: key:key -> data:'a -> 'a list t -> 'a list t
+  val change : 'a t -> key -> ('a option -> 'a option) -> 'a t
   val find_exn: 'a t -> key -> 'a
   val find: 'a t -> key -> 'a option
   val remove: 'a t -> key -> 'a t
@@ -179,6 +245,8 @@ module type S = sig
   val map: f:('a -> 'b) -> 'a t -> 'b t
   val mapi: f:(key:key -> data:'a -> 'b) -> 'a t -> 'b t
   val fold: f:(key:key -> data:'a -> 'b -> 'b) -> 'a t -> init:'b -> 'b
+  val fold_right: f:(key:key -> data:'a -> 'b -> 'b) -> 'a t -> init:'b -> 'b
+
   val filter: f:(key:key -> data:'a -> bool) -> 'a t -> 'a t
   val filter_map: f:('a -> 'b option) -> 'a t -> 'b t
   val filter_mapi: f:(key:key -> data:'a -> 'b option) -> 'a t -> 'b t
@@ -201,6 +269,13 @@ module type S = sig
   val max_elt_exn : 'data t -> key * 'data
   val for_all : f:('data -> bool) -> 'data t -> bool
   val exists : f:('data -> bool) -> 'data t -> bool
+  val fold_range_inclusive :
+    'data t -> min:key -> max:key -> init:'a
+    -> f:(key:key -> data:'data -> 'a -> 'a) -> 'a
+  val range_to_alist : 'data t -> min:key -> max:key -> (key * 'data) list
+  val prev_key : 'data t -> key -> key option
+  val next_key : 'data t -> key -> key option
+  val rank : 'a t -> key -> int option
 end
 
 module type S2 = sig
@@ -215,6 +290,8 @@ module type S2 = sig
   val is_empty: ('k, 'v) t -> bool
   val cardinal : ('k, 'v) t -> int
   val add: key:'k -> data:'v -> ('k, 'v) t -> ('k, 'v) t
+  val add_multi: key:'k -> data:'v -> ('k, 'v list) t -> ('k, 'v list) t
+  val change : ('k, 'v) t -> 'k -> ('v option -> 'v option) -> ('k,'v) t
   val find_exn: ('k, 'v) t -> 'k -> 'v
   val find: ('k, 'v) t -> 'k -> 'v option
   val remove: ('k, 'v) t -> 'k -> ('k, 'v) t
@@ -223,6 +300,7 @@ module type S2 = sig
   val map: f:('v -> 'b) -> ('k, 'v) t -> ('k, 'b) t
   val mapi: f:(key:'k -> data:'v -> 'b) -> ('k, 'v) t -> ('k, 'b) t
   val fold: f:(key:'k -> data:'v -> 'b -> 'b) -> ('k, 'v) t -> init:'b -> 'b
+  val fold_right: f:(key:'k -> data:'v -> 'b -> 'b) -> ('k, 'v) t -> init:'b -> 'b
   val filter: f:(key:'k -> data:'v -> bool) -> ('k, 'v) t -> ('k, 'v) t
   val filter_map: f:('v -> 'b option) -> ('k, 'v) t -> ('k, 'b) t
   val filter_mapi: f:(key:'k -> data:'v -> 'b option) -> ('k, 'v) t -> ('k, 'b) t
@@ -245,6 +323,14 @@ module type S2 = sig
   val max_elt_exn : ('k, 'data) t -> 'k * 'data
   val for_all : f:('data -> bool) -> ('k, 'data) t -> bool
   val exists : f:('data -> bool) -> ('k, 'data) t -> bool
+  val fold_range_inclusive :
+    ('k, 'data) t -> min:'k -> max:'k -> init:'a
+    -> f:(key:'k -> data:'data -> 'a -> 'a) -> 'a
+  val range_to_alist : ('k, 'data) t -> min:'k -> max:'k -> ('k * 'data) list
+
+  val next_key : ('k, 'data) t -> 'k -> 'k option
+  val prev_key : ('k, 'data) t -> 'k -> 'k option
+  val rank : ('k, 'data) t -> 'k -> int option
 end
 
 module type Gen = sig
@@ -253,6 +339,5 @@ module type Gen = sig
 end
 
 (* Check that S and S2 are instances of Gen *)
-
 module Check_S (M : S) = (M : Gen(M.T).S)
 module Check_S2 (M : S2) = (M : Gen(M.T).S)

@@ -1,118 +1,115 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-(** Basic types and definitions required throughout the system. *)
-
-TYPE_CONV_PATH "Core.Common"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 open StdLabels
 open MoreLabels
-open Printf
 open Sexplib.Conv
-open Bin_prot
 
-(* we want 64bit file operations as the default *)
-include Pervasives.LargeFile
+open Bin_prot
+open Bin_prot.Std
+
+let seek_out = `Deprecated_use_out_channel
+let pos_out = `Deprecated_use_out_channel
+let out_channel_length = `Deprecated_use_out_channel
+let seek_in = `Deprecated_use_in_channel
+let pos_in = `Deprecated_use_in_channel
+let in_channel_length = `Deprecated_use_in_channel
+let modf = `Deprecated_use_float_modf
+let truncate = `Deprecated_use_float_round_towards_zero
+
+include struct
+  open In_channel
+  let close_in = close
+  let read_lines = read_lines
+  let input_lines = input_lines
+end
+
+include struct
+  open Out_channel
+  let close_out = close
+  let write_lines = write_lines
+end
+
+let read_wrap ?binary ~f _ =
+  ignore binary;
+  ignore f;
+ `Deprecated_use_In_channel_with_file
+let write_wrap ?binary ~f _ =
+  ignore binary;
+  ignore f;
+ `Deprecated_use_Out_channel_with_file
 
 (** handy types for marking things read-only and read-write *)
-type immutable with bin_io, sexp
 type read_only with bin_io, sexp
-type read_write with bin_io, sexp
+type immutable  = private read_only with bin_io, sexp
+type read_write = private read_only with bin_io, sexp
 type write_only with bin_io, sexp
 
 let sexp_of_immutable _ = failwith "attempt to convert abstract type immutable"
-let immutable_of_sexp _ = failwith "attempt to convert abstract type immutable"
+let immutable_of_sexp = sexp_of_immutable
 let sexp_of_read_only _ = failwith "attempt to convert abstract type read_only"
-let read_only_of_sexp _ = failwith "attempt to convert abstract type read_only"
+let read_only_of_sexp = sexp_of_read_only
 let sexp_of_read_write _ = failwith "attempt to convert abstract type read_write"
-let read_write_of_sexp _ = failwith "attempt to convert abstract type read_write"
+let read_write_of_sexp = sexp_of_read_write
 let sexp_of_write_only _ = failwith "attempt to convert abstract type write_only"
-let write_only_of_sexp _ = failwith "attempt to convert abstract type write_only"
+let write_only_of_sexp = sexp_of_write_only
 
 type never_returns
 let never_returns (_ : never_returns) = assert false
 
-include (Exn : sig
-  exception Finally of exn * exn
-end)
+exception Finally = Exn.Finally
 
 let protectx = Exn.protectx
 let protect = Exn.protect
 
 let critical_section = Mutex0.critical_section
 
-let (|!) = Function.(|!)
+let (|!) = Fn.(|!)
+let ident = Fn.id
+let const = Fn.const
+let (==>) a b = (not a) || b
 
-let ident = Function.ident
-let const = Function.const
-
-
-(** [may f (Some x)] applies function [f] to [x]. [may f None] does nothing. *)
-let may f o = Option.iter ~f o
-
-(** [read_wrap ~f fname] executes [~f] on the open input channel from
-    [fname], and closes it afterwards.  Opens channel in binary mode iff
-    [binary] is true. *)
-let read_wrap ?(binary = false) ~f fname =
-  let ic =
-    if binary then
-      open_in_bin fname
-    else
-      open_in fname
-  in
-  protectx ic ~f ~finally:close_in
-
-(** [write_wrap ~f fname] executes [~f] on the open output channel from
-    [fname], and closes it afterwards.  Opens channel in binary mode iff
-    [binary] is true. *)
-let write_wrap ?(binary = false) ~f fname =
-  let oc =
-    if binary then
-      open_out_bin fname
-    else
-      open_out fname
-  in
-  protectx oc ~f ~finally:close_out
-
-let write_lines fname lines =
-  write_wrap fname ~f:(fun oc -> Out_channel.output_lines oc lines)
-
-let input_lines = In_channel.input_lines
-
-let read_lines fname = read_wrap fname ~f:input_lines
-
-(** unwraps an option, throwing [Not_found] if it is [None] *)
 let uw = function Some x -> x | None -> raise Not_found
 
-(** Operators for picking apart tuples *)
+let is_none = Option.is_none
+let is_some = Option.is_some
 
-let ss_fst = Space_safe_tuple.T2.get1
-let ss_snd = Space_safe_tuple.T2.get2
-
-let ss_fst3 = Space_safe_tuple.T3.get1
-let ss_snd3 = Space_safe_tuple.T3.get2
-let ss_trd3 = Space_safe_tuple.T3.get3
-
-(** Returns the first element of a triple. *)
 let fst3 (x,_,_) = x
-
-(** Returns the second element of a triple. *)
 let snd3 (_,y,_) = y
-
-(** Returns the third element of a triple. *)
 let trd3 (_,_,z) = z
 
-(** A comparator that returns results in ascending order. *)
 external ascending : 'a -> 'a -> int = "%compare"
-
-(** A comparator that returns results in descending order. *)
 let descending x y = compare y x
 
-(** Extensible exception printer *)
-
-open Sexplib.Sexp
+open Sexplib
 
 let failwithf = Core_printf.failwithf
 let invalid_argf = Core_printf.invalid_argf
 let exitf = Core_printf.exitf
+
+(* module With_return only exists to avoid circular dependencies *)
+include With_return
 
 let equal = Caml.(=)
 
@@ -120,24 +117,32 @@ let phys_equal = Caml.(==)
 let (==) _ _ = `Consider_using_phys_equal
 let (!=) _ _ = `Consider_using_phys_equal
 
-(** Equivalent to Filename.concat *)
+let force = Lazy.force
+
 let ( ^/ ) = Core_filename.concat
 
-type decimal = float with sexp, bin_io
-let sexp_of_decimal x = Sexplib.Sexp.Atom (sprintf "%.12G" x)
-let decimal_of_sexp = function
-    Sexplib.Sexp.Atom s -> float_of_string s
-  | s -> Sexplib.Conv.of_sexp_error
-      "decimal_of_sexp: Expected Atom, found List" s
 
-type ('a,'b) result = ('a,'b) Result.t = Ok of 'a | Error of 'b
+type decimal = float with bin_io
+let sexp_of_decimal x = Sexp.Atom (Core_printf.sprintf "%.12G" x)
+let decimal_of_sexp = function
+  | Sexp.Atom s ->
+    let result = Float.of_string s in
+    begin match Pervasives.classify_float result with
+    | FP_normal
+    | FP_subnormal
+    | FP_zero ->
+      result
+    | FP_infinite
+    | FP_nan ->
+      Conv.of_sexp_error "decimal_of_sexp: nan or inf" (Sexp.Atom s)
+    end
+  | s ->
+    Conv.of_sexp_error "decimal_of_sexp: Expected Atom, found List" s
 
 type 'a bound = Incl of 'a | Excl of 'a | Unbounded
+
 type passfail = Pass | Fail of string
 
 exception Validation_error of string list with sexp
 exception Unimplemented of string with sexp
 exception Bug of string with sexp
-exception Uninitialized_value of string with sexp
-
-let kprintf _ = `Please_use_ksprintf

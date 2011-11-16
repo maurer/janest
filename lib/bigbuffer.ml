@@ -1,17 +1,34 @@
-(***********************************************************************)
-(*                                                                     *)
-(*                           Objective Caml                            *)
-(*                                                                     *)
-(*  Pierre Weis and Xavier Leroy, projet Cristal, INRIA Rocquencourt   *)
-(*                                                                     *)
-(*  Copyright 1999 Institut National de Recherche en Informatique et   *)
-(*  en Automatique.  All rights reserved.  This file is distributed    *)
-(*  under the terms of the GNU Library General Public License, with    *)
-(*  the special exception on linking described in file ../LICENSE.     *)
-(*                                                                     *)
-(***********************************************************************)
-
-(* $Id: buffer.mli,v 1.21 2005/10/25 18:34:07 doligez Exp $ *)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This file is derived from source code of the Ocaml compiler.               *
+ * which has additional copyrights:                                           *
+ *                                                                            *
+ *    Pierre Weis and Xavier Leroy, projet Cristal, INRIA Rocquencourt        *
+ *                                                                            *
+ *    Copyright 1999 Institut National de Recherche en Informatique et        *
+ *    en Automatique.                                                         *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 (* Some code taken from INRIA's buffer module. *)
 
@@ -41,13 +58,22 @@ let create n =
 
 let contents buf = Bigstring.to_string buf.bstr ~len:buf.pos
 
-let big_contents buf =
-  sub_copy ~len:buf.pos buf.bstr
+let big_contents buf = sub ~len:buf.pos buf.bstr
+
+let volatile_contents buf = buf.bstr
 
 let sub buf pos len =
   if pos < 0 || len < 0 || pos > buf.pos - len
   then invalid_arg "Bigbuffer.sub"
   else Bigstring.to_string buf.bstr ~pos ~len
+
+let blit ~src ~src_pos ~dst ~dst_pos ~len =
+  if len < 0 || src_pos < 0 || src_pos > src.pos - len
+             || dst_pos < 0 || dst_pos > (String.length dst) - len
+  then invalid_arg "Bigbuffer.blit"
+  else
+    Bigstring.blit_bigstring_string ~src:src.bstr ~src_pos ~dst ~dst_pos ~len
+;;
 
 let nth buf pos =
   if pos < 0 || pos >= buf.pos then invalid_arg "Bigbuffer.nth"
@@ -100,6 +126,7 @@ let add_buffer buf_dst buf_src =
   buf_dst.pos <- new_pos
 
 let add_channel buf ic len =
+  if len < 0 then invalid_arg "Bigbuffer.add_channel";
   let pos = buf.pos in
   if pos + len > buf.len then resize buf len;
   Bigstring.really_input ic buf.bstr ~pos ~len;

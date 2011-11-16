@@ -1,32 +1,34 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
+(** [daemonize ?(close_stdio = true) ?(cd = "/") ?umask=[0] ()] makes the current
+    executing process a daemon, and dups /dev/null to stdin/stdout/stderr if
+    close_stdio=true. See Chapter 13 of Advanced Programming in the UNIX Environment
+    Second Edition by Stephens and Rago for more details.
 
-(** [daemonize ?close_stdio ?cd ?umask ()] makes the executing process a
-    daemon, i.e. maximally independent from other processes and least
-    intrusive on others.
-
-    To achieve this the following steps are taken:
-
-      1) Fork, parent exit
-      2) Become session and process group leader.
-      3) Fork again so that no terminal can ever get control over us again.
-         second parent exits.
-      4) Change current working directory to [cd] to avoid problems during
-         unmounting of network file systems.  May need to be change from default
-         if you want to leave core dumps somewhere.
-      5) Set the umask to [umask].
-      6) if [close_stdio] = [true], close stdin, stdout and stderr by opening
-         /dev/null and duplicating the descriptor.
-
-    Do not forget to set up logging to a file, with toplevel exception handling,
-    as otherwise startup failures will be lost in the ether.
-
-    @param close_stdio default = [true]
-    @param cd default = ["/"]
-    @param umask default = [0] to make all created files read- and
-                           writeable by everybody by default.
     @raise Failure if fork was unsuccessful.
 *)
-
 val daemonize :
   ?close_stdio : bool
   -> ?cd : string
@@ -34,46 +36,21 @@ val daemonize :
   -> unit
   -> unit
 
+(** [daemonize_wait ?(cd = "/") ?(umask=0) ()] makes the executing process a
+    daemon, but delays full detachment from the calling shell/process until
+    the returned "release" closure is called.
 
-  
-(** [daemonize_wait ?cd ?umask ()] makes the executing process a
-    daemon, but can report information back to the launching process via exit codes
-    and stdout/stderr for better startup/initialization error reporting.
+    Any output to stdout/stderr before the "release" closure is called will get
+    sent out normally.  After "release" is called, /dev/null gets dup'd to
+    stdin/stdout/stderr.
 
-    To achieve this the following steps are taken:
+    If the process exits before the "release" closure is called, the exit code
+    will bubble up to the calling shell/process.
 
-      1) Fork, parent waits for messages from child.
-      2) Become session and process group leader.
-      3) Fork again.
-         parent waits for child/listens on a pipe for a message saying it
-         can exit.
-      4) Change current working directory to [cd].
-      5) Set the umask to [umask].
-      6) return closure which, when called will:
-            close stdin, stdout and stderr by
-              opening /dev/null and duplicating the descriptor.
-            write to a pipe, which communicates success to parent,
-            causing it to exit with 0.  that exit code bubbles up to
-            grand-parent, which exits with 0 as well.
-
-    Note that calling the closure (returned in step 6) will adjust SIGPIPE
+    Note that calling the release closure will adjust SIGPIPE
     handling, so you should not rely on the delivery of this signal
     during this time.
 
-    Any failures or premature exits by the child before the returned
-    closure is called will cause the parent and then grandparent to exit
-    with the same exit code as the child, thus communicating the failure
-    back to the calling source.
-
-    Do not forget to set up logging to a file, e.g. using the
-    Syslog-module, for post-parental-release.  Before that you can use
-    stdout/stderr.
-
-    @param cd default = ["/"]
-    @param umask default = [0] to make all created files read- and
-                           writeable by everybody by default.
-
     @raise Failure if fork was unsuccessful.
 *)
-
 val daemonize_wait : ?cd : string -> ?umask : int -> unit -> (unit -> unit)

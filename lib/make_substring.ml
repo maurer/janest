@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 (* A substring is a contiguous sequence of characters in a string.  We use a
    functor because we want substrings of [string] and [bigstring].
 *)
@@ -7,7 +31,7 @@ type bigstring = Bigstring.t
 
 module Blit : sig
   type ('src, 'dst) t =
-  src:'src -> src_pos:int -> dst:'dst -> dst_pos:int -> len:int -> unit
+      src:'src -> src_pos:int -> dst:'dst -> dst_pos:int -> len:int -> unit
 
   val string_string : (string, string) t
   val bigstring_string : (bigstring, string) t
@@ -15,7 +39,7 @@ module Blit : sig
   val bigstring_bigstring : (bigstring, bigstring) t
 end = struct
   type ('src, 'dst) t =
-  src:'src -> src_pos:int -> dst:'dst -> dst_pos:int -> len:int -> unit
+      src:'src -> src_pos:int -> dst:'dst -> dst_pos:int -> len:int -> unit
 
   let string_string : (string, string) t = Core_string.blit
 
@@ -70,16 +94,12 @@ module F (Base : Base) : S with type base = Base.t = struct
   let pos t = t.pos
   let length t = t.len
 
-  let create base ~pos ~len =
-    if pos < 0 then
-      failwithf "Substring.create got negative pos %d" pos ()
-    else if len < 0 then
-      failwithf "Substring.create got negative len %d" len ()
-    else if pos + len > Base.length base then
-      failwithf "Substring.create went past end of buffer %d"
-        (pos + len) ()
-    else
-      { base = base; pos = pos; len = len; }
+  let create ?pos ?len base =
+    let (pos, len) =
+      Ordered_collection_common.get_pos_len_exn ?pos ?len
+        ~length:(Base.length base)
+    in
+    { base = base; pos = pos; len = len; }
   ;;
 
   let drop_prefix t n =
@@ -123,7 +143,7 @@ module F (Base : Base) : S with type base = Base.t = struct
   ;;
 
   let blit_to blit =
-    fun t ~dst ~dst_pos ->
+    (); fun t ~dst ~dst_pos ->
       blit ~src:t.base ~src_pos:t.pos ~dst ~dst_pos ~len:t.len
   ;;
   let blit_to_string = blit_to Base.blit_to_string
@@ -131,7 +151,7 @@ module F (Base : Base) : S with type base = Base.t = struct
   let blit_base = blit_to Base.blit
 
   let blit_from ~name blit =
-    fun t ~src ~src_pos ~len ->
+    (); fun t ~src ~src_pos ~len ->
       if len > t.len then
         failwithf "Substring.blit_from_%s len > substring length : %d > %d"
           name len t.len ();
@@ -155,9 +175,9 @@ module F (Base : Base) : S with type base = Base.t = struct
   let to_bigstring = make Bigstring.create Base.blit_to_bigstring
 
   let concat_gen create_dst blit_dst ts =
-    let len = List.fold_left ts ~init:0 ~f:(fun len t -> len + length t) in
+    let len = List.fold ts ~init:0 ~f:(fun len t -> len + length t) in
     let dst = create_dst len in
-    ignore (List.fold_left ts ~init:0
+    ignore (List.fold ts ~init:0
                ~f:(fun dst_pos t ->
                  blit_dst t ~dst ~dst_pos;
                  dst_pos + length t));
@@ -165,6 +185,6 @@ module F (Base : Base) : S with type base = Base.t = struct
   ;;
 
   let concat ts = of_base (concat_gen Base.create blit_base ts)
-  let concat_string = concat_gen String.create blit_to_string
-  let concat_bigstring =  concat_gen Bigstring.create blit_to_bigstring
+  let concat_string ts = concat_gen String.create blit_to_string ts
+  let concat_bigstring ts =  concat_gen Bigstring.create blit_to_bigstring ts
 end

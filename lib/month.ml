@@ -1,6 +1,28 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-TYPE_CONV_PATH "Month"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
+module Hashtbl = Core_hashtbl
 module Array = Core_array
 module Int = Core_int
 module List = Core_list
@@ -31,7 +53,7 @@ let of_int_exn i =
 
 let to_int t = t + 1
 
-let shift t i = (t + i) mod num_months
+let shift t i = Int.Infix.( % ) (t + i) num_months
 
 let jan = 0
 let feb = 1
@@ -46,7 +68,7 @@ let oct = 9
 let nov = 10
 let dec = 11
 
-let all = List.init num_months ~f:Function.ident
+let all = List.init num_months ~f:Fn.id
 
 type variant = [ `Jan | `Feb | `Mar | `Apr | `May | `Jun
                | `Jul | `Aug | `Sep | `Oct | `Nov | `Dec ]
@@ -84,12 +106,12 @@ let to_string t = all_strings.(t)
 
 let of_string =
   let module T = String.Table in
-  let table = T.create num_months in
+  let table = T.create ~size:num_months () in
   Array.iteri all_strings ~f:(fun t s ->
-    T.replace table ~key:(String.uppercase s) ~data:t);
+    Hashtbl.replace table ~key:(String.uppercase s) ~data:t);
   fun str ->
     
-    match T.find table (String.uppercase str) with
+    match Hashtbl.find table (String.uppercase str) with
     | None -> failwithf "Invalid month: %s" str ()
     | Some x -> x
 ;;

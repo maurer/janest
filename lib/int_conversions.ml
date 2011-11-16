@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 type 'a int_spec = {
   name : string;
   num_bits : int;
@@ -95,37 +119,64 @@ let (int64_to_nativeint, int64_to_nativeint_exn) =
 let nativeint_to_int64 = Int64.of_nativeint
 
 (**
-   Takes an int represented as a string ((-|+)?[0-9]+) and puts underscores
+   Takes an int represented as a string ((-|+)?[0-9]+) and puts delimiter
    every 3 digits starting from the right.
 *)
-
-let prettify_string input =
-  let chars_per_underscore = 3 in
+let insert_delimiter input ~delimiter =
+  let chars_per_delimiter = 3 in
   let input_length = String.length input in
-  if input_length <= chars_per_underscore then
+  if input_length <= chars_per_delimiter then
     input
   else begin
     let has_sign = match input.[0] with '+' | '-' -> true | _ -> false in
     let num_digits = if has_sign then input_length - 1 else input_length in
-    let num_underscores = (num_digits - 1) / chars_per_underscore in
-    let output_length = input_length + num_underscores in
+    let num_delimiters = (num_digits - 1) / chars_per_delimiter in
+    let output_length = input_length + num_delimiters in
     let output = String.create output_length in
     let input_pos = ref (input_length - 1) in
     let output_pos = ref (output_length - 1) in
-    let num_chars_until_underscore = ref chars_per_underscore in
+    let num_chars_until_delimiter = ref chars_per_delimiter in
     let first_digit_pos = if has_sign then 1 else 0 in
     while !input_pos >= first_digit_pos do
-      if !num_chars_until_underscore = 0 then begin
-        output.[!output_pos] <- '_';
+      if !num_chars_until_delimiter = 0 then begin
+        output.[!output_pos] <- delimiter;
         decr output_pos;
-        num_chars_until_underscore := chars_per_underscore;
+        num_chars_until_delimiter := chars_per_delimiter;
       end;
       output.[!output_pos] <- input.[!input_pos];
       decr input_pos;
       decr output_pos;
-      decr num_chars_until_underscore;
+      decr num_chars_until_delimiter;
     done;
     if has_sign then output.[0] <- input.[0];
     output;
   end
 ;;
+
+(**
+   Takes an int represented as a string ((-|+)?[0-9]+) and puts underscores
+   every 3 digits starting from the right.
+*)
+let insert_underscores input =
+  insert_delimiter input ~delimiter:'_'
+;;
+
+let sexp_of_int_style : [ `Underscores | `No_underscores ] ref =
+  ref `No_underscores
+;;
+
+module Make (I : sig
+  type t
+  val to_string : t -> string
+end) = struct
+
+  let to_string_hum t = insert_underscores (I.to_string t)
+
+  let sexp_of_t t =
+    let s = I.to_string t in
+    Sexplib.Sexp.Atom
+      (match !sexp_of_int_style with
+      | `Underscores -> insert_underscores s
+      | `No_underscores -> s)
+  ;;
+end

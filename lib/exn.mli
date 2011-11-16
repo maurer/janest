@@ -1,4 +1,27 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 type t = exn with sexp_of
 
 (** Raised when finalization after an exception failed, too.
@@ -36,12 +59,21 @@ val protect : f:(unit -> 'a) -> finally:(unit -> unit) -> 'a
 
 val pp : Format.formatter -> t -> unit
 
+(*
+ * CRv201108 dpowers: Would it be better to take (unit -> never_returns) and return Exn.t 
+ * to force the writer to make a choice about what happens when this bombs and exit is not
+ * true?
+ *)
+
+
 (** [handle_uncaught ~exit f] catches an exception escaping [f] and
     prints an error message to stderr.  Exits with return code 1 if
     [exit] is [true].  Otherwise returns unit.
 *)
-
 val handle_uncaught : exit : bool -> (unit -> unit) -> unit
+
+(* The same as [handle_uncaught], but an exit function is specified.  *)
+val catch_and_print_backtrace : exit:(int -> unit) -> (unit -> unit) -> unit
 
 (* Traces exceptions passing through.  Useful because in practice backtraces still don't
    seem to work.
@@ -54,3 +86,6 @@ val handle_uncaught : exit : bool -> (unit -> unit) -> unit
    : Program died with Reraised("rogue_function", Failure "foo")
 *)
 val reraise_uncaught : string -> (unit -> 'a) -> 'a
+
+(** [Printexc.get_backtrace] *)
+val backtrace : unit -> string

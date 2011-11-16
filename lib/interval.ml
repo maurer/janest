@@ -1,23 +1,59 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-TYPE_CONV_PATH "Core.Interval"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 
 
-module List = Core_list
+open Std_internal
 
-type 'a interval = Interval of 'a * 'a | Empty with bin_io, sexp
+type 'a interval = Interval of 'a * 'a | Empty with bin_io, of_sexp
+
+let interval_of_sexp a_of_sexp sexp =
+  try interval_of_sexp a_of_sexp sexp   (* for backwards compatibility *)
+  with _exn ->
+    match sexp with
+    | Sexp.List [] -> Empty
+    | Sexp.List [ lb; ub ] ->
+        Interval (a_of_sexp lb, a_of_sexp ub)
+    | Sexp.Atom _ | Sexp.List _ ->
+        of_sexp_error "Interval.t_of_sexp: expected pair or empty list" sexp
+
+let sexp_of_interval sexp_of_a t =
+  match t with
+  | Empty -> Sexp.List []
+  | Interval (lb, ub) ->
+      Sexp.List [ sexp_of_a lb; sexp_of_a ub ]
 
 module type Bound = sig
   type 'a bound
   val compare : 'a bound -> 'a bound -> int
   val ( >= ) : 'a bound -> 'a bound -> bool
   val ( <= ) : 'a bound -> 'a bound -> bool
-  val ( = ) : 'a bound -> 'a bound -> bool
-  val ( > ) : 'a bound -> 'a bound -> bool
-  val ( < ) : 'a bound -> 'a bound -> bool
+  val ( =  ) : 'a bound -> 'a bound -> bool
+  val ( >  ) : 'a bound -> 'a bound -> bool
+  val ( <  ) : 'a bound -> 'a bound -> bool
   val ( <> ) : 'a bound -> 'a bound -> bool
 end
-
 
 module Raw_make (T : Bound) = struct
 
@@ -38,6 +74,7 @@ module Raw_make (T : Bound) = struct
       | Empty -> Empty
       | Interval (x,y) as i -> if T.(>) x y then Empty else i
 
+    
     let create x y =
       (* if x >= y, then this is just the Empty interval. *)
       empty_cvt (Interval (x,y))
@@ -88,11 +125,14 @@ module Raw_make (T : Bound) = struct
             else x in
           Some bounded_value
 
-    let contains_interval i1 i2 = match i1,i2 with
+    let is_superset i1 ~of_:i2 = match i1,i2 with
       | Interval (l1,u1), Interval (l2,u2) ->
           T.(<=) l1 l2 && T.(>=) u1 u2
       | _, Empty -> true
-      | _ -> false
+      | Empty, Interval (_, _) -> false
+
+    let is_subset i1 ~of_:i2 =
+      is_superset i2 ~of_:i1
 
     let map ~f = function
       | Empty -> Empty
@@ -136,12 +176,10 @@ module Raw_make (T : Bound) = struct
         let i = intersect i1 i2 in
         if is_empty i then None else Some i)
 
-    
-    let intervals_are_a_partition intervals =
+    let half_open_intervals_are_a_partition intervals =
       let intervals = List.filter ~f:(fun x -> not (is_empty x)) intervals in
       let intervals = List.sort ~cmp:interval_compare intervals in
-
-    (* requires sorted list of intervals *)
+      (* requires sorted list of intervals *)
       let rec is_partition a = function
         | [] -> true
         | b :: tl ->
@@ -163,22 +201,25 @@ module Raw_make (T : Bound) = struct
         let lb i = Interval.lbound_exn i in
         List.sort intervals ~cmp:(fun i i' -> T.compare (lb i) (lb i'))
       in
+      
       if not (Interval.are_disjoint intervals)
       then failwith "Interval_set.create: intervals were not disjoint"
       else intervals
+    ;;
 
     let create pair_list =
       let intervals = List.map pair_list
         ~f:(fun (lbound, ubound) -> Interval.create lbound ubound)
       in
       create_from_intervals intervals
+    ;;
 
     let contains_set ~container ~contained =
       List.for_all contained
         ~f:(fun contained_interval ->
           List.exists container
             ~f:(fun container_interval ->
-              Interval.contains_interval container_interval contained_interval
+              Interval.is_superset container_interval ~of_:contained_interval
             )
         )
 
@@ -190,7 +231,6 @@ module Raw_make (T : Bound) = struct
       | [] -> invalid_arg "Interval_set.ubound called on empty set"
       | _ -> Interval.ubound_exn (List.last_exn t)
 
-
     let lbound_exn t =
       match t with
       | [] -> invalid_arg "Interval_set.lbound called on empty set"
@@ -200,17 +240,17 @@ module Raw_make (T : Bound) = struct
       match List.last t with
       | None -> None
       | Some i ->
-          match Interval.ubound i with
-          | None -> assert false
-          | Some x -> Some x
+        match Interval.ubound i with
+        | None -> assert false
+        | Some x -> Some x
 
     let lbound t =
       match List.hd t with
       | None -> None
       | Some i ->
-          match Interval.lbound i with
-          | None -> assert false
-          | Some x -> Some x
+        match Interval.lbound i with
+        | None -> assert false
+        | Some x -> Some x
   end
 
 end
@@ -267,7 +307,7 @@ end) = struct
   module C = Raw_make(T)
   include C.Interval
   let to_poly (t : t) = t
-    
+
   let t_of_sexp s =
     let t = t_of_sexp s in
     if is_malformed t then
@@ -295,7 +335,21 @@ end
 module type S = Interval_intf.S
 module type S1 = Interval_intf.S1
 
-(** Specific optimized modules *)
 module Float = Make(Float)
 module Int = Make(Core_int)
-module Time = Make(Time)
+module Time = struct
+  include Make(Time)
+
+  
+  
+  let create_ending_after (open_ofday, close_ofday) ~now =
+    let close_time = Time.ofday_occurrence close_ofday `right_after now in
+    let open_time = Time.ofday_occurrence open_ofday `right_before close_time in
+    create open_time close_time
+
+  let create_ending_before (open_ofday, close_ofday) ~ubound =
+    let close_time = Time.ofday_occurrence close_ofday `right_before ubound in
+    let open_time = Time.ofday_occurrence open_ofday `right_before close_time in
+    create open_time close_time
+
+end

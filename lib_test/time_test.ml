@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 open Core.Std
 open OUnit;;
 
@@ -5,7 +29,11 @@ module Date = Date
 module Ofday = Time.Ofday
 module Span = Time.Span
 
-let teq t1 t2 = truncate (Time.to_float t1 *. 1000.) = truncate (Time.to_float t2 *. 1000.)
+let teq t1 t2 =
+  if Sys.word_size = 64 then
+    round_towards_zero (Time.to_float t1 *. 1000.) = round_towards_zero (Time.to_float t2 *. 1000.)
+  else
+    true (* milliseconds since 1970 too large for truncate *)
 let speq s1 s2 = round (Span.to_ms s1) = round (Span.to_ms s2)
 let convtest ?tol f1 f2 =
   let x = float (Random.int 1_000_000) /. 1000. in
@@ -15,13 +43,15 @@ let convtest ?tol f1 f2 =
   in
   abs_float (f1 (f2 x) -. x) <= tol
 
-let mintime_str = "0000-01-01 00:00:00.000"
-let maxtime_str = "3000-01-01 00:00:00.000"
+let mintime_str = "0000-01-01 00:00:00.000000"
+let maxtime_str = "3000-01-01 00:00:00.000000"
 
 let time_gen () = Time.of_float (Quickcheck.fg ())
+
 let reasonable_time time =              (* between about 1970 and 2070 *)
   let time = Time.to_float time in
   time > 0. && time < 100. *. 52. *. 24. *. 60. *. 60.
+
 let similar_time time time' =
   let time = Time.to_float time in
   let time' = Time.to_float time' in
@@ -43,22 +73,19 @@ let () = add "t"
       "diff1" @? (Float.iround_exn (Span.to_sec (Time.diff time2 time1)) = 15);
       "diff1'" @? (Float.iround_exn (Span.to_ms (Time.diff time2 time1)) = 15 * 1000);
       "diff2" @? (Float.iround_exn (Span.to_ms (Time.diff time3 time2)) = 232);
-      "conv1" @? (Time.to_string time1 = s1 ^ ":00.000");
-      "conv2" @? (Time.to_string time2 = s2 ^ ".000");
-      "conv3" @? (Time.to_string time3 = s3);
+      "conv1" @? (Time.to_string time1 = s1 ^ ":00.000000");
+      "conv2" @? (Time.to_string time2 = s2 ^ ".000000");
+      "conv3" @? (Time.to_string time3 = s3 ^ "000");
       "ord" @? (now2 >= now1);
       "sexp1" @? (Time.t_of_sexp (Time.sexp_of_t time1) = time1);
       "sexp2" @? (Time.t_of_sexp (Time.sexp_of_t time2) = time2);
       "sexp3" @? (Time.t_of_sexp (Time.sexp_of_t time3) = time3);
-      let date, ofday = Time.to_date_ofday time3 in
+      let date, ofday = Time.to_local_date_ofday time3 in
       "date" @? (date = Date.of_string "2005-05-25");
-      "ofday" @? (Time.Ofday.to_sec ofday =.
-          Time.Ofday.to_sec (Time.Ofday.of_string "12:46:15.232"));
+      "ofday" @? (Ofday.(=.) ofday (Time.Ofday.of_string "12:46:15.232"));
       "ofday1" @? (Time.Ofday.of_string "09:13" = Time.Ofday.of_string "0913");
       "add1" @? teq (Time.add time1 (Span.of_sec 15.)) time2;
       "add2" @? teq (Time.add time2 (Span.of_ms 232.)) time3;
-      "min" @? (Time.to_string Time.min_value = mintime_str && Time.of_string mintime_str = Time.min_value);
-      "max" @? (Time.to_string Time.max_value = maxtime_str && Time.of_string maxtime_str = Time.max_value);
     )
 
 let () =
@@ -71,15 +98,15 @@ let () =
       let rand_state = Random.State.make [| 1; 2; 3; 4; 5; 6; 7 |] in
       for i = 0 to 100_000 do
         let secs = Random.State.int rand_state 86_400_000 in
-        let ofday = Ofday.of_span_since_midnight (Span.of_ms (float secs)) in
+        let ofday = Ofday.of_span_since_start_of_day (Span.of_ms (float secs)) in
         let ofday_string = Ofday.to_string ofday in
         let ofday' = Ofday.of_string ofday_string in
-        if Ofday.(<>) ofday ofday' then
-          failwithf "(%d seconds) %s (%f) <> Ofday.of_string %s (%f)"
+        if Ofday.(<>.) ofday ofday' then
+          failwithf "(%d seconds) %s (%.20f) <> Ofday.of_string %s (%.20f)"
             secs ofday_string (Ofday.to_float ofday) (Ofday.to_string ofday')
             (Ofday.to_float ofday') ();
         let ofday' = Ofday.of_string_iso8601_extended ofday_string in
-        if Ofday.(<>) ofday ofday' then
+        if Ofday.(<>.) ofday ofday' then
           failwithf "%s <> Ofday.of_string_iso8601_extended %s"
             ofday_string (Ofday.to_string ofday') ();
       done)
@@ -89,14 +116,14 @@ let () =
   add "date"
     (fun () ->
       let start =
-        Time.of_date_ofday
+        Time.of_local_date_ofday
           (Date.create ~y:1999 ~m:Month.jan ~d:1)
           Ofday.start_of_day
       in
       let day = Span.of_day 1. in
       for i = 0 to 100_000 do
         let date =
-          Time.to_date (Time.add start (Span.scale (float i) day))
+          Time.to_local_date (Time.add start (Span.scale day (float i)))
         in
         let date_string = Date.to_string date in
         let date' = Date.of_string date_string in
@@ -108,20 +135,35 @@ let () =
 let () =
   add "add_days"
     (fun () ->
-      "one" @? (Time.Date.add_days (Time.Date.of_string "2008-11-02") 1 =
-        Time.Date.of_string "2008-11-03");
-      "two" @? (Time.Date.add_days (Time.Date.of_string "2008-11-02") 2 =
-        Time.Date.of_string "2008-11-04");
-      "leap" @? (Time.Date.add_days (Time.Date.of_string "2000-02-28") 1 =
-        Time.Date.of_string "2000-02-29")
+      "one" @? (Date.add_days (Date.of_string "2008-11-02") 1 =
+        Date.of_string "2008-11-03");
+      "two" @? (Date.add_days (Date.of_string "2008-11-02") 2 =
+        Date.of_string "2008-11-04");
+      "leap" @? (Date.add_days (Date.of_string "2000-02-28") 1 =
+        Date.of_string "2000-02-29")
+    )
+
+let () =
+  add "add_months"
+    (fun () ->
+      "zero" @? (Date.add_months (Date.of_string "2009-02-28") 0 =
+        Date.of_string "2009-02-28");
+      "one" @? (Date.add_months (Date.of_string "2009-01-30") 1 =
+        Date.of_string "2009-02-28");
+      "two" @? (Date.add_months (Date.of_string "2009-01-30") 2 =
+        Date.of_string "2009-03-30");
+      "december" @? (Date.add_months (Date.of_string "2009-02-28") 10 =
+        Date.of_string "2009-12-28");
+      "neg" @? (Date.add_months (Date.of_string "2009-01-30") (-11) =
+        Date.of_string "2008-02-29")
     )
 
 let () =
   add "add_weekdays"
     (fun () ->
       let test lbl d1 n d2 =
-        lbl @? (Time.Date.add_weekdays 
-        (Time.Date.of_string d1) n = Time.Date.of_string d2)
+        lbl @? (Date.add_weekdays
+        (Date.of_string d1) n = Date.of_string d2)
       in
       test "one" "2009-01-01" 1 "2009-01-02";
       test "one_weekend" "2009-01-02" 1 "2009-01-05";
@@ -142,12 +184,12 @@ let () =
             "2009-01-01";
             "2009-03-01";
             "2009-03-02";
-          ] ~f:Time.Date.of_string)
+          ] ~f:Date.of_string)
         in
-        lbl @? (Time.Date.add_business_days ~is_holiday
-          (Time.Date.of_string d1) n = Time.Date.of_string d2)
+        let res = Date.add_business_days ~is_holiday (Date.of_string d1) n in
+        lbl @? (res = Date.of_string d2)
       in
-      test "one" "2009-01-01" 1 "2009-01-02";
+      test "one" "2009-01-01" 1 "2009-01-05";
       test "one_weekend" "2009-01-02" 1 "2009-01-05";
       test "neg_one" "2009-01-02" (-1) "2008-12-31";
       test "neg_one_weekend" "2009-01-05" (-1) "2009-01-02";
@@ -160,9 +202,9 @@ let () =
 let () =
   add "span_scale"
     (fun () ->
-      "ms" @? speq (Span.scale 0.001 (Span.of_sec 10.)) (Span.of_ms 10.);
-      "min" @? speq (Span.scale 60. (Span.of_sec 10.)) (Span.of_min 10.);
-      "hr" @? speq (Span.scale (60. *. 60.) (Span.of_sec 10.)) (Span.of_hr 10.);
+      "ms" @? speq (Span.scale (Span.of_sec 10.) 0.001) (Span.of_ms 10.);
+      "min" @? speq (Span.scale (Span.of_sec 10.) 60.) (Span.of_min 10.);
+      "hr" @? speq (Span.scale (Span.of_sec 10.) (60. *. 60.)) (Span.of_hr 10.);
     );
   add "span_conv"
     (fun () ->
@@ -185,33 +227,40 @@ let () =
       "conv3" @? (d = Date.of_string "20040415");
       "conv4" @? (d = Date.of_string "15APR2004");
       "conv5" @? (d = Date.of_string "04/15/2004");
+      "conv6" @? (d = Date.of_string "2004/04/15");
+      "conv7" @? (d = Date.of_string "4/15/4");
     );
   add "norollover"
     (fun () ->
       let t1 = Time.of_string "2005-05-25 12:46:59.900" in
       let t2 = Time.add t1 (Span.of_ms 99.9) in
-      "60secspr" @? ((Time.to_string t2) = "2005-05-25 12:46:59.999");
+      (* within 1 mic *)
+      "60secspr" @? ((Time.to_string t2) = "2005-05-25 12:46:59.999900");
     );
   add "to_string,of_string"
     (fun () ->
       let check time =
         if reasonable_time time
-        then
+        then begin
           let time' = Time.of_string (Time.to_string time) in
-          similar_time time time'
-        else true
+          if similar_time time time' then true
+          else begin
+            Printf.printf "\nbad time: %f\n%!" (Time.to_float time);
+            exit 7;
+          end;
+        end else true
       in
       Quickcheck.laws_exn "string" 100 time_gen check;
     );
   add "to_string,of_string2"
     (fun () ->
-      let s = "2005-06-01 10:15:08.047" in
+      let s = "2005-06-01 10:15:08.047123" in
       let t = Time.of_string s in
       "foo" @? (Time.to_string t = s)
     );
   add "to_string,of_string3"
     (fun () ->
-      let s = "2006-06-16 04:37:07.082" in
+      let s = "2006-06-16 04:37:07.082945" in
       let t = Time.of_string s in
       "foo" @? (Time.to_string t = s)
     );
@@ -228,7 +277,7 @@ let () =
     );
   add "to_filename_string,of_filename_string2"
     (fun () ->
-      let s = "2005-06-01_10-15-08.047" in
+      let s = "2005-06-01_10-15-08.047983" in
       let t = Time.of_filename_string s in
       "foo" @? (Time.to_filename_string t = s)
     );
@@ -245,36 +294,30 @@ let () =
     );
   add "daylight_saving_time"
     (fun () ->
-      let s = "2006-04-02 23:00:00.000" in
+      let s = "2006-04-02 23:00:00.000000" in
       let time = Time.of_string s in
       "dst" @? (Time.to_string time = s)
     );
   add "weird_date_in_time"
     (fun () ->
       let t1 = Time.of_string "01 JAN 2008 10:37:22.551" in
-      "rnse1" @? (Time.to_string t1 = "2008-01-01 10:37:22.551");
+      "rnse1" @? (Time.to_string t1 = "2008-01-01 10:37:22.551000");
       let t2 = Time.of_string "01 FEB 2008 17:38:44.031" in
-      "rnse2" @? (Time.to_string t2 = "2008-02-01 17:38:44.031")
+      "rnse2" @? (Time.to_string t2 = "2008-02-01 17:38:44.031000")
     );
   add "ofday_small_diff"
     (fun () ->
-      let same x y =
-        match x, y with
-        | Some x, Some y -> abs_float (x -. y) < sqrt epsilon_float
-        | None, None -> true
-        | _ -> false
-      in
+      let same x y = abs_float (x -. y) < sqrt epsilon_float in
       let check (s1,s2,d) =
         let t1 = Time.Ofday.of_string s1 in
         let t2 = Time.Ofday.of_string s2 in
-        same (Option.map ~f:Span.to_sec (Time.Ofday.small_diff t1 t2)) d &&
-          same (Option.map ~f:Span.to_sec (Time.Ofday.small_diff t2 t1))
-          (Option.map ~f:(~-.) d)
+           same (Span.to_sec (Time.Ofday.small_diff t1 t2)) d 
+        && same (Span.to_sec (Time.Ofday.small_diff t2 t1)) (~-. d)
       in
       "foo" @? List.for_all ~f:check
-        ["10:00:01.298", "14:59:55.000", Some 6.298;
-         "08:59:54.000", "10:00:01.555", Some (-7.555);
-         "12:48:55.787", "17:48:55.000", Some 0.787;
+        ["10:00:01.298", "14:59:55.000", 6.298;
+         "08:59:54.000", "10:00:01.555", (-7.555);
+         "12:48:55.787", "17:48:55.000", 0.787;
         ]);
   add "ofday_occurrence_right_side"
     (fun () ->
@@ -290,7 +333,7 @@ let () =
       ] in
       let now = Time.now () in
       let now_f = Time.to_float now in
-      let utimes = Time.to_ofday now :: List.map times ~f:(Time.Ofday.of_string) in
+      let utimes = Time.to_local_ofday now :: List.map times ~f:(Time.Ofday.of_string) in
       let after_times = List.map utimes
         ~f:(fun ut -> Time.ofday_occurrence ut `right_after now) in
       let before_times = List.map utimes
@@ -340,8 +383,8 @@ let () =
       let d2 = Date.create ~y:2000 ~m:Month.jan ~d:2 in
       let d3 = Date.create ~y:2000 ~m:Month.feb ~d:28 in
       let d4 = Date.create ~y:2000 ~m:Month.mar ~d:1 in
-      "normal-diff" @? (Time.Date.diff d2 d1 = 1);
-      "leap-diff" @? (Time.Date.diff d4 d3 = 2)
+      "normal-diff" @? (Date.diff d2 d1 = 1);
+      "leap-diff" @? (Date.diff d4 d3 = 2)
       )
 ;;
 
@@ -379,19 +422,6 @@ let () =
     test "0.5m" 30.;
     test "1m" 60.;
     test "1h" (60. *. 60.);
-  );
-  add "Span.to_string_hum" (fun () ->
-    let test secs string =
-      ("to_string_hum " ^ string_of_float secs) @?
-        (Span.to_string_hum (Span.of_sec secs) = string)
-    in
-    test 0. "0:00:00.000";
-    test 0.075 "0:00:00.075";
-    test 3.075 "0:00:03.075";
-    test 163.075 "0:02:43.075";
-    test 3763.075 "1:02:43.075";
-    test 432163.075 "120:02:43.075";
-    test (-. 432163.075) "-120:02:43.075";
   );
   add "Time.of_string_fix_proto" (fun () ->
     let test s t =

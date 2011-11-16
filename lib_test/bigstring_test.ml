@@ -1,4 +1,27 @@
-(*pp cpp *)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 open Core.Std;;
 open OUnit;;
 open Quickcheck;;
@@ -130,16 +153,7 @@ let fdpair_test ~n fdpair sender receiver bs =
   with
     e -> assert_failure (sprintf "%s: receive exception: %s" n (Exn.to_string e))
 
-let send_recv_test ~n bs =
-  fdpair_test ~n socketpair
-    (fun bs fd ->
-      Bigstring.really_send_no_sigpipe fd bs;
-    )
-    (fun ~n bs fd ->
-      let bs' = Bigstring.create (Bigstring.length bs) in
-      Bigstring.really_recv fd bs';
-      (sprintf "send/recv %s: %s,%s" n (repr bs) (repr bs')) @? (bs = bs'))
-    bs
+
 
 let write_read_test ~n fdpair bs =
   fdpair_test ~n fdpair
@@ -221,15 +235,8 @@ let test =
            blit_test ~n:"random" ~src_pos ~dst_pos ~len (s1,s2))
            (fun () -> (sg (), sg(),nng (), nng (), nng ()))
        );
-       "really send/recv" >::
-         (fun () ->
-           (* send_recv_test ~n:"empty" (bs_of_s ""); *)
-           send_recv_test ~n:"simple" (bs_of_s "A simple short string");
-           repeat 500 (send_recv_test ~n:"random") (bsg ~size:png);
-           repeat 500 (send_recv_test ~n:"random big")
-             (bsg ~size:(fun () -> 100 * png ()));
-         );
-       "really write/read pipe" >::
+     
+      "really write/read pipe" >::
          (fun () ->
            let write_read_test = write_read_test Unix.pipe in
            (* write_read_test ~n:"empty" (bs_of_s ""); *)
@@ -260,4 +267,17 @@ let test =
              (bsg ~size:(fun () -> 100 * png ()));
          );
 
+       "sub" >::
+         (fun () ->
+           let original = Bigstring.of_string "catfish" in
+           match Bigstring.to_string (Bigstring.sub ~pos:3 original) with
+           | "fish" -> ()
+           | other -> failwithf "Expected fish, got: %s" other ());
+
+       "sub_shared" >::
+         (fun () ->
+           let original = Bigstring.of_string "catfish" in
+           match Bigstring.to_string (Bigstring.sub_shared ~pos:3 original) with
+           | "fish" -> ()
+           | other -> failwithf "Expected fish, got: %s" other ());
     ]

@@ -1,8 +1,33 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 module type Basic = sig
   type 'a t
   val bind : 'a t -> ('a -> 'b t) -> 'b t
   val return : 'a -> 'a t
 end
+
 
 module type Infix = sig
   type 'a monad
@@ -42,9 +67,6 @@ module type S = sig
   (** [ignore t] = map t ~f:(fun _ -> ()). *)
   val ignore : 'a monad -> unit monad
 
-  
-  (** [unit] = [return ()] *)
-  val unit : unit monad
 
 end
 
@@ -59,18 +81,16 @@ module Make (M : Basic) : S with type 'a monad = 'a M.t = struct
 
     let (>>=) = bind
 
-    let (>>|) t f = t >>= (fun a -> return (f a))
+    let (>>|) t f = t >>= fun a -> return (f a)
   end
 
   include Monad_infix
 
-  let join t = t >>= (fun t' -> t')
+  let join t = t >>= fun t' -> t'
 
   let map t ~f = t >>| f
 
   let ignore t = map t ~f:(fun _ -> ())
-
-  let unit = return ()
 
 end
 
@@ -79,10 +99,6 @@ end
    The second parameter get unified across all the computation. This is used
    to encode monads working on a multi parameter data structure like
    ([('a,'b result)]).
-
-   The signature is exactly the same as for [S1] except [S.unit] which got
-   pruned.  (We cannot write [let unit = return ()] without forcing the
-   ['d] parameter of [('a, 'd) monad] to be covariant.)
 *)
 module type Basic2 = sig
   type ('a, 'd) t
@@ -98,8 +114,7 @@ module type Infix2 = sig
   val (>>|) : ('a, 'd) monad -> ('a -> 'b) -> ('b, 'd) monad
 end
 
-
-(** The same as S1 except the monad type has two arguments. The second is always just
+(** The same as S except the monad type has two arguments. The second is always just
     passed through. *)
 module type S2 = sig
   include Infix2
@@ -117,6 +132,26 @@ module type S2 = sig
   val ignore : (_, 'd) monad -> (unit, 'd) monad
 end
 
+module Check_S2_refines_S (X : S) : (S2 with type ('a, 'd) monad = 'a X.monad) =
+struct
+  type ('a, 'd) monad = 'a X.monad
+  include struct
+    open X
+    let (>>=)  = (>>=)
+    let (>>|)  = (>>|)
+    let bind   = bind
+    let return = return
+    let map    = map
+    let join   = join
+    let ignore = ignore
+  end
+  module Monad_infix = struct
+    open X.Monad_infix
+    type ('a, 'd) monad = 'a X.monad
+    let (>>=) = (>>=)
+    let (>>|) = (>>|)
+  end
+end
 
 module Make2 (M : Basic2) : S2 with type ('a, 'd) monad = ('a, 'd) M.t = struct
 
@@ -129,15 +164,14 @@ module Make2 (M : Basic2) : S2 with type ('a, 'd) monad = ('a, 'd) M.t = struct
 
     let (>>=) = bind
 
-    let (>>|) t f = t >>= (fun a -> return (f a))
+    let (>>|) t f = t >>= fun a -> return (f a)
   end
 
   include Monad_infix
 
-  let join t = t >>= (fun t' -> t')
+  let join t = t >>= fun t' -> t'
 
   let map t ~f = t >>| f
 
   let ignore t = map t ~f:(fun _ -> ())
-
 end

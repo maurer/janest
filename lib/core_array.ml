@@ -1,7 +1,30 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-TYPE_CONV_PATH "Core_array"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 module Array = StdLabels.Array
+open Sexplib.Std
+open Bin_prot.Std
 
 let invalid_argf = Core_printf.invalid_argf
 
@@ -17,9 +40,7 @@ let blit = Array.blit
 let concat = Array.concat
 let copy = Array.copy
 let create_matrix = Array.create_matrix
-let fast_sort = Array.fast_sort
 let fill = Array.fill
-let fold_left = Array.fold_left
 let fold_right = Array.fold_right
 let init = Array.init
 let iteri = Array.iteri
@@ -27,6 +48,8 @@ let make_matrix = Array.make_matrix
 let map = Array.map
 let mapi = Array.mapi
 let of_list = Array.of_list
+(* Note that Ocaml's stable_sort and fast_sort are the same. Regular sort is unstable and
+   slower, but uses constant heap space. *)
 let sort = Array.sort
 let stable_sort = Array.stable_sort
 let sub = Array.sub
@@ -52,10 +75,11 @@ let to_array t = t
 
 let is_empty t = length t = 0
 
-
-let fold t ~init ~f = fold_left t ~init ~f
+let fold t ~init ~f = Array.fold_left t ~init ~f
 
 let iter t ~f = Array.iter t ~f
+
+let concat_map t ~f = concat (to_list (map ~f t))
 
 (** [normalize array index] returns a new index into the array such that if index is less
     than zero, the returned index will "wrap around" -- i.e. array.(normalize array (-1))
@@ -84,7 +108,7 @@ let swap = Array_permute.swap;;
 
 (** reverses an array in place. *)
 
-let rev t =
+let rev_inplace t =
   let n = length t in
   if n > 1 then
     for i = 0 to (n - 1) / 2 do
@@ -94,7 +118,7 @@ let rev t =
 
 let of_list_rev l =
   let t = of_list l in
-  rev t;
+  rev_inplace t;
   t
 
 (** [filter_opt array] returns a new array where [None] entries are omitted and [Some x]
@@ -108,10 +132,47 @@ let filter_opt t =
   );
   of_list_rev !result
 
+(* The following implementation of filter_opt is faster, and as far as we know it's
+   correct, but we don't want to code review it yet until we actually need the speed.
+let filter_opt t =
+  let lix = length t - 1 in
+  let rec outer_loop outer_i =
+    if outer_i < 0 then [||]
+    else
+      match t.(outer_i) with
+      | None -> outer_loop (outer_i - 1)
+      | Some el ->
+          let rec loop i n =
+            if i < 0 then
+              let res = make n el in
+              let rec inner_loop i pos =
+                if i < 0 then res
+                else
+                  match t.(i) with
+                  | None -> inner_loop (i - 1) pos
+                  | Some el ->
+                      res.(pos) <- el;
+                      inner_loop (i - 1) (pos - 1)
+              in
+              inner_loop (outer_i - 1) (n - 2)
+            else
+              match t.(i) with
+              | None -> loop (i - 1) n
+              | Some _ -> loop (i - 1) (n + 1)
+          in
+          loop (outer_i - 1) 1
+  in
+  outer_loop lix
+*)
+
 (** [filter_map ~f array] maps [f] over [array] and filters [None] out of the results. *)
 let filter_map t ~f = filter_opt (map t ~f)
 (** Same as {!filter_map} but uses {!Array.mapi}. *)
 let filter_mapi t ~f = filter_opt (mapi t ~f)
+
+let iter2 t1 t2 ~f =
+  if length t1 <> length t2 then invalid_arg "Array.iter2";
+  iteri t1 ~f:(fun i x1 -> f x1 t2.(i))
 
 let map2 t1 t2 ~f =
   let len = length t1 in
@@ -133,7 +194,6 @@ let exists t ~f =
   in
   loop (length t - 1)
 
-
 let mem el t =
   exists t ~f:(fun x -> x = el)
 
@@ -146,6 +206,18 @@ let for_all t ~f =
     else false
   in
   loop (length t - 1)
+
+let for_all2 t1 t2 ~f =
+  let len = length t1 in
+  if length t2 <> len then invalid_arg "Array.for_all2";
+  let rec loop i =
+    if i < 0
+    then true
+    else if f t1.(i) t2.(i)
+    then loop (i - 1)
+    else false
+  in
+  loop (len - 1)
 
 
 let replace t i ~f = t.(i) <- f t.(i)
@@ -227,7 +299,8 @@ module Infix = struct
   let ( <|> ) t (start,stop) = slice t start stop
 end
 
-
+(* We use [init 0] rather than [||] because all [||] are physically equal, and
+   we want [empty] to create a new array. *)
 let empty () = init 0 ~f:(fun _ -> assert false)
 
 let cartesian_product t1 t2 =

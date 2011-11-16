@@ -1,3 +1,29 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
+
+
 
 
 open Std_internal
@@ -6,25 +32,25 @@ module Range : sig
   (* A range represents a closed interval of integers *)
   type t = private { lo: int; hi: int } (* Invariant: lo <= hi *)
 
+  (** Create [t] from a range *)
   val make : int -> int -> t
-    (** Create [t] from a range *)
 
   val to_string : t -> string
 
+  (** [compare s t] returns:
+      `Mergeable : [s] and [t] have a intersection,
+                   or they are adjacent: ex. [10..12] and [13..15]
+      `Lt_and_not_adjacent : if [s] is less than [t] but not adjacent
+      `Gt_and_not_adjacent : if [s] is greater than [t] but not adjacent
+  *)
   val compare : t -> t -> [ `Lt_and_not_adjacent
                           | `Gt_and_not_adjacent
                           | `Mergeable ]
-    (** [compare s t] returns:
-         `Mergeable : [s] and [t] have a intersection,
-                      or they are adjacent: ex. [10..12] and [13..15]
-         `Lt_and_not_adjacent : if [s] is less than [t] but not adjacent
-         `Gt_and_not_adjacent : if [s] is greater than [t] but not adjacent
-    *)
 
+  (** [merge s t] merges mergeable ranges *)
   val merge : t -> t -> [ `Ok of t
                         | `Lt_and_not_adjacent
                         | `Gt_and_not_adjacent ]
-    (** [merge s t] merges mergeable ranges *)
 
   val contains : int -> t -> bool
 end = struct
@@ -51,8 +77,9 @@ end = struct
 end
 
 type t = Range.t list
-    (* invariant : the elements of [t] must be discrete (not mergeable) each other and
-       sorted in DECREASING order. *)
+
+(* invariant : the elements of [t] must be discrete (not mergeable) each other and sorted
+   in DECREASING order. *)
 
 let create () = []
 

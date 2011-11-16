@@ -1,5 +1,26 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-TYPE_CONV_PATH "Result"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 type ('a, 'b) t =
   | Ok of 'a
@@ -23,6 +44,17 @@ type ('a, 'b) sexpable = ('a, 'b) t
 type ('a, 'b) binable = ('a, 'b) t
 
 let fail x = Error x;;
+let failf format = Printf.ksprintf fail format
+
+(* This definition shadows the version created by the functor application above, but it
+   is much more efficient. *)
+let map t ~f = match t with
+  | Ok x -> Ok (f x)
+  | Error _ as x -> x
+
+let map_error t ~f = match t with
+  | Ok _ as x -> x
+  | Error x -> Error (f x)
 
 let is_ok = function
   | Ok _ -> true
@@ -39,6 +71,11 @@ let ok = function
 let error = function
   | Ok _ -> None
   | Error x -> Some x
+
+let of_option opt ~error =
+  match opt with
+  | Some x -> Ok x
+  | None -> Error error
 
 let iter v ~f = match v with
   | Ok x -> f x
@@ -57,8 +94,41 @@ let apply ~f x =
 let ok_fst = function
   | Ok x -> `Fst x
   | Error x -> `Snd x
-;;
 
-let trywith f =
+let ok_if_true bool ~error =
+  if bool
+  then Ok ()
+  else Error error
+
+let try_with f =
   try Ok (f ())
   with exn -> Error exn
+
+let ok_exn ?fail = function
+  | Ok x -> x
+  | Error _ ->
+    match fail with
+    | None -> failwith "Result.ok_exn"
+    | Some exn -> raise exn
+;;
+
+let ok_unit = Ok ()
+
+let raise_error = function
+  | Ok x -> x
+  | Error exn -> raise exn
+;;
+
+module Export = struct
+  type ('ok, 'err) _result =
+    ('ok, 'err) t =
+      | Ok of 'ok
+      | Error of 'err
+end
+
+let combine t1 t2 ~ok ~err =
+  match t1, t2 with
+  | Ok _, Error e | Error e, Ok _ -> Error e
+  | Ok    ok1 , Ok    ok2  -> Ok    (ok  ok1  ok2 )
+  | Error err1, Error err2 -> Error (err err1 err2)
+;;

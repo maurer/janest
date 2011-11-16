@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 open OUnit;;
 open Core.Std
 
@@ -86,9 +110,9 @@ module String =
 module Span =
   F (struct
     include Time.Span
-    let one = min_value
+    let one = Span.of_sec (-1.0)
     let two = zero
-    let three = max_value
+    let three = Span.of_sec 1.0
   end)
 
 module Ofday =
@@ -105,9 +129,9 @@ module Date =
     let one = Time.now ()
     let two = Time.add one (Time.Span.of_hr 30.0)
     let three = Time.add two (Time.Span.of_hr 30.0)
-    let one = Time.to_date one
-    let two = Time.to_date two
-    let three = Time.to_date three
+    let one = Time.to_local_date one
+    let two = Time.to_local_date two
+    let three = Time.to_local_date three
   end)
 
 module Time =
@@ -172,6 +196,18 @@ module Int =
     let three = 3
   end)
 
+let lexicographic_test =
+  "lexicographic" >:: (fun () ->
+    "1 0" @? (Comparable.lexicographic [compare] 1 1 = 0);
+    "1 -1" @? (Comparable.lexicographic [compare] 1 2 = -1);
+    "1 1" @? (Comparable.lexicographic [compare] 2 1 = 1);
+    let cmp = Array.to_list (Array.init 3 ~f:(fun i a b ->
+      compare a.(i) b.(i))) in
+    "3 0" @? (Comparable.lexicographic cmp [|1;2;3;4|] [|1;2;3;9|] = 0);
+    "3 -1" @? (Comparable.lexicographic cmp [|1;2;3;4|] [|1;2;4;9|] = -1);
+    "3 1" @? (Comparable.lexicographic cmp [|1;2;3;4|] [|1;1;4;9|] = 1);
+  )
+
 let test =
   TestList
   [Float.test;
@@ -187,5 +223,6 @@ let test =
    Nativeint.test;
    Int'.test;
    Int''.test;
+   lexicographic_test;
   ]
 ;;

@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 open OUnit;;
 open Core.Std
 
@@ -27,7 +51,7 @@ let () =
   ]
     ~f:(fun (input, expected) ->
       let got =
-        try Core.Int_conversions.prettify_string input
+        try Core.Int_conversions.insert_underscores input
         with exn ->
           failwithf "input = %s  exn = %s" input (Exn.to_string exn) ()
       in
@@ -40,9 +64,9 @@ module Examples (I : Int_intf.S) = struct
   let two = one + one
 
   let examples =
-    [min_int; min_int + one; min_int + two; min_int / two; neg two; neg one;
+    [min_value; min_value + one; min_value + two; min_value / two; neg two; neg one;
      zero;
-     one; two; max_int / two; max_int - two; max_int - one; max_int;]
+     one; two; max_value / two; max_value - two; max_value - one; max_value;]
   end
 
 module Inverses (X : Int_intf.S) (Y : Int_intf.S)
@@ -53,7 +77,7 @@ module Inverses (X : Int_intf.S) (Y : Int_intf.S)
     open Conv
     let xs = let module E = Examples (X) in E.examples
     let ys = let module E = Examples (Y) in E.examples
-    let out_of_range y = assert (y >= x_to_y X.max_int || y <= x_to_y X.min_int)
+    let out_of_range y = assert (y >= x_to_y X.max_value || y <= x_to_y X.min_value)
     let test =
       "int_conversions" >:: (fun () ->
         List.iter xs ~f:(fun x ->
@@ -81,9 +105,9 @@ module Inverses' (X : Int_intf.S) (Y : Int_intf.S)
     let y_to_x_exn y = get (y_to_x y)
     let x_to_y_exn x = get (x_to_y x)
     let x_out_of_range x =
-      assert (x >= y_to_x_exn Y.max_int || x <= y_to_x_exn Y.min_int)
+      assert (x >= y_to_x_exn Y.max_value || x <= y_to_x_exn Y.min_value)
     let y_out_of_range y =
-      assert (y >= x_to_y_exn X.max_int || y <= x_to_y_exn X.min_int)
+      assert (y >= x_to_y_exn X.max_value || y <= x_to_y_exn X.min_value)
     let test =
       "int_conversions" >:: (fun () ->
         List.iter xs ~f:(fun x ->
@@ -158,7 +182,7 @@ module Ii3' = Inverses' (Int) (Int32) (struct
   let x_to_y = Int32.of_int
   let y_to_x = Int32.to_int
 end)
-  
+
 let test =
   TestList
     [

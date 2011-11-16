@@ -1,8 +1,12 @@
-name = "core"
-version = "0.6.0"
-description = "Core - Jane Street Capital's standard library overlay"
-
-requires = "bigarray, res, sexplib, bin_prot, threads, fieldslib"
-
+# OASIS_START
+# DO NOT EDIT (digest: 130b1733fa45862cb6ab3db7061db11c)
+version = "107.01"
+description = "Jane Street Capital's standard library overlay"
+requires
+ =
+ "sexplib.syntax sexplib fieldslib.syntax fieldslib bin_prot bin_prot.syntax bigarray res unix threads"
 archive(byte) = "core.cma"
 archive(native) = "core.cmxa"
+exists_if = "core.cma"
+# OASIS_STOP
+

@@ -1,12 +1,35 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-TYPE_CONV_PATH "Core_string"
-
-
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 
 module Array = Caml.ArrayLabels
 module Char = Core_char
 module String = Caml.StringLabels
+open Sexplib.Std
+open Bin_prot.Std
+
+
 
 let phys_equal = Caml.(==)
 
@@ -18,7 +41,8 @@ module T = struct
   type binable = t
   type sexpable = t
 
-  let compare = String.compare
+  
+  let compare (x : string) y = Pervasives.compare x y
   (* = on two strings avoids calling compare_val, which is what happens
      with String.compare *)
   let equal (x : string) y = x = y
@@ -30,25 +54,25 @@ type elt = char
 
 type container = t
 type stringable = t
+type identifiable = t
 
 (* Standard functions *)
 let blit = String.blit
 let capitalize = String.capitalize
-let compare = String.compare
 let concat ?(sep="") l = String.concat ~sep l
 let contains = String.contains
 let contains_from = String.contains_from
 let copy = String.copy
 let escaped = String.escaped
 let fill = String.fill
-let index = String.index
-let index_from = String.index_from
+let index_exn = String.index
+let index_from_exn = String.index_from
 let length = String.length
 let lowercase = String.lowercase
 let make = String.make
 let rcontains_from = String.rcontains_from
-let rindex = String.rindex
-let rindex_from = String.rindex_from
+let rindex_exn = String.rindex
+let rindex_from_exn = String.rindex_from
 let sub = String.sub
 let uncapitalize = String.uncapitalize
 let uppercase = String.uppercase
@@ -56,6 +80,22 @@ external create : int -> string = "caml_create_string"
 external get : string -> int -> char = "%string_safe_get"
 external length : string -> int = "%string_length"
 external set : string -> int -> char -> unit = "%string_safe_set"
+
+let index t char =
+  try Some (index_exn t char)
+  with Not_found -> None
+
+let rindex t char =
+  try Some (rindex_exn t char)
+  with Not_found -> None
+
+let index_from t pos char =
+  try Some (index_from_exn t pos char)
+  with Not_found -> None
+
+let rindex_from t pos char =
+  try Some (rindex_from_exn t pos char)
+  with Not_found -> None
 
 let id x = x
 let of_string = id
@@ -73,11 +113,11 @@ let init n ~f =
 ;;
 
 (** See {!Core_array.normalize} for the following 4 functions. *)
-let normalize s i =
-  Ordered_collection_common.normalize ~length_fun:String.length s i
-let slice start stop s =
+let normalize t i =
+  Ordered_collection_common.normalize ~length_fun:String.length t i
+let slice t start stop =
   Ordered_collection_common.slice ~length_fun:String.length ~sub_fun:String.sub
-  start stop s
+    t start stop
 
 let nget x i =
   x.[normalize x i]
@@ -126,10 +166,15 @@ let rsplit2 line ~on =
   try Some (rsplit2_exn line ~on) with Not_found -> None
 
 let split_gen str ~on =
-  let is_delim on c =
+  let rec char_list_mem l (c:char) =
+    match l with
+    | [] -> false
+    | hd::tl -> hd = c || char_list_mem tl c
+  in
+  let is_delim on (c:char) =
     match on with
     | `char c' -> c = c'
-    | `chars s -> Char.Set.mem s c
+    | `char_list l -> char_list_mem l c
   in
   let len = String.length str in
   let rec loop acc last_pos pos =
@@ -140,7 +185,7 @@ let split_gen str ~on =
         let pos1 = pos + 1 in
         let sub_str = String.sub str ~pos:pos1 ~len:(last_pos - pos1) in
         loop (sub_str :: acc) pos (pos - 1)
-      else loop acc last_pos (pos - 1)
+    else loop acc last_pos (pos - 1)
   in
   loop [] len (len - 1)
 ;;
@@ -148,9 +193,7 @@ let split_gen str ~on =
 let split str ~on = split_gen str ~on:(`char on) ;;
 
 let split_on_chars str ~on:chars =
-  
-  let chars = Char.Set.of_list chars in
-  split_gen str ~on:(`chars chars)
+  split_gen str ~on:(`char_list chars)
 ;;
 
 (* [is_suffix s ~suff] returns [true] if the string [s] ends with the suffix [suff] *)
@@ -174,13 +217,13 @@ let is_prefix s ~prefix =
 
 let wrap_sub_n t n ~name ~pos ~len ~on_error =
   if n < 0 then
-    raise (Invalid_argument (name ^ " expecting nonnegative argument"))
+    invalid_arg (name ^ " expecting nonnegative argument")
   else
     try
       sub t ~pos ~len
     with _ ->
       on_error
-      
+
 let drop_prefix t n = wrap_sub_n ~name:"drop_prefix" t n ~pos:n ~len:(length t - n) ~on_error:""
 let drop_suffix t n = wrap_sub_n ~name:"drop_suffix" t n ~pos:0 ~len:(length t - n) ~on_error:""
 let prefix t n = wrap_sub_n ~name:"prefix" t n ~pos:0 ~len:n ~on_error:t
@@ -218,9 +261,9 @@ let rstrip t =
   match last_non_whitespace t with
   | None -> ""
   | Some i ->
-      if i = length t - 1
-      then t
-      else prefix t (i + 1)
+    if i = length t - 1
+    then t
+    else prefix t (i + 1)
 ;;
 
 let first_non_whitespace t = lfindi t ~f:(fun _ c -> not (Char.is_whitespace c))
@@ -232,7 +275,7 @@ let lstrip t =
   | Some n -> drop_prefix t n
 ;;
 
-(* [strip t] could be implemented as [lstrip (rstrip t)].  The implementatiom
+(* [strip t] could be implemented as [lstrip (rstrip t)].  The implementation
    below saves (at least) a factor of two allocation, by only allocating the
    final result.  This also saves some amount of time. *)
 let strip t =
@@ -249,13 +292,22 @@ let strip t =
         | Some last -> sub t ~pos:first ~len:(last - first + 1)
 ;;
 
-let map ~f s =
-  let l = String.length s in
-  let s' = String.create l in
+let mapi t ~f =
+  let l = String.length t in
+  let t' = String.create l in
   for i = 0 to l - 1 do
-    s'.[i] <- f s.[i]
+    t'.[i] <- f i t.[i]
   done;
-  s'
+  t'
+
+(* repeated code to avoid requiring an extra allocation for a closure on each call. *)
+let map t ~f =
+  let l = String.length t in
+  let t' = String.create l in
+  for i = 0 to l - 1 do
+    t'.[i] <- f t.[i]
+  done;
+  t'
 
 let to_array s = Array.init (String.length s) ~f:(fun i -> s.[i])
 
@@ -286,68 +338,46 @@ let is_empty t =
   String.length t = 0
 ;;
 
+let mem ?(equal = Char.(=)) t c =
+  let rec loop i = i < length t && (equal c t.[i] || loop (i + 1)) in
+  loop 0
+;;
+
 let concat_array ?sep ar = concat ?sep (Array.to_list ar)
 
-(* Maybe we'll add this later ... *)
-(* let tc_concat tc ~sep c = *)
-(*   let module C = Container in *)
-(*   if tc.C.is_empty c then "" *)
-(*   else begin *)
-(*     let sep_len = String.length sep in *)
-(*     let len = *)
-(*       tc.C.fold ~init:(- sep_len) c ~f:(fun len s -> *)
-(*         len + length s + sep_len) *)
-(*     in *)
-(*     let dst = create len in *)
-(*     ignore *)
-(*       (tc.C.fold ~init:0 c ~f:(fun dst_pos src -> *)
-(*         let dst_pos = *)
-(*           if dst_pos = 0 then 0 *)
-(*           else begin *)
-(*             blit ~src:sep ~src_pos:0 ~dst_pos ~len:sep_len ~dst; *)
-(*             dst_pos + sep_len *)
-(*           end *)
-(*         in *)
-(*         let src_len = String.length src in *)
-(*         blit ~src ~src_pos:0 ~len:src_len ~dst_pos ~dst; *)
-(*         dst_pos + src_len)); *)
-(*     dst *)
-(*   end *)
+let concat_map ?sep s ~f = concat_array ?sep (Array.map (to_array s) ~f)
 
- let concat_map ?sep s ~f = concat_array ?sep (Array.map (to_array s) ~f)
-
-let chop_prefix_opt s ~prefix =
+let chop_prefix s ~prefix =
   if is_prefix s ~prefix then
     Some (drop_prefix s (String.length prefix))
   else
     None
 
-let chop_prefix s ~prefix =
-  match chop_prefix_opt s ~prefix with
+let chop_prefix_exn s ~prefix =
+  match chop_prefix s ~prefix with
   | Some str -> str
   | None ->
       raise (Invalid_argument
-               (Printf.sprintf "Core_string.chop_prefix %S %S" s prefix))
+               (Printf.sprintf "Core_string.chop_prefix_exn %S %S" s prefix))
 
-let chop_suffix_opt s ~suffix =
+let chop_suffix s ~suffix =
   if is_suffix s ~suffix then
     Some (drop_suffix s (String.length suffix))
   else
     None
 
-let chop_suffix s ~suffix =
-  match chop_suffix_opt s ~suffix with
+let chop_suffix_exn s ~suffix =
+  match chop_suffix s ~suffix with
   | Some str -> str
   | None ->
       raise (Invalid_argument
-               (Printf.sprintf "Core_string.chop_suffix %S %S" s suffix))
+               (Printf.sprintf "Core_string.chop_suffix_exn %S %S" s suffix))
 
-(* The following function returns exactly the same results than
-   the standard hash function on strings (it performs exactly the
-   same computation), but it is faster on short strings (because we
-   don't have to call the generic C function). For random strings
-   of length 4 to 6 (typical rics), it is 40% faster. For strings
-   of length 30 or more, the standard hash function is faster.
+(* The following function returns exactly the same results as the standard hash function
+   on strings (it performs exactly the same computation), but it is faster on short
+   strings (because we don't have to call the generic C function). For random strings of
+   length 4 to 6, it is 40% faster. For strings of length 30 or more, the standard hash
+   function is faster.
 *)
 let hash s =
   let len = String.length s in
@@ -368,8 +398,8 @@ include Hashable.Make_binable (struct
   include T
   let hash = hash
 end)
-module Map = Core_map.Make (T)
-module Set = Core_set.Make (T)
+module Map = Core_map.Make_binable (T)
+module Set = Core_set.Make_binable (T)
 
 (* for interactive top-levels -- modules deriving from String should have String's pretty
    printer. *)

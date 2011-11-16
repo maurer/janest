@@ -1,5 +1,29 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
-TYPE_CONV_PATH "Option"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
+open Sexplib.Std
+open Bin_prot.Std
 
 type 'a t = 'a option with sexp
 
@@ -110,8 +134,20 @@ let both x y =
   | Some a, Some b -> Some (a,b)
   | _ -> None
 
-let wrap_exn f = (); fun x -> try Some (f x) with | _ -> None
+let filter ~f = function
+  | Some v as o when f v -> o
+  | _ -> None
 
+let compare ~cmp v1 v2 =
+  let tag_to_int = function Some _ -> 1 | None -> 0 in
+  match v1,v2 with
+  | Some v1,Some v2 -> cmp v1 v2
+  | None,None -> 0
+  | _ -> compare (tag_to_int v1) (tag_to_int v2)
+
+let try_with f =
+  try Some (f ())
+  with _ -> None
 
 include Monad.Make (struct
   type 'a t = 'a option

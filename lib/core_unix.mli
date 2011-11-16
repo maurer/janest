@@ -1,31 +1,40 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This file is derived from source code of the Ocaml compiler.               *
+ * which has additional copyrights:                                           *
+ *                                                                            *
+ *    Xavier Leroy, projet Cristal, INRIA Rocquencourt                        *
+ *                                                                            *
+ *    Copyright 1999 Institut National de Recherche en Informatique et        *
+ *    en Automatique.                                                         *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 (* This file is a copy of unixLabels.mli from the OCaml distribution.
    It has been modified to remove "external" specifications.
-   There are also a few additions:
-     module File_descr
-
-   [getenv] returns an option.
-   [getenv_exn] is the exception-raising variant of getenv.
-
-
-   [Unix.kill] is now [Signal.send], and the signal type is abstract.
+   There are many additions as well.
 *)
-
-(***********************************************************************)
-(*                                                                     *)
-(*                           Objective Caml                            *)
-(*                                                                     *)
-(*            Xavier Leroy, projet Cristal, INRIA Rocquencourt         *)
-(*                                                                     *)
-(*  Copyright 1996 Institut National de Recherche en Informatique et   *)
-(*  en Automatique.  All rights reserved.  This file is distributed    *)
-(*  under the terms of the GNU Library General Public License, with    *)
-(*  the special exception on linking described in file ../../LICENSE.  *)
-(*                                                                     *)
-(***********************************************************************)
-
-(* $Id: unixLabels.mli,v 1.13 2004/07/13 12:25:14 xleroy Exp $ *)
-
+INCLUDE "config.mlh"
 (** Interface to the Unix system.
    To use as replacement to default {!Unix} module,
    add [module Unix = UnixLabels] in your implementation.
@@ -37,6 +46,7 @@ module File_descr : sig
   include Hashable.S with type hashable = t
   include Sexpable.S with type sexpable = t
   val to_int : t -> int
+  val of_int : int -> t
   val to_string : t -> string
   val sexp_of_t : t -> Sexplib.Sexp.t
 end
@@ -121,6 +131,7 @@ type error =
     | EOVERFLOW           (** File size or position not representable *)
 
     | EUNKNOWNERR of int  (** Unknown error *)
+with sexp
 
 
 (** Raised by the system calls below when an error is encountered.
@@ -128,6 +139,9 @@ type error =
    is the function name; the third component is the string parameter
    to the function, if it has one, or the empty string otherwise. *)
 exception Unix_error of error * string * string
+
+(** @raise Unix_error with a given errno, function name and argument *)
+external unix_error : int -> string -> string -> _ = "unix_error_stub"
 
 (** Return a string describing the given error code. *)
 val error_message : error -> string
@@ -146,20 +160,18 @@ val environment : unit -> string array
 
 
 
-(** Return the value associated to a variable in the process
-   environment.  Return [None] if the variable is unbound.
-   (This function is identical to [Sys.getenv].) *)
-val getenv : string -> string option
-
-(** Return the value associated to a variable in the process
-   environment.  Failwith if the variable is unbound. *)
-val getenv_exn : string -> string
-
 (** [Unix.putenv ~key ~data] sets the value associated to a
    variable in the process environment.
    [key] is the name of the environment variable,
    and [data] its new associated value. *)
 val putenv : key : string -> data : string -> unit
+
+(**
+   [unsetenv name] deletes the variable [name] from the environment.
+
+   EINVAL [name] contained an ’=’ or an '\000' character.
+*)
+val unsetenv : string -> unit
 
 (** {6 Process handling} *)
 
@@ -203,7 +215,7 @@ val execve : prog:string -> args:string array -> env:string array -> _
    the program is searched in the path. *)
 val execvp : prog:string -> args:string array -> _
 
-(** Same as {!UnixLabels.execvp} respectively, except that
+(** Same as {!UnixLabels.execve} respectively, except that
    the program is searched in the path. *)
 val execvpe : prog:string -> args:string array -> env:string array -> _
 
@@ -216,7 +228,7 @@ val fork : unit -> int
 
 (** Wait until one of the children processes die, and return its pid
    and termination status. *)
-val wait : unit -> int * Process_status.t
+val wait : ?restart:bool -> unit -> int * Process_status.t
 
 (** Same as {!UnixLabels.wait}, but waits for the process whose pid is given.
    A pid of [-1] means wait for any child.
@@ -227,6 +239,7 @@ val wait : unit -> int * Process_status.t
    immediately without waiting, or also report stopped children.
    [restart] (default false) causes the system call to be retried
    upon EINTR. *)
+
 
 val waitpid : ?restart:bool -> mode:wait_flag list -> int
               -> int * Process_status.t
@@ -283,7 +296,8 @@ type open_flag =
 
 
 (** The type of file access rights. *)
-type file_perm = int
+type file_perm = int with sexp
+
 
 
 (** Open the named file with the given flags. Third argument is
@@ -336,6 +350,7 @@ val descr_of_out_channel : out_channel -> file_descr
 
 (** {6 Seeking and truncating} *)
 
+
 (** Positioning modes for {!UnixLabels.lseek}. *)
 type seek_command =
   Unix.seek_command =
@@ -366,7 +381,7 @@ type file_kind =
     | S_LNK                   (** Symbolic link *)
     | S_FIFO                  (** Named pipe *)
     | S_SOCK                  (** Socket *)
-  with sexp_of
+  with sexp
 
 (** The informations returned by the {!UnixLabels.stat} calls. *)
 type stats =
@@ -384,8 +399,7 @@ type stats =
       st_atime : float;                   (** Last access time *)
       st_mtime : float;                   (** Last modification time *)
       st_ctime : float                    (** Last status change time *)
-    }
-
+    } with sexp
 
 (** Return the information for the named file. *)
 val stat : string -> stats
@@ -414,8 +428,7 @@ module Native_file : sig
         st_uid : int;                       (** User id of the owner *)
         st_gid : int;                       (** Group ID of the file's group *)
         st_rdev : int;                      (** Device minor number *)
-        st_size : int;                    (** Size in bytes *)
-        
+        st_size : int;                      (** Size in bytes *)
         st_atime : float;                   (** Last access time *)
         st_mtime : float;                   (** Last modification time *)
         st_ctime : float                    (** Last status change time *)
@@ -458,6 +471,18 @@ type lock_command =
  * exception if it is too large. *)
 val lockf : file_descr -> mode:lock_command -> len:Core_int64.t -> unit
 
+module Flock_command : sig
+  (* These must never be reordered, the underlying C call relies on this order *)
+  type t =
+    | LOCK_SH
+    | LOCK_EX
+    | LOCK_UN
+end
+
+(** [flock fd cmd] places or releases a lock on the fd as per the flock C call of the same
+    name. *)
+val flock : file_descr -> Flock_command.t -> bool
+
 (** Return [true] if the given file descriptor refers to a terminal or
    console window, [false] otherwise. *)
 val isatty : file_descr -> bool
@@ -474,10 +499,15 @@ val unlink : string -> unit
 (** [rename old new] changes the name of a file from [old] to [new]. *)
 val rename : src:string -> dst:string -> unit
 
-(** [link source dest] creates a hard link named [dest] to the file
-   named [new]. *)
-val link : src:string -> dst:string -> unit
+(** [link ?force ~target ~link_name ()] creates a hard link named [link_name]
+    to the file named [target].  If [force] is true, an existing entry in
+    place of [link_name] will be unlinked.  This unlinking may raise a Unix
+    error, e.g. if the entry is a directory.
 
+    @param force default = [false]
+*)
+val link :
+  ?force : bool -> target : string -> link_name : string -> unit -> unit
 
 
 (** {6 File permissions and ownership} *)
@@ -550,7 +580,9 @@ val clear_close_on_exec : file_descr -> unit
 (** {6 Directories} *)
 
 
-(** Create a directory with the given permissions. *)
+(** Create a directory.  The permissions of the created directory are
+    (perm & ~umask & 0777)
+*)
 val mkdir : string -> perm:file_perm -> unit
 
 (** Remove an empty directory. *)
@@ -573,6 +605,7 @@ val opendir : string -> dir_handle
 
 (** Return the next entry in a directory.
    @raise End_of_file when the end of the directory has been reached. *)
+
 val readdir : dir_handle -> string
 
 (** Reposition the descriptor to the beginning of the directory *)
@@ -660,16 +693,19 @@ end
 
 val open_process_full : string -> env:string array -> Process_channels.t
 
-
+(* close_process_* raises Unix_error if, for example, the file descriptor has already been
+   closed. *)
 
 (** Close channels opened by {!UnixLabels.open_process_in},
     wait for the associated command to terminate,
-    and return its termination status. *)
+    and return its termination status.
+*)
 val close_process_in : in_channel -> Process_status.t
 
 (** Close channels opened by {!UnixLabels.open_process_out},
-   wait for the associated command to terminate,
-   and return its termination status. *)
+    wait for the associated command to terminate,
+    and return its termination status.
+*)
 val close_process_out : out_channel -> Process_status.t
 
 (** Close channels opened by {!UnixLabels.open_process},
@@ -682,9 +718,7 @@ val close_process : in_channel * out_channel -> Process_status.t
    and return its termination status. *)
 val close_process_full : Process_channels.t -> Process_status.t
 
-
 (** {6 Symbolic links} *)
-
 
 (** [symlink source dest] creates the file [dest] as a symbolic link
    to the file [source]. *)
@@ -693,9 +727,7 @@ val symlink : src:string -> dst:string -> unit
 (** Read the contents of a link. *)
 val readlink : string -> string
 
-
 (** {6 Polling} *)
-
 
 (** Wait until some input/output operations become possible on
    some channels. The three list arguments are, respectively, a set
@@ -717,11 +749,15 @@ module Select_fds : sig
   val empty : t
 end
 
-val select :
-  read:file_descr list
+(** Setting restart to true means that we want select to restart automatically
+    on EINTR (instead of propagating the exception)... *)
+val select:
+  ?restart : bool
+  -> read:file_descr list
   -> write:file_descr list
   -> except:file_descr list
   -> timeout:float
+  -> unit
   -> Select_fds.t
 
 (** Wait until a non-ignored, non-blocked signal is delivered. *)
@@ -750,7 +786,7 @@ type tm =
       tm_wday : int;                      (** Day of week (Sunday is 0) *)
       tm_yday : int;                      (** Day of year 0..365 *)
       tm_isdst : bool;                    (** Daylight time savings in effect *)
-    }
+    } with sexp
 
 (** Return the current time since 00:00:00 GMT, Jan. 1, 1970,
    in seconds. *)
@@ -778,11 +814,22 @@ val localtime : float -> tm
    The [tm] argument is interpreted in the local time zone. *)
 val mktime : tm -> float * tm
 
+(** Convert a date and time, specified by the [tm] argument, into a formatted string.
+    See 'man strftime' for format options. *)
+val strftime : tm -> string -> string
+
 (** Schedule a [SIGALRM] signal after the given number of seconds. *)
 val alarm : int -> int
 
+
 (** Stop execution for the given number of seconds. *)
 val sleep : int -> unit
+
+(** [nanosleep f] delays execution of the program for at least [f] seconds.  The function
+  can return earlier if a signal has been delivered, in which case the number of
+  seconds left is returned.  Any other failure raises an exception.
+ *)
+val nanosleep : float -> float
 
 (** Return the execution times of the process. *)
 val times : unit -> process_times
@@ -826,7 +873,11 @@ val setitimer :
   interval_timer -> interval_timer_status -> interval_timer_status
 
 
-(** {6 User id, group id} *)
+(** {6 User id, group id}
+    It's highly recommended to read the straight unix docs on these functions for more
+    color. You can get that info from man pages or
+    http://www.opengroup.org/onlinepubs/000095399/functions/setuid.html
+    *)
 
 
 (** Return the user id of the user executing the process. *)
@@ -835,7 +886,8 @@ val getuid : unit -> int
 (** Return the effective user id under which the process runs. *)
 val geteuid : unit -> int
 
-(** Set the real user id and effective user id for the process. *)
+(** Sets the real user id and effective user id for the process. Only use this when
+    superuser. To setuid as an ordinary user, see Core_extended.Unix.seteuid. *)
 val setuid : int -> unit
 
 (** Return the group id of the user executing the process. *)
@@ -851,48 +903,49 @@ val setgid : int -> unit
    belongs. *)
 val getgroups : unit -> int array
 
-(** Structure of entries in the [passwd] database. *)
-type passwd_entry =
-  Unix.passwd_entry =
-    { pw_name : string;
-      pw_passwd : string;
-      pw_uid : int;
-      pw_gid : int;
-      pw_gecos : string;
-      pw_dir : string;
-      pw_shell : string
+(** Structure of entries in the [passwd] database *)
+module Passwd : sig
+  type t =
+    { name : string;
+      passwd : string;
+      uid : int;
+      gid : int;
+      gecos : string;
+      dir : string;
+      shell : string;
     }
 
+  val getbyname : string -> t option
+  val getbyname_exn : string -> t
+
+  val getbyuid : int -> t option
+  val getbyuid_exn : int -> t
+
+  val setpwent : unit -> unit
+  val endpwent : unit -> unit
+
+  val getpwent : unit -> t option
+  val getpwent_exn : unit -> t
+end
+
 (** Structure of entries in the [groups] database. *)
-type group_entry =
-  Unix.group_entry =
-    { gr_name : string;
-      gr_passwd : string;
-      gr_gid : int;
-      gr_mem : string array
+module Group : sig
+  type t =
+    { name : string;
+      passwd : string;
+      gid : int;
+      mem : string array;
     }
+  with sexp_of
+
+  val getbyname : string -> t option
+  val getbyname_exn : string -> t
+  val getbygid : int -> t option
+  val getbygid_exn : int -> t
+end
 
 (** Return the login name of the user executing the process. *)
 val getlogin : unit -> string
-
-
-(** Find an entry in [passwd] with the given name, or raise
-   [Not_found]. *)
-val getpwnam : string -> passwd_entry
-
-(** Find an entry in [group] with the given name, or raise
-   [Not_found]. *)
-val getgrnam : string -> group_entry
-
-(** Find an entry in [passwd] with the given user id, or raise
-   [Not_found]. *)
-val getpwuid : int -> passwd_entry
-
-(** Find an entry in [group] with the given group id, or raise
-   [Not_found]. *)
-val getgrgid : int -> group_entry
-
-
 
 (** {6 Internet addresses} *)
 
@@ -1131,61 +1184,61 @@ val establish_server :
 
 (** {6 Host and protocol databases} *)
 
-
-(** Structure of entries in the [hosts] database. *)
-type host_entry =
-  Unix.host_entry =
-    { h_name : string;
-      h_aliases : string array;
-      h_addrtype : socket_domain;
-      h_addr_list : inet_addr array
-    }
-
-(** Structure of entries in the [protocols] database. *)
-type protocol_entry =
-  Unix.protocol_entry =
-    { p_name : string;
-      p_aliases : string array;
-      p_proto : int
-    }
-
-
-(** Structure of entries in the [services] database. *)
-type service_entry =
-  Unix.service_entry =
-    { s_name : string;
-      s_aliases : string array;
-      s_port : int;
-      s_proto : string
-    }
-
 (** Return the name of the local host. *)
 val gethostname : unit -> string
 
+module Host : sig
+  (** Structure of entries in the [hosts] database. *)
+  type t =
+    { name : string;
+      aliases : string array;
+      addrtype : socket_domain;
+      addrs : inet_addr array;
+    }
 
-(** Find an entry in [hosts] with the given name, or raise
-   [Not_found]. *)
-val gethostbyname : string -> host_entry
+  (** Find an entry in [hosts] with the given name. *)
+  val getbyname : string -> t option
+  val getbyname_exn : string -> t
 
-(** Find an entry in [hosts] with the given address, or raise
-   [Not_found]. *)
-val gethostbyaddr : inet_addr -> host_entry
+  (** Find an entry in [hosts] with the given address. *)
+  val getbyaddr : inet_addr -> t option
+  val getbyaddr_exn : inet_addr -> t
+end
 
-(** Find an entry in [protocols] with the given name, or raise
-   [Not_found]. *)
-val getprotobyname : string -> protocol_entry
+module Protocol : sig
+  (** Structure of entries in the [protocols] database. *)
+  type t =
+    { name : string;
+      aliases : string array;
+      proto : int;
+    }
 
-(** Find an entry in [protocols] with the given protocol number,
-   or raise [Not_found]. *)
-val getprotobynumber : int -> protocol_entry
+  (** Find an entry in [protocols] with the given name. *)
+  val getbyname : string -> t option
+  val getbyname_exn : string -> t
 
-(** Find an entry in [services] with the given name, or raise
-   [Not_found]. *)
-val getservbyname : string -> protocol:string -> service_entry
+  (** Find an entry in [protocols] with the given protocol number. *)
+  val getbynumber : int -> t option
+  val getbynumber_exn : int -> t
+end
 
-(** Find an entry in [services] with the given service number,
-   or raise [Not_found]. *)
-val getservbyport : int -> protocol:string -> service_entry
+module Service : sig
+  (** Structure of entries in the [services] database. *)
+  type t =
+    { name : string;
+      aliases : string array;
+      port : int;
+      proto : string;
+    }
+
+  (** Find an entry in [services] with the given name. *)
+  val getbyname : string -> protocol:string -> t option
+  val getbyname_exn : string -> protocol:string -> t
+
+  (** Find an entry in [services] with the given service number. *)
+  val getbyport : int -> protocol:string -> t option
+  val getbyport_exn : int -> protocol:string -> t
+end
 
 (** Address information returned by {!Unix.getaddrinfo}. *)
 type addr_info =
@@ -1247,6 +1300,14 @@ type getnameinfo_option =
     Raise [Not_found] if an error occurs. *)
 val getnameinfo : sockaddr -> getnameinfo_option list -> name_info
 
+
+(** {2 Getting terminal size} *)
+
+
+
+(** [get_terminal_size ()] @return [(rows, cols)], the number of rows and
+    columns of the terminal. *)
+val get_terminal_size : unit -> int * int
 
 (** {6 Terminal interface} *)
 
@@ -1328,3 +1389,376 @@ val set_in_channel_timeout : in_channel -> float -> unit
 
 (** Set a timeout for a socket associated with an [out_channel] *)
 val set_out_channel_timeout : out_channel -> float -> unit
+
+(** {2 Utility functions} *)
+
+external exit_immediately : int -> _ = "caml_sys_exit"
+(** [exit_immediately exit_code] immediately calls the [exit] system call
+    with the given exit code without performing any other actions
+    (unlike Pervasives.exit).  Does not return. *)
+
+
+(** {2 Filesystem functions} *)
+
+val mknod :
+  ?file_kind : file_kind ->
+  ?perm : int ->
+  ?major : int ->
+  ?minor : int ->
+  string -> unit
+(** [mknod ?file_kind ?perm ?major ?minor path] creates a filesystem
+    entry.  Note that only FIFO-entries are guaranteed to be supported
+    across all platforms as required by the POSIX-standard.  On Linux
+    directories and symbolic links cannot be created with this function.
+    Use {!Unix.mkdir} and {!Unix.symlink} instead there respectively.
+
+    @raise Invalid_argument if an unsupported file kind is used.
+    @raise Unix_error if the system call fails.
+
+    @param file_kind default = [S_REG] (= regular file)
+    @param perm default = [0o600] (= read/write for user only)
+    @param major default = [0]
+    @param minor default = [0]
+*)
+
+
+(** {2 I/O vectors} *)
+
+(** I/O-vectors for scatter/gather-operations *)
+module IOVec : sig
+  open Bigarray
+
+  (** Representation of I/O-vectors.
+      NOTE: DO NOT CHANGE THE MEMORY LAYOUT OF THIS TYPE!!!
+      All C-functions in our bindings that handle I/O-vectors depend on it.
+  *)
+  type 'buf t = private
+    {
+      buf : 'buf;  (** Buffer holding the I/O-vector *)
+      pos : int;  (** Position of I/O-vector in buffer *)
+      len : int;  (** Length of I/O-vector in buffer *)
+    }
+
+  type 'buf kind  (** Kind of I/O-vector buffers *)
+
+  type bigstring = (char, int8_unsigned_elt, c_layout) Array1.t
+
+  val string_kind : string kind
+  val bigstring_kind : bigstring kind
+
+  val empty : 'buf kind -> 'buf t
+  (** [empty] the empty I/O-vector. *)
+
+  val of_string : ?pos : int -> ?len : int -> string -> string t
+  (** [of_string ?pos ?len str] @return an I/O-vector designated by
+      position [pos] and length [len] in string [str].
+
+      @raise Invalid_argument if designated substring out of bounds.
+
+      @param pos default = 0
+      @param len default = [String.length str - pos]
+  *)
+
+  val of_bigstring : ?pos : int -> ?len : int -> bigstring -> bigstring t
+  (** [of_bigstring ?pos ?len bstr] @return an I/O-vector designated by
+      position [pos] and length [len] in bigstring [bstr].
+
+      @raise Invalid_argument if designated substring out of bounds.
+
+      @param pos default = 0
+      @param len default = [String.length str - pos]
+  *)
+
+  val drop : 'buf t -> int -> 'buf t
+  (** [drop iovec n] drops [n] characters from [iovec].  @return resulting
+      I/O-vector.
+
+      @raise Failure if [n] is greater than length of [iovec].
+  *)
+
+  val max_iovecs : int
+end
+
+
+(** {2 I/O functions} *)
+
+external int_of_file_descr : file_descr -> int = "%identity"
+(** [int_of_file_descr fd] converts file descriptor [fd] to the internal
+    integer value. *)
+
+external file_descr_of_int : int -> file_descr = "%identity"
+(** [file_descr_of_int n] converts an integer to a file descriptor. *)
+
+external dirfd : dir_handle -> file_descr = "unix_dirfd"
+
+(** Extract a file descriptor from a directory handle. *)
+
+external sync : unit -> unit = "unix_sync"
+(** Synchronize all filesystem buffers with disk. *)
+
+external fsync : file_descr -> unit = "unix_fsync"
+(** Synchronize the kernel buffers of a given file descriptor with disk. *)
+
+IFDEF FDATASYNC THEN
+external fdatasync : file_descr -> unit = "unix_fdatasync"
+(** Synchronize the kernel buffers of a given file descriptor with disk,
+    but do not necessarily write file attributes. *)
+ENDIF
+
+external readdir_ino :
+  dir_handle -> string * nativeint = "unix_readdir_ino_stub"
+(** [readdir_ino dh] return the next entry in a directory (([(filename,
+    inode)]).  @raise End_of_file when the end of the directory has been
+    reached. *)
+
+val read_assume_fd_is_nonblocking :
+  file_descr -> ?pos : int -> ?len : int -> string -> int
+(** [read_assume_fd_is_nonblocking fd ?pos ?len buf] calls the system call
+    [read] ASSUMING THAT IT IS NOT GOING TO BLOCK.  Reads at most [len]
+    bytes into buffer [buf] starting at position [pos].  @return the
+    number of bytes actually read.
+
+    @raise Invalid_argument if buffer range out of bounds.
+    @raise Unix_error on Unix-errors.
+
+    @param pos = 0
+    @param len = [String.length buf - pos]
+*)
+
+val write_assume_fd_is_nonblocking :
+  file_descr -> ?pos : int -> ?len : int -> string -> int
+(** [write_assume_fd_is_nonblocking fd ?pos ?len buf] calls the system call
+    [write] ASSUMING THAT IT IS NOT GOING TO BLOCK.  Writes at most [len]
+    bytes from buffer [buf] starting at position [pos].  @return the
+    number of bytes actually written.
+
+    @raise Invalid_argument if buffer range out of bounds.
+    @raise Unix_error on Unix-errors.
+
+    @param pos = 0
+    @param len = [String.length buf - pos]
+*)
+
+val writev_assume_fd_is_nonblocking :
+  file_descr -> ?count : int -> string IOVec.t array -> int
+(** [writev_assume_fd_is_nonblocking fd ?count iovecs] calls the system call
+    [writev] ASSUMING THAT IT IS NOT GOING TO BLOCK using [count]
+    I/O-vectors [iovecs].  @return the number of bytes actually written.
+
+    @raise Invalid_argument if the designated ranges are invalid.
+    @raise Unix_error on Unix-errors.
+*)
+
+val writev : file_descr -> ?count : int -> string IOVec.t array -> int
+(** [writev fd ?count iovecs] like {!writev_assume_fd_is_nonblocking}, but does
+    not require the descriptor to not block.  If you feel you have to
+    use this function, you should probably have chosen I/O-vectors that
+    build on bigstrings, because this function has to internally blit
+    the I/O-vectors (ordinary OCaml strings) to intermediate buffers on
+    the C-heap.
+
+    @return the number of bytes actually written.
+
+    @raise Invalid_argument if the designated ranges are invalid.
+    @raise Unix_error on Unix-errors.
+*)
+
+external pselect :
+  file_descr list -> file_descr list -> file_descr list -> float -> int list ->
+  file_descr list * file_descr list * file_descr list = "unix_pselect_stub"
+(** [pselect rfds wfds efds timeout sigmask] like {!Core_unix.select} but
+    also allows one to wait for the arrival of signals. *)
+
+(** {2 Resource limits} *)
+module RLimit : sig
+  type limit = Limit of int64 | Infinity with sexp
+
+  type t = {
+    cur : limit;  (* soft limit *)
+    max : limit;  (* hard limit (ceiling for soft limit) *)
+  } with sexp
+
+  type resource = [
+    | `Core_file_size
+    | `Cpu_seconds
+    | `Data_segment
+    | `File_size
+    | `Num_file_descriptors
+    | `Stack
+    | `Virtual_memory
+  ] with sexp
+
+  (* See man pages for "getrlimit" and "setrlimit" for details. *)
+  val get : resource -> t
+  val set : resource -> t -> unit
+end
+
+(** {2 Resource usage} -- For details, "man getrusage" *)
+module Resource_usage : sig
+  
+  type who = SELF | CHILDREN
+
+  type t
+
+  val get : who -> t
+
+  val utime : t -> float      (* user time used *)
+  val stime : t -> float      (* system time used *)
+  val maxrss : t -> int64     (* maximum resident set size *)
+  val ixrss : t -> int64      (* integral shared memory size *)
+  val idrss : t -> int64      (* integral unshared data size *)
+  val isrss : t -> int64      (* integral unshared stack size *)
+  val minflt : t -> int64     (* page reclaims *)
+  val majflt : t -> int64     (* page faults *)
+  val nswap : t -> int64      (* swaps *)
+  val inblock : t -> int64    (* block input operations *)
+  val oublock : t -> int64    (* block output operations *)
+  val msgsnd : t -> int64     (* messages sent *)
+  val msgrcv : t -> int64     (* messages received *)
+  val nsignals : t -> int64   (* signals received *)
+  val nvcsw : t -> int64      (* voluntary context switches *)
+  val nivcsw : t -> int64     (* involuntary context switches *)
+
+  (** [add ru1 ru2] adds two rusage structures (e.g. your resource usage
+      and your children's). *)
+  val add : t -> t -> t
+end
+
+(** {2 System configuration} *)
+
+type sysconf =
+  | ARG_MAX
+  | CHILD_MAX
+  | HOST_NAME_MAX
+  | LOGIN_NAME_MAX
+  | OPEN_MAX
+  | PAGESIZE
+  | RE_DUP_MAX
+  | STREAM_MAX
+  | SYMLOOP_MAX
+  | TTY_NAME_MAX
+  | TZNAME_MAX
+  | POSIX_VERSION
+  | PHYS_PAGES
+  | AVPHYS_PAGES
+  | IOV_MAX
+
+external sysconf : sysconf -> int64 = "unix_sysconf"
+
+(** {2 Temporary file and directory creation} *)
+
+(** [mkstemp prefix] creates and opens a unique temporary file with
+    [prefix], automatically appending a suffix of six random characters
+    to make the name unique.
+
+    @raise Unix_error on errors.
+*)
+val mkstemp : string -> string * Unix.file_descr
+
+(** [mkdtemp prefix] creates a temporary directory with [prefix],
+    automatically appending a suffix of six random characters to make
+    the name unique.
+
+    @raise Unix_error on errors.
+k*)
+val mkdtemp : string -> string
+
+(** {2 Signal handling} *)
+
+(* Causes abnormal program termination unless the signal SIGABRT is
+   caught and the signal handler does not return.  If the SIGABRT signal is
+   blocked or ignored, the abort() function will still override it.
+*)
+external abort : unit -> _ = "unix_abort" "noalloc"
+
+(** {2 User id, group id} *)
+
+external initgroups : string -> int -> unit = "unix_initgroups"
+
+(** {2 Globbing and shell expansion} *)
+
+(* no system calls involved *)
+val fnmatch :
+  ?flags :
+    [ `No_escape
+    | `Pathname
+    | `Period
+    | `File_name
+    | `Leading_dir
+    | `Casefold ] list -> pat : string -> string -> bool
+
+(* See man page for wordexp. *)
+val wordexp :
+  ?flags : [ `No_cmd | `Show_err | `Undef ] list -> string -> string array
+
+(** {2 System information} *)
+
+module Utsname : sig
+  type t
+  val sysname : t -> string
+  val nodename : t -> string
+  val release : t -> string
+  val version : t -> string
+  val machine : t -> string
+end
+
+(* See man page for uname. *)
+val uname : unit -> Utsname.t
+
+(** {2 Additional IP functionality} *)
+
+(* [if_indextoname ifindex] If [ifindex] is an interface index, then
+   the function returns the interface name.  Otherwise, it raises
+   [Unix_error]. *)
+external if_indextoname : int -> string = "unix_if_indextoname"
+
+(** [mcast_join ?ifname sock addr] join a multicast group at [addr]
+    with socket [sock], optionally using network interface [ifname].
+
+    @param ifname default = any interface
+*)
+external mcast_join :
+  ?ifname : string -> file_descr -> sockaddr -> unit = "unix_mcast_join"
+
+(** [mcast_leave ?ifname sock addr] leaves a multicast group at [addr]
+    with socket [sock], optionally using network interface [ifname].
+
+    @param ifname default = any interface
+*)
+external mcast_leave :
+  ?ifname : string -> file_descr -> sockaddr -> unit = "unix_mcast_leave"
+
+module Scheduler : sig
+  module Policy : sig
+    type t = [ `Fifo | `Round_robin | `Other ] with sexp
+  end
+
+  (* See [man sched_setscheduler]. *)
+  val set : pid : int -> policy : Policy.t -> priority : int -> unit
+end
+
+module Priority : sig
+  external nice : int -> int = "unix_nice"
+end
+
+(** [get_num_open_fds ()] @return number of open file descriptors.  It walks
+    through every possible file descriptor and calls fcntl() to see if it
+    is valid, which may be slow.  This function can be useful for detecting
+    descriptor leaks. *)
+val get_num_open_fds : unit -> int
+
+(* For keeping your memory in RAM, i.e. preventing it from being swapped out. *)
+module Mman : sig
+  module Mcl_flags : sig
+    type t = Current | Future with sexp
+  end
+
+  (* Lock all pages in this processes virtual address space into physical memory. See [man
+     mlockall] for more details. *)
+  val mlockall : Mcl_flags.t list -> unit
+
+  (* Unlock previously locked pages. See [man munlockall]. *)
+  val munlockall : unit -> unit
+end
+
+(* vim: set filetype=ocaml : *)

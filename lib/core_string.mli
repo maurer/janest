@@ -1,10 +1,36 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 (** An extension of the standard StringLabels. If you open Core.Std, you'll get
     these in the String module. *)
 
 type t = string
 
+type identifiable = t
+
 include Binable.S with type binable = t
-include Comparable.S with type comparable = t
+include Comparable.S_binable with type comparable = t
 include Container.S0 with type container = t with type elt = char
 include Hashable.S_binable with type hashable = t
 include Sexpable.S with type sexpable = t
@@ -12,13 +38,19 @@ include Stringable.S with type stringable = t
 
 (* From the standard StringLabels *)
 external length : t -> int = "%string_length"
+
 external get : t -> int -> char = "%string_safe_get"
 external set : t -> int -> char -> unit = "%string_safe_set"
+
 external create : int -> t = "caml_create_string"
 val make : int -> char -> t
 val copy : t -> t
+val init : int -> f:(int -> char) -> t
+
 val sub : t -> pos:int -> len:int -> t
+
 val fill : t -> pos:int -> len:int -> char -> unit
+
 val blit : src:t -> src_pos:int -> dst:t -> dst_pos:int -> len:int -> unit
 
 (** concatanate all strings in the list using separator [sep] (default sep "") *)
@@ -26,26 +58,36 @@ val concat : ?sep:t -> t list -> t
 
 (* (** Like concat, but uses the Container typeclass *)
 val tc_concat : (t, 'container) Container.tc -> sep:t -> 'container -> t *)
+
+(** Warning: Only returns a copy if changes are necessary!  Special characters are
+    represented by escape sequences, following the lexical conventions of Objective
+    Caml. *)
 val escaped : t -> t
 
-
-val index : t -> char -> int
-val rindex : t -> char -> int
-val index_from : t -> int -> char -> int
-val rindex_from : t -> int -> char -> int
 val contains : t -> char -> bool
-val contains_from : t -> int -> char -> bool
+val contains_from  : t -> int -> char -> bool
 val rcontains_from : t -> int -> char -> bool
+
 val uppercase : t -> t
 val lowercase : t -> t
-val capitalize : t -> t
-val uncapitalize : t -> t
-val compare: t -> t -> int
 
-val init : int -> f:(int -> char) -> t
+val capitalize   : t -> t
+val uncapitalize : t -> t
+
+val index : t -> char -> int option
+val index_exn : t -> char -> int
+
+val rindex : t -> char -> int option
+val rindex_exn : t -> char -> int
+
+val index_from : t -> int -> char -> int option
+val index_from_exn : t -> int -> char -> int
+
+val rindex_from : t -> int -> char -> int option
+val rindex_from_exn : t -> int -> char -> int
 
 (** [slice s start stop] gets a slice of [s] between [start] and [stop].
-    [start] and [stop] will be normalized before the access
+    [start] and [stop] will be normalized before the access.
     (viz. Core_array.normalize). *)
 val slice : t -> int -> int -> t
 
@@ -71,10 +113,10 @@ val is_prefix : t -> prefix:t -> bool
 *)
 val lsplit2_exn : t -> on:char -> t * t
 
-(** If the string [s] contains the character [char], then [rsplit2_exn
-    s char] returns a pair containing [s] split around the first
-    appearance of [char] (from the right).
-    @raise Not_found When [char] cannot be found in [s]
+(** If the string [s] contains the character [on], then [rsplit2_exn
+    s ~on] returns a pair containing [s] split around the first
+    appearance of [on] (from the right).
+    @raise Not_found When [on] cannot be found in [s]
 *)
 val rsplit2_exn : t -> on:char -> t * t
 
@@ -87,8 +129,9 @@ val lsplit2 : t -> on:char -> (t * t) option
 val rsplit2 : t -> on:char -> (t * t) option
 
 (** [split s ~on] @return a list of substrings of [s] that are separated by
-    [on]. Consecutive [on] characters will cause multiple empty strings
-    in the result *)
+    [on].  Consecutive [on] characters will cause multiple empty strings
+    in the result.  Splitting the empty string returns a list of the empty
+    string, not the empty list. *)
 val split : t -> on:char -> t list
 
 (** [split_on_chars s ~on] @return a list of all substrings of [s]
@@ -105,6 +148,9 @@ val lfindi : t -> f:(int -> char -> bool) -> int option
 (** [rfindi s ~f] returns the index [i] of the last character in [s]
     satisfying [f i s.[i]]. *)
 val rfindi : t -> f:(int -> char -> bool) -> int option
+
+(* Warning: the following strip functions have copy-on-write semantics (i.e. they may
+   return the same string passed in) *)
 
 (** [lstrip s] returns a string with consecutive white space (tabs,
     spaces, newlines, and carriage returns) stripped from the beginning of
@@ -123,12 +169,15 @@ val strip : t -> t
 
 (** [map f s] applies [f] to each character in [s], and returns the
     resulting string. *)
-val map : f : (char -> char) -> t -> t
+val map : t -> f : (char -> char) -> t
+
+(** [mapi f s] applies [f] to each character in [s] and its index, and returns the
+    resulting string. *)
+val mapi : t -> f : (int -> char -> char) -> t
 
 (** Like [map], but allows replacement of a single character with zero or two or more
     characters. *)
 val concat_map : ?sep:t -> t -> f : (char -> t) -> t
-
 
 (** [tr target replacement s] replaces every instance of [target] in [s] with
     [replacement]. *)
@@ -138,23 +187,19 @@ val tr : target : char -> replacement : char -> t -> t
     replacing every instance of [target] in [s] with [replacement]. *)
 val tr_inplace : target : char -> replacement : char -> t -> unit
 
-
-
-
-
 (** [chop_suffix s ~suf] returns a copy [s] without the trailing [suff]
     @raise Invalid_argument is [suff] is not a suffix of [s]
 *)
-val chop_suffix : t -> suffix:t -> t
+val chop_suffix_exn : t -> suffix:t -> t
 
 (** [chop_prefix s ~pref] returns a copy [s] without the leading [pref]
     @raise Invalid_argument is [pref] is not a prefix of [s]
 *)
-val chop_prefix : t -> prefix:t -> t
+val chop_prefix_exn : t -> prefix:t -> t
 
-val chop_suffix_opt : t -> suffix:t -> t option
+val chop_suffix : t -> suffix:t -> t option
 
-val chop_prefix_opt : t -> prefix:t -> t option
+val chop_prefix : t -> prefix:t -> t option
 
 (** [suffix s n] returns the longest suffix of [s] of length less than or equal to [n] *)
 val suffix : string -> int -> string

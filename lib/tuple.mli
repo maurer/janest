@@ -1,4 +1,26 @@
-
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 module T2 : sig
   type ('a, 'b) t = 'a * 'b
@@ -41,3 +63,36 @@ module T3 : sig
   val map2 : f:('b -> 'd) -> ('a, 'b, 'c) t -> ('a, 'd, 'c) t
   val map3 : f:('c -> 'd) -> ('a, 'b, 'c) t -> ('a, 'b, 'd) t
 end
+
+(* These functors allow users to write:
+   module Foo = struct
+     type t = String.t * Int.t
+     include Tuple.T2.Comparable (String.t) (Int)
+     include Tuple.T2.Hashable (String.t) (Int)
+   end
+*)
+
+module type Comparable_sexpable = sig
+  include Comparable.S
+  include Sexpable.S with type sexpable = comparable
+end
+
+module Comparable (S1 : Comparable_sexpable) (S2 : Comparable_sexpable)
+  : Comparable.S with type comparable = S1.comparable * S2.comparable
+
+module type Hashable_sexpable = sig
+  type t
+  include Hashable.S with type hashable = t
+  val compare : t -> t -> int
+  include Sexpable.S with type sexpable = t
+end
+
+
+module Hashable (S1 : Hashable_sexpable) (S2 : Hashable_sexpable)
+  : Hashable.S with type hashable = S1.hashable * S2.hashable
+
+module Sexpable (S1 : Sexpable.S) (S2 : Sexpable.S)
+  : Sexpable.S with type sexpable = S1.sexpable * S2.sexpable
+
+module Hashable_sexpable (S1 : Hashable_sexpable) (S2 : Hashable_sexpable)
+  : Hashable_sexpable with type t = S1.t * S2.t

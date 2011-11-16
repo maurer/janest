@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 open OUnit;;
 open Core.Std
 open Array
@@ -6,10 +30,10 @@ let ar1 = [|1;2;3;4;5;6;7;8;9;10|]
 
 let ( =|= ) list array = list = Array.to_list array
 
-let test = 
+let test =
   "core_array" >:::
-    [ "slice" >:: 
-        (fun () -> 
+    [ "slice" >::
+        (fun () ->
            "all" @? (slice ar1 0 0 = ar1);
            "ordinary" @? (slice ar1 1 3 = [|2;3|]);
            "neg1" @? (slice ar1 0 (-1) = [|1;2;3;4;5;6;7;8;9|]);
@@ -17,7 +41,7 @@ let test =
            "neg3" @? (slice ar1 (-5) (-4) = [|6|];)
         );
       "nget" >::
-        (fun () -> 
+        (fun () ->
            "neg" @? (nget ar1 (-3) = 8);
            "pos" @? (nget ar1 3 = ar1.(3));
            "invalid" @?
@@ -25,7 +49,7 @@ let test =
               with Invalid_argument _ -> true | _ -> false)
         );
       "filter_opt" >::
-        (fun () -> 
+        (fun () ->
            "none" @? (filter_opt [|None;None;None|] = [||]);
            "single" @? (filter_opt [|None;Some 3;None|] = [|3|]);
            "singlef" @? (filter_opt [|None;Some 3.;None|] = [|3.|]);
@@ -73,15 +97,15 @@ let test =
            let one_list = [0] in
            "ordered" @?
              (let ordered_array = Array.of_list ordered_list in
-              Array.rev ordered_array;
+              Array.rev_inplace ordered_array;
               List.rev ordered_list =|= ordered_array);
            "empty" @?
              (let empty_array = Array.of_list empty_list in
-              Array.rev empty_array;
+              Array.rev_inplace empty_array;
               List.rev empty_list =|= empty_array);
            "one" @?
              (let one_array = Array.of_list one_list in
-              Array.rev one_array;
+              Array.rev_inplace one_array;
               List.rev one_list =|= one_array);
         );
       "replace_all" >::

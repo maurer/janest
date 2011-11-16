@@ -1,17 +1,41 @@
+/******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************/
+
 
 
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 #include <caml/mlvalues.h>
 #include <caml/alloc.h>
 #include <caml/custom.h>
 #include <caml/fail.h>
 #include <caml/memory.h>
 #include <caml/callback.h>
-
 #include "ocaml_utils.h"
 
-/* The code for crc_octets and the constants involded is taken from 
+/* The code for crc_octets and the constants involded is taken from
    RFC2440 http://sunsite.icm.edu.pl/gnupg/rfc2440-6.html
  */
 #define CRC24_INIT 0xb704ceL
@@ -27,7 +51,7 @@ crc24 crc_octets(unsigned char *octets, size_t len) {
     for (i = 0; i < 8; i++) {
       crc <<= 1;
       if (crc & 0x1000000)
-	crc ^= CRC24_POLY;
+        crc ^= CRC24_POLY;
     }
   }
   return crc & 0xffffffL;
@@ -98,7 +122,12 @@ value caml_crc32(value v_str) {
   return caml_copy_int64(crc);
 }
 
-/* Improved localtime implementation */
+/* Improved localtime implementation
+
+   Addresses bug:
+
+   http://caml.inria.fr/mantis/view.php?id=5193
+ */
 
 #include <time.h>
 #include <errno.h>
@@ -147,7 +176,12 @@ CAMLprim value core_timegm (value tm_val) {
   return caml_copy_double((double) res);
 }
 
-#define WRAP_TIME_FUN(NAME) \
+/*
+ * These are the same functions as the ones in ocaml except that they call
+ * {localtime,gmtime}_r instead of {localtime,gmtime} to avoid setting the
+ * global tzname (instead setting the tm_store value that we discard).
+ */
+#define WRAP_TIME_FUN(NAME, ERROR)                   \
   CAMLprim value core_##NAME (value t)         \
   { \
     time_t clock; \
@@ -155,9 +189,80 @@ CAMLprim value core_timegm (value tm_val) {
     struct tm tm_store; \
     clock = (time_t) Double_val(t); \
     tm = NAME##_r(&clock, &tm_store); \
-    if (tm == NULL) caml_failwith("##NAME##"); \
+    if (tm == NULL) caml_failwith(ERROR); \
     return alloc_tm(tm); \
   }
 
-WRAP_TIME_FUN(localtime)
-WRAP_TIME_FUN(gmtime)
+WRAP_TIME_FUN(localtime, "localtime")
+WRAP_TIME_FUN(gmtime, "gmtime")
+
+/* Fixing 5193 */
+
+/* Fix the broken close_(in/out) function which does not release the
+   caml lock. */
+
+#define IO_BUFFER_SIZE 4096
+
+typedef long file_offset;
+
+struct channel {
+  int fd;                       /* Unix file descriptor */
+  file_offset offset;           /* Absolute position of fd in the file */
+  char * end;                   /* Physical end of the buffer */
+  char * curr;                  /* Current position in the buffer */
+  char * max;                   /* Logical end of the buffer (for input) */
+  void * mutex;                 /* Placeholder for mutex (for systhreads) */
+  struct channel * next, * prev;/* Double chaining of channels (flush_all) */
+  int revealed;                 /* For Cash only */
+  int old_revealed;             /* For Cash only */
+  int refcount;                 /* For flush_all and for Cash */
+  int flags;                    /* Bitfield */
+  char buff[IO_BUFFER_SIZE];    /* The buffer itself */
+};
+
+#define Channel(v) (*((struct channel **) (Data_custom_val(v))))
+
+CAMLprim value fixed_close_channel(value vchannel)
+{
+  int result;
+  int tmp_fd = -1;
+  struct channel *channel = Channel(vchannel);
+
+  if (channel->fd == -1) result = 0;
+  else {
+    tmp_fd = channel->fd;
+    channel->fd = -1;
+
+    caml_enter_blocking_section();
+    result = close(tmp_fd);
+    caml_leave_blocking_section();
+
+    channel->curr = channel->max = channel->end;
+  }
+
+  if (result == -1) caml_failwith("error closing channel");
+  return Val_unit;
+}
+
+
+/* It is assumed that all parameters have been checked for sanity in
+   OCaml.  The returned index is a global offset in the string.  Since
+   this function does not access the OCaml runtime, we can attach the
+   "noalloc" qualifier to its external declaration for faster function
+   calls.  This function returns the offset of the wanted character or
+   the index after the last character of the searched range if it
+   could not be found.  OCaml code has to check for this case and
+   handle it accordingly.  Don't raise an exception here in C-code,
+   otherwise we cannot use the "noalloc" qualifier! */
+CAMLprim value caml_string_index(
+  value v_str, value v_ofs, value v_len, value v_char)
+{
+  char *str = String_val(v_str);
+  size_t ofs = Long_val(v_ofs);
+  size_t len = Long_val(v_len);
+  char c = Int_val(v_char);
+  char *s = str + ofs;
+  char *e = s + len;
+  while (s < e && *s != c) ++s;
+  return Val_long(s - str);
+}

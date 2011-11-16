@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 (** Line-by-line reading of a file.  A line buffer allows one to read
     one line of a file at a time, blocking until a line is available.
     Line buffers are distinct from Pervasives.read_line in that they
@@ -34,8 +58,7 @@ exception File_truncated_or_deleted
       once max_null_retries is reached.
 *)
 
-
-val open_linebuf :
+val create :
      ?pos:Int64.t
   -> ?close_on_eof:bool
   -> ?null_hack:[ `Off | `Retry_then_fail | `Retry ]
@@ -45,13 +68,11 @@ val open_linebuf :
   -> string
   -> t
 
-
 (** Closes the line buffer (and the underlying file).  *)
-val close_linebuf : t -> unit
+val close : t -> unit
 
 (** Returns whether or not the line buffer is closed *)
-
-val closed_linebuf : t -> bool
+val is_closed : t -> bool
 
 (** Tries to read a line from the file.  If no more lines are available,
     returns [None]. *)
