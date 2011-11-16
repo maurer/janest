@@ -1,9 +1,33 @@
-(*pp $(pwd)/pp.sh *)
-(*
-#include <unistd.h>
-#include <netinet/in.h>
-#undef SEEK_SET
-end-pp-include*)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
+INCLUDE "config.mlh"
+(* The preceding C declarations are required for the C preprocessor
+   so that the ifdefs below will correctly reflect the capabilities of
+   the system we are compiling on.  This is only needed for the public
+   release of Core. *)
+
 open Unix
 open Bigarray
 
@@ -11,6 +35,7 @@ open Bigarray
 
 (** Type of bigstrings *)
 type t = (char, int8_unsigned_elt, c_layout) Array1.t
+include Binable.S with type binable = t
 
 (** Type of I/O errors *)
 exception IOError of
@@ -19,6 +44,7 @@ exception IOError of
 
 
 (** {6 Creation and string conversion} *)
+
 
 val create : int -> t
 (** [create length] @return a new bigstring having [length]. *)
@@ -62,12 +88,12 @@ val get_opt_len : t -> pos : int -> int option -> int
 val length : t -> int
 (** [length bstr] @return the length of bigstring [bstr]. *)
 
-
-val sub_copy : ?pos : int -> ?len : int -> t -> t
-(** [sub_copy ?pos ?len bstr] @return the sub-bigstring in [bstr]
-    that starts at position [pos] and has length [len].  The sub-bigstring
-    is a unique copy of the memory region, i.e. modifying it will not
-    modify the original bigstring.
+val sub : ?pos : int -> ?len : int -> t -> t
+(** [sub ?pos ?len bstr] @return the sub-bigstring in [bstr] that starts at
+    position [pos] and has length [len].  The sub-bigstring is a unique copy
+    of the memory region, i.e. modifying it will not modify the original
+    bigstring.  Note that this is different than the behavior of the
+    standard OCaml Array1.sub, which shares the memory.
 
     @param pos default = 0
     @param len default = [Bigstring.length bstr - pos]
@@ -83,6 +109,9 @@ val sub_shared : ?pos : int -> ?len : int -> t -> t
     @param pos default = 0
     @param len default = [Bigstring.length bstr - pos]
 *)
+
+(** [get t pos] returns the character at [pos] *)
+val get : t -> int -> char
 
 external is_mmapped : t -> bool = "bigstring_is_mmapped_stub" "noalloc"
 (** [is_mmapped bstr] @return whether the bigstring [bstr] is
@@ -164,6 +193,22 @@ val really_recv : file_descr -> ?pos : int -> ?len : int -> t -> unit
     @param len default = [length bstr - pos]
 *)
 
+val recvfrom_assume_fd_is_nonblocking :
+  file_descr -> ?pos : int -> ?len : int -> t -> int * sockaddr
+(** [recvfrom_assume_fd_is_nonblocking sock ?pos ?len bstr] reads up to
+    [len] bytes into bigstring [bstr] starting at position [pos] from
+    socket [sock] without yielding to other OCaml-threads.
+
+    @return the number of bytes actually read and the socket address of
+    the client.
+
+    @raise Unix_error in the case of input errors.
+    @raise Invalid_argument if the designated range is out of bounds.
+
+    @param pos default = 0
+    @param len default = [length bstr - pos]
+*)
+
 val read_assume_fd_is_nonblocking :
   file_descr -> ?pos : int -> ?len : int -> t -> int
 (** [read_assume_fd_is_nonblocking fd ?pos ?len bstr] reads up to
@@ -229,7 +274,7 @@ val really_write : file_descr -> ?pos : int -> ?len : int -> t -> unit
     @param len default = [length bstr - pos]
 *)
 
-#if defined(MSG_NOSIGNAL)
+IFDEF MSG_NOSIGNAL THEN
 val really_send_no_sigpipe : file_descr -> ?pos : int -> ?len : int -> t -> unit
 (** [really_send_no_sigpipe sock ?pos ?len bstr] sends [len] bytes in
     bigstring [bstr] starting at position [pos] to socket [sock] without
@@ -255,9 +300,21 @@ val send_nonblocking_no_sigpipe :
     @param pos default = 0
     @param len default = [length bstr - pos]
 *)
-#else
-#warning "MSG_NOSIGNAL not defined; send_nonblocking_no_sigpipe, really_send_no_sigpipe not implemented."
-#endif
+
+val sendto_nonblocking_no_sigpipe :
+  file_descr -> ?pos : int -> ?len : int -> t -> sockaddr -> int option
+(** [sendto_nonblocking_no_sigpipe sock ?pos ?len bstr sockaddr] tries
+    to send [len] bytes in bigstring [bstr] starting at position [pos]
+    to socket [sock] using address [addr].  @return [Some bytes_written],
+    or [None] if the operation would have blocked.
+
+    @raise Invalid_argument if the designated range is out of bounds.
+    @raise Unix_error in the case of output errors.
+
+    @param pos default = 0
+    @param len default = [length bstr - pos]
+*)
+ENDIF
 
 val write : file_descr -> ?pos : int -> ?len : int -> t -> int
 (** [write fd ?pos ?len bstr] writes [len]
@@ -286,7 +343,7 @@ val write_assume_fd_is_nonblocking :
 *)
 
 val writev :
-  file_descr -> ?count : int -> t Unix_ext.IOVec.t array -> int
+  file_descr -> ?count : int -> t Core_unix.IOVec.t array -> int
 (** [writev fd ?count iovecs] writes [count] [iovecs] of
     bigstrings to file descriptor [fd].  @return the number of bytes
     written.
@@ -298,7 +355,7 @@ val writev :
 *)
 
 val writev_assume_fd_is_nonblocking :
-  file_descr -> ?count : int -> t Unix_ext.IOVec.t array -> int
+  file_descr -> ?count : int -> t Core_unix.IOVec.t array -> int
 (** [writev_assume_fd_is_nonblocking fd ?count iovecs] writes [count]
     [iovecs] of bigstrings to file descriptor [fd] without yielding to
     other OCaml-threads.  @return the number of bytes actually written.
@@ -309,9 +366,9 @@ val writev_assume_fd_is_nonblocking :
     @param count default = [Array.length iovecs]
 *)
 
-#if defined(MSG_NOSIGNAL)
+IFDEF MSG_NOSIGNAL THEN
 val sendmsg_nonblocking_no_sigpipe :
-  file_descr -> ?count : int -> t Unix_ext.IOVec.t array -> int option
+  file_descr -> ?count : int -> t Core_unix.IOVec.t array -> int option
 (** [sendmsg_nonblocking_no_sigpipe sock ?count iovecs] sends
     [count] [iovecs] of bigstrings to socket [sock].  @return [Some
     bytes_written], or [None] if the operation would have blocked.
@@ -323,9 +380,7 @@ val sendmsg_nonblocking_no_sigpipe :
 
     @param count default = [Array.length iovecs]
 *)
-#else
-#warning "MSG_NOSIGNAL not defined; sendmsg_nonblocking_no_sigpipe not implemented."
-#endif
+ENDIF
 
 val output :
   ?min_len : int -> out_channel -> ?pos : int -> ?len : int -> t -> int
@@ -452,7 +507,7 @@ external unsafe_really_write :
     {!Bigstring.write}, but does not perform any bounds checks.
     Will crash on bounds errors! *)
 
-#if defined(MSG_NOSIGNAL)
+IFDEF MSG_NOSIGNAL THEN
 external unsafe_really_send_no_sigpipe :
   file_descr -> pos : int -> len : int -> t -> unit
   = "bigstring_really_send_no_sigpipe_stub"
@@ -465,9 +520,7 @@ val unsafe_send_nonblocking_no_sigpipe :
 (** [unsafe_send_nonblocking_no_sigpipe sock ~pos ~len bstr] similar to
     {!Bigstring.send_nonblocking_no_sigpipe}, but does not perform any
     bounds checks.  Will crash on bounds errors! *)
-#else
-#warning "MSG_NOSIGNAL not defined; send{,msg}_noblocking_no_sigpipe unavailable."
-#endif
+ENDIF
 
 external unsafe_output :
   min_len : int -> out_channel -> pos : int -> len : int -> t -> int
@@ -477,22 +530,33 @@ external unsafe_output :
     Will crash on bounds errors! *)
 
 external unsafe_writev :
-  file_descr -> t Unix_ext.IOVec.t array -> int -> int
+  file_descr -> t Core_unix.IOVec.t array -> int -> int
   = "bigstring_writev_stub"
 (** [unsafe_writev fd iovecs count] similar to
     {!Bigstring.writev}, but does not perform any bounds checks.
     Will crash on bounds errors! *)
 
-#if defined(MSG_NOSIGNAL)
+IFDEF MSG_NOSIGNAL THEN
 val unsafe_sendmsg_nonblocking_no_sigpipe :
-  file_descr -> t Unix_ext.IOVec.t array -> int -> int option
+  file_descr -> t Core_unix.IOVec.t array -> int -> int option
 (** [unsafe_sendmsg_nonblocking_no_sigpipe fd iovecs count]
     similar to {!Bigstring.sendmsg_nonblocking_no_sigpipe}, but
     does not perform any bounds checks.  Will crash on bounds errors! *)
+ENDIF
 
-#else
-#warning "MSG_NOSIGNAL not defined; unsafe_sendmsg_nonblocking_no_sigpipe unavailable."
-#endif
+(** {6 Search} *)
+
+(** [find ?pos ?len char t] returns [Some i] for the smallest [i >= pos] such that
+    [t.{i} = char], or [None] if there is no such [i].
+
+    @param pos default = 0
+    @param len default = [length bstr - pos] *)
+val find :
+  ?pos : int
+  -> ?len : int
+  -> char
+  -> t
+  -> int option
 
 (** {6 Destruction} *)
 

@@ -1,4 +1,34 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This file is derived from source code of the Ocaml compiler.               *
+ * which has additional copyrights:                                           *
+ *                                                                            *
+ *    Xavier Leroy, projet Cristal, INRIA Rocquencourt                        *
+ *                                                                            *
+ *    Copyright 1999 Institut National de Recherche en Informatique et        *
+ *    en Automatique.                                                         *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 (***********************************************************************)
 (*                                                                     *)
@@ -13,7 +43,6 @@
 (*                                                                     *)
 (***********************************************************************)
 
-TYPE_CONV_PATH "Core.Core_set"
 
 (* $Id: pSet.ml,v 1.2 2003/09/10 15:40:01 sandor Exp $ *)
 
@@ -29,9 +58,19 @@ module List = StdLabels.List
 module type Elt = Elt
 module type S = Core_set_intf.S
 
+module type S_binable = sig
+  include S
+  include Binable.S with type binable = t
+end
 
 
-type +'a tree = Empty | Node of 'a tree * 'a * 'a tree * int
+
+type 'a tree =
+| Empty
+(* (Leaf x) is the same as (Node (Empty, x, Empty, 1, 1)) but uses less space. *)
+| Leaf of 'a
+(* first int is height, second is sub-tree size *)
+| Node of 'a tree * 'a * 'a tree * int * int
 
 module Raw_impl (Elt : sig type +'a t val compare : 'a t -> 'a t -> int end) =
 struct
@@ -43,8 +82,16 @@ struct
   (* Sets are represented by balanced binary trees (the heights of the
      children differ by at most 2 *)
   let height = function
-      Empty -> 0
-    | Node(_, _, _, h) -> h
+    | Empty -> 0
+    | Leaf _ -> 1
+    | Node(_, _, _, h, _) -> h
+
+  let cardinal = function
+    | Empty -> 0
+    | Leaf _ -> 1
+    | Node(_, _, _, _, s) -> s
+
+  let length = cardinal
 
       (* Creates a new node with left son l, value v and right son r.
          We must have all elements of l < v < all elements of r.
@@ -52,9 +99,16 @@ struct
          Inline expansion of height for better speed. *)
 
   let create l v r =
-    let hl = match l with Empty -> 0 | Node(_,_,_,h) -> h in
-    let hr = match r with Empty -> 0 | Node(_,_,_,h) -> h in
-    Node(l, v, r, (if hl >= hr then hl + 1 else hr + 1))
+    let hl = match l with Empty -> 0 | Leaf _ -> 1 | Node(_,_,_,h,_) -> h in
+    let hr = match r with Empty -> 0 | Leaf _ -> 1 | Node(_,_,_,h,_) -> h in
+    let h = if hl >= hr then hl + 1 else hr + 1 in
+    if h = 1
+    then Leaf v
+    else begin
+      let sl = match l with Empty -> 0 | Leaf _ -> 1 | Node(_,_,_,_,s) -> s in
+      let sr = match r with Empty -> 0 | Leaf _ -> 1 | Node(_,_,_,_,s) -> s in
+      Node (l, v, r, h, sl + sr + 1)
+    end
 
       (* Same as create, but performs one step of rebalancing if necessary.
          Assumes l and r balanced and | height l - height r | <= 3.
@@ -62,41 +116,58 @@ struct
          where no rebalancing is required. *)
 
   let bal l v r =
-    let hl = match l with Empty -> 0 | Node(_,_,_,h) -> h in
-    let hr = match r with Empty -> 0 | Node(_,_,_,h) -> h in
+    let hl = match l with Empty -> 0 | Leaf _ -> 1 | Node(_,_,_,h,_) -> h in
+    let hr = match r with Empty -> 0 | Leaf _ -> 1 | Node(_,_,_,h,_) -> h in
     if hl > hr + 2 then begin
       match l with
-        Empty -> invalid_arg "Set.bal"
-      | Node(ll, lv, lr, _) ->
-          if height ll >= height lr then
-            create ll lv (create lr v r)
-          else begin
-            match lr with
-              Empty -> invalid_arg "Set.bal"
-            | Node(lrl, lrv, lrr, _)->
-                create (create ll lv lrl) lrv (create lrr v r)
-          end
+        Empty -> assert false
+      | Leaf _ -> assert false          (* because h(l)>h(r)+2 and h(leaf)=1 *)
+      | Node(ll, lv, lr, _, _) ->
+        if height ll >= height lr then
+          create ll lv (create lr v r)
+        else begin
+          match lr with
+            Empty -> assert false
+          | Leaf lrv ->
+            assert (ll = Empty);
+            create (create ll lv Empty) lrv (create Empty v r)
+          | Node(lrl, lrv, lrr, _, _)->
+            create (create ll lv lrl) lrv (create lrr v r)
+        end
     end else if hr > hl + 2 then begin
       match r with
-        Empty -> invalid_arg "Set.bal"
-      | Node(rl, rv, rr, _) ->
-          if height rr >= height rl then
-            create (create l v rl) rv rr
-          else begin
-            match rl with
-              Empty -> invalid_arg "Set.bal"
-            | Node(rll, rlv, rlr, _) ->
-                create (create l v rll) rlv (create rlr rv rr)
-          end
-    end else
-      Node(l, v, r, (if hl >= hr then hl + 1 else hr + 1))
-
-      (* Insertion of one element *)
+        Empty -> assert false
+      | Leaf rv -> create (create l v Empty) rv Empty
+      | Node(rl, rv, rr, _, _) ->
+        if height rr >= height rl then
+          create (create l v rl) rv rr
+        else begin
+          match rl with
+            Empty -> assert false
+          | Leaf rlv ->
+            assert (rr = Empty);
+            create (create l v Empty) rlv (create Empty rv rr)
+          | Node(rll, rlv, rlr, _, _) ->
+            create (create l v rll) rlv (create rlr rv rr)
+        end
+    end else begin
+      let h = if hl >= hr then hl + 1 else hr + 1 in
+      let sl = match l with Empty -> 0 | Leaf _ -> 1 | Node(_,_,_,_,s) -> s in
+      let sr = match r with Empty -> 0 | Leaf _ -> 1 | Node(_,_,_,_,s) -> s in
+      if h = 1
+      then Leaf v
+      else Node (l, v, r, h, sl + sr + 1)
+    end
+  (* Insertion of one element *)
 
   let rec add t x =
     match t with
-    | Empty -> Node(Empty, x, Empty, 1)
-    | Node(l, v, r, _) as t ->
+    | Empty -> Leaf x
+    | (Leaf v) as t ->
+        let c = Elt.compare x v in
+        if c = 0 then t else
+          if c < 0 then bal (Leaf x) v Empty else bal Empty v (Leaf x)
+    | Node(l, v, r, _, _) as t ->
         let c = Elt.compare x v in
         if c = 0 then t else
           if c < 0 then bal (add l x) v r else bal l v (add r x)
@@ -108,7 +179,10 @@ struct
     match (l, r) with
       (Empty, _) -> add r v
     | (_, Empty) -> add l v
-    | (Node(ll, lv, lr, lh), Node(rl, rv, rr, rh)) ->
+    
+    | (Leaf lv, _) -> join (Node (Empty, lv, Empty, 1, 1)) v r
+    | (_, Leaf rv) -> join l v (Node (Empty, rv, Empty, 1, 1))
+    | (Node(ll, lv, lr, lh, _), Node(rl, rv, rr, rh, _)) ->
         if lh > rh + 2 then bal ll lv (join lr v r) else
           if rh > lh + 2 then bal (join l v rl) rv rr else
             create l v r
@@ -117,18 +191,39 @@ struct
 
   let rec min_elt = function
       Empty -> None
-    | Node(Empty, v, _, _) -> Some v
-    | Node(l, _, _, _) -> min_elt l
+    | Leaf v
+    | Node(Empty, v, _, _, _) -> Some v
+    | Node(l, _, _, _, _) -> min_elt l
 
   let rec min_elt_exn t =
     match min_elt t with
     | None -> raise Not_found
     | Some v -> v
 
+  let fold_until t ~init ~f =
+    let rec fold_until_helper ~f t acc =
+      match t with
+      | Empty -> `Continue acc
+      | Leaf value -> f value acc
+      | Node(left, value, right, _, _) ->
+          match fold_until_helper ~f left acc with
+          | `Stop _a as x -> x
+          | `Continue acc ->
+              match (f value acc) with
+              | `Stop _a as x -> x
+              | `Continue a -> fold_until_helper ~f right a
+    in
+    match fold_until_helper ~f t init with
+    | `Stop a -> a
+    (* `Continue case is reached if Set is exhausted without `Stop being returned.
+       This will happen if t is empty, for example. *)
+    | `Continue a -> a
+
   let rec max_elt = function
       Empty -> None
-    | Node(_, v, Empty, _) -> Some v
-    | Node(_, _, r, _) -> max_elt r
+    | Leaf v
+    | Node(_, v, Empty, _, _) -> Some v
+    | Node(_, _, r, _, _) -> max_elt r
 
   let rec max_elt_exn t =
     match max_elt t with
@@ -139,8 +234,9 @@ struct
 
   let rec remove_min_elt = function
       Empty -> invalid_arg "Set.remove_min_elt"
-    | Node(Empty, _, r, _) -> r
-    | Node(l, v, r, _) -> bal (remove_min_elt l) v r
+    | Leaf _ -> Empty
+    | Node(Empty, _, r, _, _) -> r
+    | Node(l, v, r, _, _) -> bal (remove_min_elt l) v r
 
       (* Merge two trees l and r into one.
          All elements of l must precede the elements of r.
@@ -170,7 +266,14 @@ struct
   let rec split x = function
       Empty ->
         (Empty, false, Empty)
-    | Node(l, v, r, _) ->
+    | Leaf v ->
+        let c = Elt.compare x v in
+        if c = 0 then (Empty, true, Empty)
+        else if c < 0 then
+          (Empty, false, Leaf v)
+        else
+         (Leaf v, false, Empty)
+    | Node(l, v, r, _, _) ->
         let c = Elt.compare x v in
         if c = 0 then (l, true, r)
         else if c < 0 then
@@ -187,24 +290,43 @@ struct
   let rec mem t x =
     match t with
     | Empty -> false
-    | Node(l, v, r, _) ->
+    | Leaf v ->
+        let c = Elt.compare x v in
+        c = 0
+    | Node(l, v, r, _, _) ->
         let c = Elt.compare x v in
         c = 0 || mem (if c < 0 then l else r) x
 
-  let singleton x = Node(Empty, x, Empty, 1)
+  let singleton x = Leaf x
 
   let rec remove t x =
     match t with
     | Empty -> Empty
-    | Node(l, v, r, _) ->
+    | Leaf v ->
+        let c = Elt.compare x v in
+        if c = 0 then Empty else t
+    | Node(l, v, r, _, _) ->
         let c = Elt.compare x v in
         if c = 0 then merge l r else
           if c < 0 then bal (remove l x) v r else bal l v (remove r x)
 
+  let rec remove_index t i =
+    match t with
+    | Empty -> Empty
+    | Leaf _ -> if i = 0 then Empty else t
+    | Node (l, v, r, _, _) ->
+      let l_size = length l in
+      let c = Pervasives.compare i l_size in
+      if c = 0 then merge l r else
+        if c < 0 then bal (remove_index l i) v r else bal l v (remove_index r (i - l_size - 1))
+
   let rec union s1 s2 =
     match (s1, s2) with
     | Empty, t | t, Empty -> t
-    | (Node(l1, v1, r1, h1), Node(l2, v2, r2, h2)) ->
+    
+    | Leaf v1, _ -> union (Node(Empty, v1, Empty, 1, 1)) s2
+    | _, Leaf v2 -> union s1 (Node(Empty, v2, Empty, 1, 1))
+    | (Node(l1, v1, r1, h1, _), Node(l2, v2, r2, h2, _)) ->
         if h1 >= h2 then
           if h2 = 1 then add s1 v2 else begin
             let (l2, _, r2) = split v1 s2 in
@@ -221,7 +343,9 @@ struct
   let rec inter s1 s2 =
     match (s1, s2) with
     | Empty, _ | _, Empty -> Empty
-    | (Node(l1, v1, r1, _), t2) ->
+    
+    | (Leaf v1, t2) -> inter (Node(Empty,v1,Empty,1,1)) t2
+    | (Node(l1, v1, r1, _, _), t2) ->
         match split v1 t2 with
           (l2, false, r2) ->
             concat (inter l1 l2) (inter r1 r2)
@@ -232,7 +356,9 @@ struct
     match (s1, s2) with
       (Empty, _) -> Empty
     | (t1, Empty) -> t1
-    | (Node(l1, v1, r1, _), t2) ->
+    
+    | (Leaf v1, t2) -> diff (Node(Empty, v1, Empty, 1, 1)) t2
+    | (Node(l1, v1, r1, _, _), t2) ->
         match split v1 t2 with
           (l2, false, r2) ->
             join (diff l1 l2) v1 (diff r1 r2)
@@ -245,7 +371,8 @@ struct
     let rec cons s e =
       match s with
       | Empty -> e
-      | Node (l, v, r, _) -> cons l (More (v, r, e))
+      | Leaf v -> (More (v, Empty, e))
+      | Node (l, v, r, _, _) -> cons l (More (v, r, e))
 
     let rec compare e1 e2 =
       match (e1, e2) with
@@ -260,7 +387,7 @@ struct
 
     let of_set s = cons s End
   end
-    
+
   let compare s1 s2 =
     Enum.compare (Enum.of_set s1) (Enum.of_set s2)
 
@@ -273,77 +400,91 @@ struct
         true
     | _, Empty ->
         false
-    | Node (l1, v1, r1, _), (Node (l2, v2, r2, _) as t2) ->
+    
+    | Leaf v1, t2 -> subset (Node (Empty, v1, Empty, 1, 1)) t2
+    | t1, Leaf v2 -> subset t1 (Node (Empty, v2, Empty, 1, 1))
+    | Node (l1, v1, r1, _, _), (Node (l2, v2, r2, _, _) as t2) ->
         let c = Elt.compare v1 v2 in
         if c = 0 then
           subset l1 l2 && subset r1 r2
+        (* Note that height and size don't matter here. *)
         else if c < 0 then
-          subset (Node (l1, v1, Empty, 0)) l2 && subset r1 t2
+          subset (Node (l1, v1, Empty, 0, 0)) l2 && subset r1 t2
         else
-          subset (Node (Empty, v1, r1, 0)) r2 && subset l1 t2
+          subset (Node (Empty, v1, r1, 0, 0)) r2 && subset l1 t2
 
-  let rec iter ~f = function
+  let rec iter t ~f = match t with
       Empty -> ()
-    | Node(l, v, r, _) -> iter ~f l; f v; iter ~f r
+    | Leaf v -> f v
+    | Node(l, v, r, _, _) -> iter ~f l; f v; iter ~f r
 
-  let rec fold ~f s ~init:accu =
+  let rec fold s ~init:accu ~f =
     match s with
       Empty -> accu
-    | Node(l, v, r, _) -> fold ~f r ~init:(f v (fold ~f l ~init:accu))
+    | Leaf v -> f v accu
+    | Node(l, v, r, _, _) -> fold ~f r ~init:(f v (fold ~f l ~init:accu))
 
-  let rec rev_fold ~f s ~init:accu =
+  let rec fold_right s ~init:accu ~f =
     match s with
       Empty -> accu
-    | Node(l, v, r, _) ->
-        rev_fold ~f l ~init:(f v (rev_fold ~f r ~init:accu))
+    | Leaf v -> f v accu
+    | Node(l, v, r, _, _) ->
+        fold_right ~f l ~init:(f v (fold_right ~f r ~init:accu))
 
-  let rec for_all ~f:p = function
+  let rec for_all t ~f:p = match t with
       Empty -> true
-    | Node(l, v, r, _) -> p v && for_all ~f:p l && for_all ~f:p r
+    | Leaf v -> p v
+    | Node(l, v, r, _, _) -> p v && for_all ~f:p l && for_all ~f:p r
 
-  let rec exists ~f:p = function
+  let rec exists t ~f:p = match t with
       Empty -> false
-    | Node(l, v, r, _) -> p v || exists ~f:p l || exists ~f:p r
+    | Leaf v -> p v
+    | Node(l, v, r, _, _) -> p v || exists ~f:p l || exists ~f:p r
 
-  let filter ~f:p s =
+  let filter s ~f:p =
     let rec filt accu = function
       | Empty -> accu
-      | Node(l, v, r, _) ->
+      | Leaf v ->
+        if p v then add accu v else accu
+      | Node(l, v, r, _, _) ->
           filt (filt (if p v then add accu v else accu) l) r in
     filt Empty s
 
-  let filter_map ~f:p s =
+  let filter_map s ~f:p =
     let rec filt accu = function
       | Empty -> accu
-      | Node(l, v, r, _) ->
+      | Leaf v ->
+        (match p v with
+        | None -> accu
+        | Some v -> add accu v)
+      | Node(l, v, r, _, _) ->
           filt (filt (match p v with
                       | None -> accu
                       | Some v -> add accu v) l) r
     in
     filt Empty s
 
-  let partition ~f:p s =
+  let partition s ~f:p =
     let rec part ((t, f) as accu) = function
       | Empty -> accu
-      | Node(l, v, r, _) ->
+      | Leaf v -> if p v then (add t v, f) else (t, add f v)
+      | Node(l, v, r, _, _) ->
           part (part (if p v then (add t v, f) else (t, add f v)) l) r in
     part (Empty, Empty) s
 
-  let rec cardinal = function
-      Empty -> 0
-    | Node(l, _, r, _) -> cardinal l + 1 + cardinal r
-
   let rec elements_aux accu = function
       Empty -> accu
-    | Node(l, v, r, _) -> elements_aux (v :: elements_aux accu r) l
+    | Leaf v -> v :: accu
+    | Node(l, v, r, _, _) -> elements_aux (v :: elements_aux accu r) l
 
   let elements s =
     elements_aux [] s
 
-  let choose t = 
+  let choose t =
     match t with
     | Empty -> None
-    | Node (_, v, _, _) -> Some v
+    | Leaf v -> Some v
+    | Node (_, v, _, _, _) -> Some v
   ;;
 
   let choose_exn = min_elt_exn
@@ -351,30 +492,32 @@ struct
   let of_list lst = List.fold_left ~f:add ~init:empty lst
   let to_list s = elements s
 
-  let of_array ar = Array.fold_left ~f:add ~init:empty ar
-  let to_array s = Array.of_list (elements s)
-
-  (* The following implementation of to_array is faster, and as far as
-     we know it's correct, but we don't want to code review it yet.
+  let of_array ar = Array.fold ~f:add ~init:empty ar
+  (* faster but equivalent to [Array.of_list (to_list t)] *)
   let to_array = function
     | Empty -> [||]
-    | Node (l, v, r, _) ->
-        let n = cardinal l + cardinal r + 1 in
-        let res = Array.create n v in
+    | Leaf v -> [| v |]
+    | Node (l, v, r, _, s) ->
+        let res = Array.create s v in
         let pos_ref = ref 0 in
         let rec loop = function
+          (* Invariant: on entry and on exit to [loop], !pos_ref is the next
+             available cell in the array. *)
           | Empty -> ()
-          | Node (l, v, r, _) ->
-              loop l;
-              res.(!pos_ref) <- v;
-              incr pos_ref;
-              loop r
+          | Leaf v ->
+            res.(!pos_ref) <- v;
+            incr pos_ref
+          | Node (l, v, r, _, _) ->
+            loop l;
+            res.(!pos_ref) <- v;
+            incr pos_ref;
+            loop r
         in
         loop l;
+        (* res.(!pos_ref) is already initialized (by Array.create above). *)
         incr pos_ref;
         loop r;
         res
-  *)
 
   let map ~f t = fold t ~init:empty ~f:(fun x t -> add t (f x))
 
@@ -384,10 +527,40 @@ struct
       then equiv_classes
       else
         let x = choose_exn set in
-        let equiv_x, not_equiv_x = partition ~f:(equiv x) set in
+        let equiv_x, not_equiv_x = partition ~f:(fun elt -> x == elt || equiv x elt) set in
         loop not_equiv_x (equiv_x :: equiv_classes)
     in
     loop set []
+
+  let rec find t ~f =
+    match t with
+    | Empty -> None
+    | Leaf v -> if f v then Some v else None
+    | Node(l, v, r, _, _) ->
+      if f v then Some v
+      else
+        match find l ~f with
+        | None -> find r ~f
+        | Some _ as r -> r
+
+  let find_exn t ~f =
+    match find t ~f with
+    | None -> failwith "Set.find_exn failed to find a matching element"
+    | Some e -> e
+
+  let rec find_index t i =
+    match t with
+    | Empty -> None
+    | Leaf v -> if i = 0 then Some v else None
+    | Node (l, v, r, _, s) ->
+      if i >= s then None
+      else begin
+        let l_size = cardinal l in
+        let c = Pervasives.compare i l_size in
+        if c < 0 then find_index l i
+        else if c = 0 then Some v
+        else find_index r (i - l_size - 1)
+      end
 
   open Sexplib
 
@@ -404,7 +577,7 @@ struct
     | sexp -> Conv.of_sexp_error "Set.t_of_sexp: list needed" sexp
 
   let sexp_of_t sexp_of_el set =
-    Type.List (rev_fold ~f:(fun el acc -> sexp_of_el el :: acc) set ~init:[])
+    Type.List (fold_right ~f:(fun el acc -> sexp_of_el el :: acc) set ~init:[])
 end
 
 include Raw_impl (struct
@@ -431,7 +604,7 @@ type 'a sexpable = 'a t
 module Common_iterable = struct
   let module_name = Some "Core.Core_set"
   let length = cardinal
-  let iter ~f t = iter ~f:(fun key -> f key) t
+  let iter t ~f = iter ~f:(fun key -> f key) t
   let init _n = empty
 
   let insert acc el _i =

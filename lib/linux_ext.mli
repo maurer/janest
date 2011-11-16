@@ -1,16 +1,37 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 (** Interface to Linux-specific system calls *)
-
-open Unix
-open Unix_ext
-
+INCLUDE "config.mlh"
+IFDEF LINUX_EXT THEN
 
 (** {2 sysinfo} *)
 
 (** Result of sysinfo syscall (man 2 sysinfo) *)
 
 type sysinfo = {
-  uptime : Time.Span.t;  (** time since boot *)
+  uptime : Span.t;  (** time since boot *)
   load1 : int;  (** load average over the last minute *)
   load5 : int;  (** load average over the last 5 minutes*)
   load15 : int;  (** load average over the last 15 minutes *)
@@ -29,10 +50,8 @@ type sysinfo = {
 
 val sysinfo : unit -> sysinfo
 
-
 (** {2 Filesystem functions} *)
 
-val sendfile : ?pos : int -> ?len : int -> fd : file_descr -> file_descr -> int
 (** [sendfile ?pos ?len ~fd sock] sends mmap-able data from file
     descriptor [fd] to socket [sock] using offset [pos] and length [len].
     @return the number of characters actually written.
@@ -51,22 +70,20 @@ val sendfile : ?pos : int -> ?len : int -> fd : file_descr -> file_descr -> int
     @param default pos = 0
     @param default len = length of data (file) associated with descriptor [fd]
 *)
-
+val sendfile : ?pos : int -> ?len : int -> fd : Core_unix.file_descr -> Core_unix.file_descr -> int
 
 (** {2 Non-portable TCP-functionality} *)
 
 type tcp_bool_option = TCP_CORK with sexp, bin_io
 
-val gettcpopt_bool : file_descr -> tcp_bool_option -> bool
 (** [gettcpopt_bool sock opt] @return the current value of the boolean
     TCP socket option [opt] for socket [sock]. *)
+val gettcpopt_bool : Core_unix.file_descr -> tcp_bool_option -> bool
 
-val settcpopt_bool : file_descr -> tcp_bool_option -> bool -> unit
 (** [settcpopt_bool sock opt v] sets the current value of the boolean
     TCP socket option [opt] for socket [sock] to value [v]. *)
+val settcpopt_bool : Core_unix.file_descr -> tcp_bool_option -> bool -> unit
 
-val send_nonblocking_no_sigpipe :
-  file_descr -> ?pos : int -> ?len : int -> string -> int option
 (** [send_nonblocking_no_sigpipe sock ?pos ?len buf] tries to do a
     nonblocking send on socket [sock] given buffer [buf], offset [pos]
     and length [len].  Prevents [SIGPIPE], i.e. raise a Unix-error
@@ -79,9 +96,9 @@ val send_nonblocking_no_sigpipe :
     @raise Invalid_argument if the designated buffer range is invalid.
     @raise Unix_error on Unix-errors.
 *)
+val send_nonblocking_no_sigpipe :
+  Core_unix.file_descr -> ?pos : int -> ?len : int -> string -> int option
 
-val send_no_sigpipe :
-  file_descr -> ?pos : int -> ?len : int -> string -> int
 (** [send_no_sigpipe sock ?pos ?len buf] tries to do a
     blocking send on socket [sock] given buffer [buf], offset [pos]
     and length [len].  Prevents [SIGPIPE], i.e. raise a Unix-error in
@@ -93,9 +110,9 @@ val send_no_sigpipe :
     @raise Invalid_argument if the designated buffer range is invalid.
     @raise Unix_error on Unix-errors.
 *)
+val send_no_sigpipe :
+  Core_unix.file_descr -> ?pos : int -> ?len : int -> string -> int
 
-val sendmsg_nonblocking_no_sigpipe :
-  file_descr -> ?count : int -> string IOVec.t array -> int option
 (** [sendmsg_nonblocking_no_sigpipe sock ?count iovecs] tries to do
     a nonblocking send on socket [sock] using [count] I/O-vectors
     [iovecs].  Prevents [SIGPIPE], i.e. raises a Unix-error in that
@@ -105,26 +122,35 @@ val sendmsg_nonblocking_no_sigpipe :
     @raise Invalid_argument if the designated ranges are invalid.
     @raise Unix_error on Unix-errors.
 *)
+val sendmsg_nonblocking_no_sigpipe :
+  Core_unix.file_descr -> ?count : int -> string Core_unix.IOVec.t array -> int option
 
 (** {2 Clock functions} *)
 
-val clock_process_cputime_id : Clock.t
-(** [clock_process_cputime_id] the clock measuring the CPU-time of a process. *)
+module Clock : sig
+  type t
 
+  (* All these functions can raise Unix_error. *)
 
-val clock_thread_cputime_id : Clock.t
-(** [clock_thread_cputime_id] the clock measuring the CPU-time of a thread. *)
+  (* returns the CPU-clock associated with the thread *)
+  val get : Thread.t -> t
 
-(** {2 Getting terminal size} *)
+  val get_time : t -> Span.t
 
-val get_terminal_size : unit -> int * int
-(** [get_terminal_size ()] @return [(rows, cols)], the number of rows and
-    columns of the terminal. *)
+  val set_time : t -> Span.t -> unit
 
+  val get_resolution : t -> Span.t
+
+  (** [get_process_clock] the clock measuring the CPU-time of a process. *)
+  val get_process_clock : unit -> t
+
+  (** [get_thread_clock] the clock measuring the CPU-time of the current
+      thread. *)
+  val get_thread_clock : unit -> t
+end
 
 (** {2 Parent death notifications} *)
 
-val pr_set_pdeathsig : Signal.t -> unit
 (** [pr_set_pdeathsig s] sets the signal [s] to be sent to the executing
     process when its parent dies.  NOTE: the parent may have died
     before or while executing this system call.  To make sure that you
@@ -133,31 +159,58 @@ val pr_set_pdeathsig : Signal.t -> unit
     died, the returned parent PID will be 1, i.e. the init process will
     have adopted the child.  You should then either send the signal to
     yourself using Unix.kill, or execute an appropriate handler. *)
+val pr_set_pdeathsig : Signal.t -> unit
 
-val pr_get_pdeathsig : unit -> Signal.t
 (** [pr_get_pdeathsig ()] get the signal that will be sent to the
     currently executing process when its parent dies. *)
+val pr_get_pdeathsig : unit -> Signal.t
+
+
+(** {2 Task name} *)
+
+(** [pr_set_name_first16 name] sets the name of the executing thread to [name].  Only
+    the first 16 bytes in [name] will be used, the rest is ignored. *)
+val pr_set_name_first16 : string -> unit
+
+(** [pr_get_name ()] gets the name of the executing thread.  The name is
+    at most 16 bytes long. *)
+val pr_get_name : unit -> string
 
 
 (** {2 Pathname resolution} *)
 
-val file_descr_realpath : file_descr -> string
 (** [file_descr_realpath fd] @return the canonicalized absolute
     pathname of the file associated with file descriptor [fd].
 
     @raise Unix_error on errors.
 *)
+val file_descr_realpath : Core_unix.file_descr -> string
 
-val out_channel_realpath : out_channel -> string
 (** [out_channel_realpath oc] @return the canonicalized absolute
     pathname of the file associated with output channel [oc].
 
     @raise Unix_error on errors.
 *)
+val out_channel_realpath : out_channel -> string
 
-val in_channel_realpath : in_channel -> string
 (** [in_channel_realpath ic] @return the canonicalized absolute
     pathname of the file associated with input channel [ic].
 
     @raise Unix_error on errors.
 *)
+val in_channel_realpath : in_channel -> string
+
+(** {2 Affinity} *)
+
+(* Setting the CPU affinity causes a process to only run on the
+   cores chosen.  You can find out how many cores a system has in
+   /proc/cpuinfo.  This can be useful in two ways: first, it limits
+   a process to a core so that it won't interfere with processes on
+   other cores.  Second, you save time by not moving the process back
+   and forth between CPUs, which sometimes invalidates their cache.
+   See "man sched_setaffinity" for details. *)
+val sched_setaffinity : pid : int -> cpuset : int list -> unit
+
+(** [cores ()] @return the number of cores on the machine *)
+val cores : unit -> int
+ENDIF

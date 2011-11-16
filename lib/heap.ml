@@ -1,11 +1,35 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
+
+
 module OldArray = Caml.Array
-
-
-open Res
+module Array = Res.Array
 
 let def_gfactor, def_sfactor, def_min_size = Res.DefStrat.default
 
-exception Empty
+exception Empty with sexp
 
 (***************************************************************)
 
@@ -85,10 +109,11 @@ let of_array ?min_size cmp ar =
   if len = 0 then create ?min_size cmp
   else
     let dummy = make_dummy_heap cmp in
+    (* Copied in from core_int, to avoid annoying loops *)
+    let int_max (x : int) y = if x > y then x else y in
     let min_size =
       match min_size with
-      
-      | None -> max def_min_size (len / 2)
+      | None -> int_max def_min_size (len / 2)
       | Some min_size -> min_size in
     let rar =
       Array.sinit (def_gfactor, def_sfactor, min_size) len (fun pos ->
@@ -301,15 +326,15 @@ let update ({ pos = pos } as h_el) el =
     if cmp el parent.el < 0 then move_up_h_el h_el ar cmp el pos
     else heapify ar cmp len pos
 
-let check_heap_property { ar = ar } =
+let check_heap_property { ar = ar; cmp = cmp } =
   let len = Array.length ar in
   try
     for i = 0 to (len - 3) / 2 do
       let el = ar.(i).el in
       let left_child = calc_left i in
       let right_child = calc_right i in
-      if ar.(left_child).el < el ||
-        ar.(right_child).el < el
+      if cmp ar.(left_child).el el < 0 ||
+        cmp ar.(right_child).el el < 0
       then raise Exit;
     done;
     true

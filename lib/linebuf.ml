@@ -1,9 +1,31 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-TYPE_CONV_PATH "Linebuf"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 (** A module for reading files.  *)
 
 open Std_internal
+module Unix = Core_unix
 
 (* Integer we use for file positions in this module.  Makes it easier to switch between
    regular native integers and 64 bit integers. *)
@@ -11,7 +33,7 @@ module Pos_int = Int64
 
 let max_null_retries = 20
 
-type lnum = Known of int | Unknown (* | Unknown_unknown *);;
+type lnum = Known of int | Unknown with sexp_of;;
 
 (** The type of a linebuf. *)
 type t = { mutable file: in_channel;        (** The channel we maintain. *)
@@ -39,17 +61,17 @@ type t = { mutable file: in_channel;        (** The channel we maintain. *)
                                                 whenever we hit nulls *)
          }
 
-type error_type = Null_retry | Too_many_nulls | Exception of string * exn
+type error_type = Null_retry | Too_many_nulls | Exception of string * Exn.t with sexp_of;;
 
 type result =
   | Success of lnum * string
   | Nothing_available
   | Error of error_type
-  | Fatal_error of string * exn
-;;
+  | Fatal_error of string * Exn.t
+with sexp_of;;
 
 (** Open a linebuffer from the passed filename. *)
-let open_linebuf ?(pos = Pos_int.zero) ?(close_on_eof=false)
+let create ?(pos = Pos_int.zero) ?(close_on_eof=false)
     ?(null_hack = `Off) ?(eprint_nulls = false)
     ?(follow_deletes=false) ?(signal_on_truncate_or_delete=false) fname =
   let file = open_in_bin fname in
@@ -58,9 +80,12 @@ let open_linebuf ?(pos = Pos_int.zero) ?(close_on_eof=false)
     if Pos_int.(=) pos Pos_int.zero then
       Known 1, Pos_int.zero
     else if Pos_int.(>) pos Pos_int.zero then
-      Unknown, pos
+      begin
+        LargeFile.seek_in file pos;
+        Unknown, pos
+      end
     else
-      invalid_argf "open_linebuf: pos must be greater than or equal to 0, was %s"
+      invalid_argf "Linebuf.create: pos must be greater than or equal to 0, was %s"
         (Pos_int.to_string pos) ()
   in
   { file = file;
@@ -79,15 +104,16 @@ let open_linebuf ?(pos = Pos_int.zero) ?(close_on_eof=false)
   }
 
 (** Close the linebuf. *)
-let close_linebuf lbuf =
+let close lbuf =
   if not lbuf.closed then
-    (try close_in lbuf.file with
+    (try In_channel.close lbuf.file with
     | Unix.Unix_error (Unix.EBADF,_, _) -> ());
+  
   lbuf.closed <- true
 
-let closed_linebuf t = t.closed
+let is_closed t = t.closed
 
-exception File_truncated_or_deleted
+exception File_truncated_or_deleted with sexp;;
 
 let possibly_reopen lbuf =
   if lbuf.signal_on_truncate_or_delete
@@ -106,7 +132,7 @@ let reopen_if_deleted lbuf =
     let {Unix.st_ino=inode} = Unix.stat lbuf.name in
     if lbuf.inode <> inode then begin
       try
-        close_linebuf lbuf;
+        close lbuf;
         lbuf.file <- open_in_bin lbuf.name;
         
         lbuf.inode <- inode;
@@ -122,8 +148,8 @@ let reopen_if_deleted lbuf =
     Unix.Unix_error (Unix.ENOENT, _, _) -> `No_such_file
   | exn -> `Error ("reopen_if_deleted: stat failed", exn)
 
-exception Null_found
-exception Too_many_null_retries
+exception Null_found with sexp;;
+exception Too_many_null_retries with sexp;;
 
 let try_read_lnum_verbose lbuf =
   try
@@ -138,7 +164,7 @@ let try_read_lnum_verbose lbuf =
           | `Retry_then_fail -> raise Too_many_null_retries
           | `Retry | `Off -> ()
         end else begin
-          close_linebuf lbuf;
+          close lbuf;
           lbuf.null_retries <- lbuf.null_retries + 1;
           raise Null_found
         end
@@ -184,7 +210,7 @@ let try_read_lnum_verbose lbuf =
   | End_of_file ->
       begin
         try
-          if lbuf.close_on_eof then close_linebuf lbuf;
+          if lbuf.close_on_eof then close lbuf;
           if lbuf.follow_deletes || lbuf.signal_on_truncate_or_delete then
             match reopen_if_deleted lbuf with
             | `No_such_file
@@ -218,7 +244,7 @@ let try_read_lnum lbuf =
 let try_read lbuf =
   Option.map (try_read_lnum lbuf) ~f:snd
 
-let read_frequency = Time.Span.of_sec 0.01
+let read_frequency = Span.of_sec 0.01
 
 let rec read lbuf =
   match try_read lbuf with
@@ -250,7 +276,7 @@ let name t =
 
 let reset t =
   
-  close_linebuf t;
+  close t;
   t.file <- open_in_bin t.name;
   t.inode <- (Unix.fstat (Unix.descr_of_in_channel t.file)).Unix.st_ino;
   t.closed <- false;

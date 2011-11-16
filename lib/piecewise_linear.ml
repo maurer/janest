@@ -1,5 +1,26 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` pa_type_conv.cmo pa_sexp_conv.cmo *)
-TYPE_CONV_PATH "Piecewise_linear"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 open Std_internal
 
@@ -7,6 +28,7 @@ module type Key = sig
   type t
   include Floatable with type floatable = t
   include Sexpable with type sexpable = t
+  include Binable with type binable = t
 end
 
 module type S = sig
@@ -14,6 +36,7 @@ module type S = sig
 
   type t
   include Sexpable with type sexpable = t
+  include Binable with type binable = t
 
   val create : (key * float) list -> (t, string) Result.t
   val get : t -> key -> float
@@ -22,7 +45,7 @@ end
 module Make (Key : Key) = struct
 
   (* if long lists are needed, consider rewriting with binary search in array *)
-  type t = (float * float) list
+  type t = (float * float) list with bin_io
 
   type key = Key.t
 
@@ -41,11 +64,12 @@ module Make (Key : Key) = struct
   type knots = (Key.t * float) list with sexp
 
   type sexpable = t
+  type binable = t
 
   let t_of_sexp sexp =
     let knots = knots_of_sexp sexp in
     match create knots with
-    | Error str -> raise (Sexplib.Conv.Of_sexp_error (str, sexp))
+    | Error str -> Sexplib.Conv.of_sexp_error str sexp
     | Ok t -> t
 
   let sexp_of_t t =

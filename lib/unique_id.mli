@@ -1,37 +1,54 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 open Std_internal
 
-module type Unit_ref = sig
-  (* note, use equal (in this module) for comparison, poly compare
-     will not work correctly. Use the hashtbl included with this
-     module. *)
+(* An abstract unique identifier based on ordinary OCaml integers.  Be careful,
+   this may easily overflow on 32bit platforms!  Int63 is a safer choice for
+   portability.
 
-  type t with sexp_of
+   [Int] is useful when one is passing unique ids to C and needs a guarantee
+   as to their representaion.  [Int] is always represented as an integer, while
+   [Int63] is either an integer (on 64-bit machines) or a pointer (on 32-bit
+   machines).
 
-  include Hashable with type hashable = t
+   If you do the following:
 
-  val create : unit -> t
-  val to_string : t -> string
-end
+     module Id1 = Int (Unit)
+     module Id2 = Int (Unit)
 
-module type Id = sig
-  type t
+   then the types Id1.t and Id2.t are equivalent.  On the other hand, if you do
 
-  include Binable with type binable = t
-  include Comparable with type comparable = t
-  include Floatable with type floatable = t
-  include Hashable with type hashable = t
-  include Sexpable with type sexpable = t
-  include Stringable with type stringable = t
+     module Id1 : Id = Int (Unit)
+     module Id2 : Id = Int (Unit)
 
-  val create : unit -> t
-end 
-  
-(** A unique identifier based on a small allocated block, and an
-    integer for hashing. All ids held in memory remain unique no
-    matter how many ids have been created. *)
-module Unit_ref (Z : sig end) : Unit_ref
+   then the types Id1.t and Id2.t are distinct.  Thus, you should use the latter
+   form.
+*)
+module Int (Z : Unit) :
+  Unique_id_intf.Id with type t = private int
 
-(** an abstract unique identifier based on 64 bit integers. *)
-module Int63 (Z : sig end) : Id
-module Int64 (Z : sig end) : Id
+(* An abstract unique identifier based on 63 bit integers. *)
+module Int63 (Z : Unit) :
+  Unique_id_intf.Id with type t = private Core_int63.t

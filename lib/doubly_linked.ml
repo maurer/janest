@@ -1,6 +1,31 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 open Sexplib.Conv
 
 let phys_equal = Caml.(==)
+let failwithf = Core_printf.failwithf
 
 module List = Core_list
 
@@ -14,13 +39,44 @@ module Elt = struct
   end
   include T
 
-  
+  let equal (t : 'a t) t' = phys_equal t t'
+
+  let invariant t =
+    assert (equal t.prev.next t);
+    assert (equal t.next.prev t);
+  ;;
 
   let next t = t.next
   let prev t = t.prev
   let value t = t.value
 
   let sexp_of_t sexp_of_a t = sexp_of_a t.value
+
+  let create_after t value =
+    let next = t.next in
+    let res = {
+      value = value;
+      next = next;
+      prev = t;
+    }
+    in
+    t.next <- res;
+    next.prev <- res;
+    res
+  ;;
+
+  let create_before t value =
+    let prev = t.prev in
+    let res = {
+      value = value;
+      next = t;
+      prev = prev;
+    }
+    in
+    t.prev <- res;
+    prev.next <- res;
+    res
+  ;;
 
   let create value =
     let rec t = {
@@ -30,8 +86,6 @@ module Elt = struct
     } in
     t
   ;;
-
-  let equal (t : 'a t) t' = phys_equal t t'
 
   let link t1 t2 =
     t1.next <- t2;
@@ -57,6 +111,7 @@ type 'a t = {
    *)
   mutable first : 'a Elt.t ref option;
   mutable length : int;
+  mutable num_readers : int;
 }
 
 type 'a container = 'a t
@@ -96,6 +151,7 @@ let create () =
   let t = {
     first = None;
     length = 0;
+    num_readers = 0;
   }
   in
   maybe_check t;
@@ -106,17 +162,10 @@ let length t = t.length
 
 let is_empty t = t.length = 0
 
-
 let is_first t elt =
   match t.first with
-  | None -> assert false
+  | None -> false
   | Some r -> Elt.equal elt !r
-;;
-
-let set_first t elt =
-  match t.first with
-  | None -> assert false
-  | Some r -> r := elt
 ;;
 
 let is_last t elt = is_first t elt.next
@@ -133,14 +182,25 @@ let next t elt = if is_last t elt then None else Some elt.next
 
 let prev t elt = if is_first t elt then None else Some elt.prev
 
+let read t f =
+  t.num_readers <- t.num_readers + 1;
+  Exn.protect ~f ~finally:(fun () -> t.num_readers <- t.num_readers - 1);
+;;
+
+let ensure_can_modify t =
+  if t.num_readers > 0 then
+    failwith "It is an error to modify a Doubly_linked.t while iterating over it.";
+;;
+
 let fold_left_elts t ~init ~f =
   match t.first with
   | None -> init
   | Some r ->
-      let rec loop i elt ac =
-        if i = 0 then ac else loop (i - 1) elt.next (f ac elt)
-      in
-      loop t.length !r init
+      read t (fun () ->
+        let rec loop i elt ac =
+          if i = 0 then ac else loop (i - 1) elt.next (f ac elt)
+        in
+        loop t.length !r init)
 ;;
 
 let fold_left t ~init ~f =
@@ -151,13 +211,14 @@ let fold_right t ~init ~f =
   match t.first with
   | None -> init
   | Some r ->
-      let rec loop i elt ac =
-        if i = 0 then ac
-        else
-          let elt = elt.prev in
-          loop (i - 1) elt (f ac elt.value)
-      in
-      loop t.length !r init
+      read t (fun () ->
+        let rec loop i elt ac =
+          if i = 0 then ac
+          else
+            let elt = elt.prev in
+            loop (i - 1) elt (f ac elt.value)
+        in
+        loop t.length !r init)
 ;;
 
 let fold = fold_left
@@ -166,12 +227,12 @@ let iteri t ~f =
   match t.first with
   | None -> ()
   | Some r ->
-      
-      let length = t.length in
-      let rec loop i elt =
-        if i < length then (f i elt.value ; loop (i + 1) elt.next)
-      in
-      loop 0 !r
+      read t (fun () ->
+        let length = t.length in
+        let rec loop i elt =
+          if i < length then (f i elt.value; loop (i + 1) elt.next)
+        in
+        loop 0 !r)
 ;;
 
 let iter t ~f = iteri t ~f:(fun _ x -> f x)
@@ -180,28 +241,36 @@ let for_all t ~f =
   match t.first with
   | None -> true
   | Some r ->
-      let rec loop i elt = i = 0 || (f elt.value && loop (i - 1) elt.next) in
-      loop t.length !r
+      read t (fun () ->
+        let rec loop i elt = i = 0 || (f elt.value && loop (i - 1) elt.next) in
+        loop t.length !r)
 ;;
 
+(* sweeks: I put in the specialized implementations for [for_all], [exists],
+ * etc. after performance problems with incremental, which uses doubly-linked
+ * lists via bag.  I think it would be a very bad idea (purely for performance
+ * reasons) to go back to the simple implementations.
+ *)
 let exists t ~f =
   match t.first with
   | None -> false
   | Some r ->
-      let rec loop i elt = i > 0 && (f elt.value || loop (i - 1) elt.next) in
-      loop t.length !r
+      read t (fun () ->
+        let rec loop i elt = i > 0 && (f elt.value || loop (i - 1) elt.next) in
+        loop t.length !r)
 ;;
 
 let find_elt t ~f =
   match t.first with
   | None -> None
   | Some r ->
-      let rec loop i elt =
-        if i = 0 then None
-        else if f elt.value then Some elt
-        else loop (i - 1) elt.next
-      in
-      loop t.length !r
+      read t (fun () ->
+        let rec loop i elt =
+          if i = 0 then None
+          else if f elt.value then Some elt
+          else loop (i - 1) elt.next
+        in
+        loop t.length !r)
 ;;
 
 let find t ~f = Option.map ~f:Elt.value (find_elt t ~f)
@@ -224,20 +293,20 @@ let to_array t =
 
 
 let insert_before t elt x =
-  let elt' = Elt.create x in
-  
-  if is_first t elt then set_first t elt';
-  Elt.link elt.prev elt';
-  Elt.link elt' elt;
+  ensure_can_modify t;
+  let elt' = Elt.create_before elt x in
+  begin match t.first with
+  | None -> ()
+  | Some r -> if Elt.equal elt !r then r := elt'
+  end;
   t.length <- t.length + 1;
   maybe_check t;
   elt'
 ;;
 
 let insert_after t elt x =
-  let elt' = Elt.create x in
-  Elt.link elt' elt.next;
-  Elt.link elt elt';
+  ensure_can_modify t;
+  let elt' = Elt.create_after elt x in
   t.length <- t.length + 1;
   maybe_check t;
   elt'
@@ -245,6 +314,7 @@ let insert_after t elt x =
 
 let insert_into_empty t x =
   assert (t.length = 0);
+  ensure_can_modify t;
   let elt = Elt.create x in
   t.first <- Some (ref elt);
   t.length <- 1;
@@ -278,6 +348,7 @@ let sexp_of_t sexp_of_a t = sexp_of_list sexp_of_a (to_list t)
 
 
 let remove t elt =
+  ensure_can_modify t;
   begin match t.first with
   | None -> failwith "Doubly_linked.remove from empty list"
   | Some r ->
@@ -308,11 +379,12 @@ let clear t =
 
 let copy t =
   let t' = create () in
-  iter t ~f:(insert_last t');
+  iter t ~f:(fun x -> ignore (insert_last t' x));
   t'
 ;;
 
 let transfer ~src ~dst =
+  ensure_can_modify dst;
   match src.first with
   | None -> ()
   | Some src_first ->

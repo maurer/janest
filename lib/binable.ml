@@ -1,7 +1,30 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-TYPE_CONV_PATH "Binable"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 include Bin_prot.Binable
+open Sexplib.Std
+open Bin_prot.Std
 
 module Of_stringable (M : Stringable.S) =
   Bin_prot.Utils.Make_binable (struct
@@ -11,5 +34,12 @@ module Of_stringable (M : Stringable.S) =
     end
     type t = M.stringable
     let to_binable = M.to_string
-    let of_binable = M.of_string
+
+    (* Wrap exception for improved diagnostics. *)
+    exception Of_binable of string * exn with sexp
+    let of_binable s =
+      try
+        M.of_string s
+      with x ->
+        raise (Of_binable (s, x))
   end)

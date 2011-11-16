@@ -1,88 +1,49 @@
-module List = StdLabels.List
-open Sexplib
-open Sexplib.Conv
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 
 
-module type Types = sig
-  type 'a elt
-  type 'a t
-end
+(* These are just the creation functions for non-polymorphic Hash_sets.  Most of the
+   functions live directly in Hash_set.  E.g.
 
-(* Gen is a signature functor that generalizes the monomorpic hash set and
-   polymorphic hash set. *)
-module Gen (T : Types) = struct
-  open T
-  module type S = sig
-    val create : int -> 'a t
-    val add : 'a t -> 'a elt -> unit
-    (** [strict_add] fails if element is already there *)
-    val strict_add : 'a t -> 'a elt -> unit 
-    val remove : 'a t -> 'a elt -> unit
-    (** [strict_remove] fails if element wasn't there *)
-    val strict_remove : 'a t -> 'a elt -> unit
-    val clear : 'a t -> unit
-    val fold : f:('a -> 'b elt -> 'a) -> init:'a -> 'b t -> 'a
-    val iter : f:('a elt -> unit) -> 'a t -> unit
-    val length : 'a t -> int
-    val mem : 'a t -> 'a elt -> bool
-    val is_empty : 'a t -> bool
-    val of_list : 'a elt list -> 'a t
-    val to_list : 'a t -> 'a elt list
-    val equal : 'a t -> 'a t -> bool
-  end
-end
+   let my_set = Int.Hash_set.create in
+   Hash_set.add my_set 3
+*)
 
 module type S = sig
-  type elt
-  type t
-  module T : Types with type 'a elt = elt with type 'a t = t
-  
-  val create : int -> t
-  val add : t -> elt -> unit
-  val strict_add : t -> elt -> unit
-  val remove : t -> elt -> unit
-  val strict_remove : t -> elt -> unit
-  val clear : t -> unit
-  val fold : f:('a -> elt -> 'a) -> init:'a -> t -> 'a
-  val iter : f:(elt -> unit) -> t -> unit
-  val length : t -> int
-  val mem : t -> elt -> bool
-  val is_empty : t -> bool
-  val of_list : elt list -> t
-  val to_list : t -> elt list
-  val equal : t -> t -> bool
-  val sexp_of_t : t -> Sexp.t
-  val t_of_sexp : Sexp.t -> t
+  type elem
+  type t = elem Hash_set.t
+  include Sexpable.S with type sexpable = t
+  val create : ?growth_allowed:bool -> ?size:int -> unit -> t
+  val of_list : elem list -> t
 end
 
 module type S_binable = sig
-  include S
+  type elem
+  type t = elem Hash_set.t
+  include Sexpable.S with type sexpable = t
   include Binable.S with type binable = t
+  val create : ?growth_allowed:bool -> ?size:int -> unit -> t
+  val of_list : elem list -> t
 end
-
-module type S1 = sig
-  type 'a t
-  module T : Types with type 'a elt = 'a with type 'a t = 'a t
-
-  val create : int -> 'a t
-  val add : 'a t -> 'a -> unit
-  val strict_add : 'a t -> 'a -> unit
-  val remove : 'a t -> 'a -> unit
-  val strict_remove : 'a t -> 'a -> unit
-  val clear : 'a t -> unit
-  val fold : f:('a -> 'b -> 'a) -> init:'a -> 'b t -> 'a
-  val iter : f:('a -> unit) -> 'a t -> unit
-  val length : 'a t -> int
-  val mem : 'a t -> 'a -> bool
-  val is_empty : 'a t -> bool
-  val of_list : 'a list -> 'a t
-  val to_list : 'a t -> 'a list
-  val equal : 'a t -> 'a t -> bool
-  val sexp_of_t : ('a -> Sexp.t) -> 'a t -> Sexp.t
-  val t_of_sexp : (Sexp.t -> 'a) -> Sexp.t -> 'a t
-end
-
-(* Check that S and S1 are instances of Gen *)
-module Check_S (M : S) = (M : Gen(M.T).S)
-module Check_S1 (M : S1) = (M : Gen(M.T).S)

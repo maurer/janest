@@ -1,9 +1,31 @@
-(*pp camlp4o -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_bin_prot.cmo *)
-TYPE_CONV_PATH "Core_stack"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
+open Bin_prot.Std
 module List = Core_list
 
-exception Empty
+exception Empty with sexp
 
 type 'a t = {
   mutable elts : 'a list;
@@ -63,6 +85,8 @@ let for_all t ~f = List.for_all t.elts ~f
 let find t ~f = List.find t.elts ~f
 
 let to_list t = t.elts
+
+let of_list l = { elts = l; length = List.length l }
 
 let to_array t = Array.of_list t.elts
 

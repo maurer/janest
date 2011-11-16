@@ -1,8 +1,32 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-TYPE_CONV_PATH "signal"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 module Int = Core_int
 module List = Core_list
+module Hashtbl = Core_hashtbl
+
+let failwithf = Core_printf.failwithf
 
 type t = int
 
@@ -53,9 +77,10 @@ include struct
   let usr1 = sigusr1
   let usr2 = sigusr2
   let vtalrm = sigvtalrm
+  let zero = 0
 end
 
-let to_string, sys_behavior =
+let to_string, default_sys_behavior =
   let known =
     [
       
@@ -80,36 +105,49 @@ let to_string, sys_behavior =
       ("usr1", usr1, Terminate);
       ("usr2", usr2, Terminate);
       ("vtalrm", vtalrm, Terminate);
+      ("<zero>", zero, Ignore);
     ]
   in
-  let str_tbl = Table.create 1 in
-  let behavior_tbl = Table.create 1 in
+  let str_tbl = Int.Table.create ~size:1 () in
+  let behavior_tbl = Int.Table.create ~size:1 () in
   List.iter known ~f:(fun (name, s, behavior) ->
-    Table.replace str_tbl ~key:s ~data:("sig" ^ name);
-    Table.replace behavior_tbl ~key:s ~data:behavior);
-  (* For unknown signal numbers, [to_string] returns a meaningful string, while
-   * [sys_behavior] has to raise an exception because we don't know what the
-   * right answer is.
-   *)
+    Hashtbl.replace str_tbl ~key:s ~data:("sig" ^ name);
+    Hashtbl.replace behavior_tbl ~key:s ~data:behavior);
+  (* For unknown signal numbers, [to_string] returns a meaningful
+     string, while [default_sys_behavior] has to raise an exception
+     because we don't know what the right answer is. *)
   let to_string s =
-    match Table.find str_tbl s with
+    match Hashtbl.find str_tbl s with
     | None -> "<unknown signal>"
     | Some string -> string
   in
-  let sys_behavior s =
-    match Table.find behavior_tbl s with
-    | None -> raise (Invalid_argument "Signal.sys_behavior: unknown signal")
+  let default_sys_behavior s =
+    match Hashtbl.find behavior_tbl s with
+    | None ->
+        raise (Invalid_argument "Signal.default_sys_behavior: unknown signal")
     | Some behavior -> behavior
   in
-  to_string, sys_behavior
+  to_string, default_sys_behavior
 ;;
 
-
-let send ?(process_must_exist=true) signal ~pid =
+let send signal ~pid =
   try
-    UnixLabels.kill ~pid ~signal
+    UnixLabels.kill ~pid ~signal;
+    `Ok
   with
-  | Unix.Unix_error (Unix.ESRCH, _, _) when not process_must_exist -> ()
+  | Unix.Unix_error (Unix.ESRCH, _, _) -> `No_such_process
+;;
+
+let send_i t ~pid =
+  match send t ~pid with
+  | `Ok | `No_such_process -> ()
+;;
+
+let send_exn t ~pid =
+  match send t ~pid with
+  | `Ok -> ()
+  | `No_such_process ->
+      failwithf "Signal.send_exn %s ~pid:%d" (to_string t) pid ()
 ;;
 
 type behavior = [ `Default | `Ignore | `Handle of t -> unit ]
@@ -145,7 +183,7 @@ let sigprocmask mode sigs =
     match mode with
     | `Block -> Unix.SIG_BLOCK
     | `Unblock -> Unix.SIG_UNBLOCK
-    | `Set -> Unix.SIG_BLOCK
+    | `Set -> Unix.SIG_SETMASK
   in
   Unix.sigprocmask mode sigs
 ;;

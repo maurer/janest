@@ -1,14 +1,41 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
-
-TYPE_CONV_PATH "Core.Core_map"
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
 open Sexplib
 open Core_map_intf
+open With_return
 
 module List = Core_list
 
 module type Key = Key
 module type S = S
+
+module type S_binable = sig
+  include S
+  include Binable.S1 with type 'a binable = 'a t
+end
+
 
 
 type ('k, +'v) tree =
@@ -74,7 +101,7 @@ module Raw_impl
   let is_empty = function Empty -> true | _ -> false
 
   let rec add ~key:x ~data = function
-      Empty ->
+    | Empty ->
         Node(Empty, x, data, Empty, 1)
     | Node(l, v, d, r, h) ->
         let c = Key.compare x v in
@@ -85,21 +112,6 @@ module Raw_impl
         else
           bal l v d (add ~key:x ~data r)
 
-
-
-
-  (* let rec fold_val ~key:x ~data ~f = function *)
-  (*     Empty -> *)
-  (*       Node(Empty, x,f None data, Empty, 1) *)
-  (*   | Node(l, v, d, r, h) -> *)
-  (*       let c = Key.compare x v in *)
-  (*       if c = 0 then *)
-  (*         Node(l, x,f (Some d) data, r, h) *)
-  (*       else if c < 0 then *)
-  (*         bal (fold_val ~f ~key:x ~data l) v d r *)
-  (*       else *)
-  (*         bal l v d (fold_val ~f ~key:x ~data r) *)
-
   let rec find t x =
     match t with
     | Empty ->
@@ -109,20 +121,18 @@ module Raw_impl
         if c = 0 then Some d
         else find (if c < 0 then l else r) x
 
+  let add_multi ~key ~data t =
+    match find t key with
+    | None -> add ~key ~data:[data] t
+    | Some l -> add ~key ~data:(data :: l) t
+
   let rec find_exn t x =
     match find t x with
     | None ->
         raise Not_found
     | Some data -> data
 
-  
-  let rec mem t x =
-    match t with
-    | Empty ->
-        false
-    | Node(l, v, _, r, _) ->
-        let c = Key.compare x v in
-        c = 0 || mem (if c < 0 then l else r) x
+  let mem t x = Option.is_some (find t x)
 
   let rec min_elt = function
     | Empty -> None
@@ -148,14 +158,42 @@ module Raw_impl
     | None -> raise Not_found
     | Some v -> v
   ;;
-            
+
   let rec remove_min_elt t =
     match t with
       Empty -> invalid_arg "Map.remove_min_elt"
     | Node(Empty, _, _, r, _) -> r
     | Node(l, x, d, r, _) -> bal (remove_min_elt l) x d r
 
-  
+  (* assumes that min <= max in the ordering given by Key.compare *)
+  let rec fold_range_inclusive t ~min ~max ~init ~f =
+    match t with
+    | Empty -> init
+    | Node (l, k, d, r, _) ->
+      let c_min = Key.compare k min in
+      if c_min < 0 then
+        (* if k < min, then this node and its left branch are outside our range *)
+        fold_range_inclusive r ~min ~max ~init ~f
+      else if c_min = 0 then
+        (* if k = min, then this node's left branch is outside our range *)
+        fold_range_inclusive r ~min ~max ~init:(f ~key:k ~data:d init) ~f
+      else (* k > min *)
+        begin
+          let z = fold_range_inclusive l ~min ~max ~init ~f in
+          let c_max = Key.compare k max in
+          (* if k > max, we're done *)
+          if c_max > 0 then z
+          else
+            let z = f ~key:k ~data:d z in
+            (* if k = max, then we fold in this one last value and we're done *)
+            if c_max = 0 then z
+            else fold_range_inclusive r ~min ~max ~init:z ~f
+        end
+
+  let range_to_alist t ~min ~max =
+    List.rev
+      (fold_range_inclusive t ~min ~max ~init:[] ~f:(fun ~key ~data l -> (key,data)::l))
+
   let merge t1 t2 =
     match (t1, t2) with
       (Empty, t) -> t
@@ -176,6 +214,32 @@ module Raw_impl
           bal (remove l x) v d r
         else
           bal l v d (remove r x)
+
+  (* Use exception to avoid tree-rebuild in no-op case *)
+  exception Change_no_op
+
+  let change t key f =
+    let rec change_core t key f =
+      match t with
+      | Empty ->
+        begin match (f None) with
+          | None -> raise Change_no_op (* equivalent to returning: Empty *)
+          | Some data -> Node(Empty, key, data, Empty, 1)
+        end
+      | Node(l, v, d, r, h) ->
+        let c = Key.compare key v in
+        if c = 0 then
+          begin match (f (Some d)) with
+            | None -> merge l r
+            | Some data -> Node(l, key, data, r, h)
+          end
+        else
+          if c < 0 then
+            bal (change_core l key f) v d r
+          else
+            bal l v d (change_core r key f)
+    in
+    try change_core t key f with Change_no_op -> t
 
   let rec iter ~f = function
       Empty -> ()
@@ -204,11 +268,11 @@ module Raw_impl
     | Node(l, v, d, r, _) ->
         fold ~f r ~init:(f ~key:v ~data:d (fold ~f l ~init:accu))
 
-  let rec rev_fold ~f t ~init:accu =
+  let rec fold_right ~f t ~init:accu =
     match t with
       Empty -> accu
     | Node(l, v, d, r, _) ->
-        rev_fold ~f l ~init:(f ~key:v ~data:d (rev_fold ~f r ~init:accu))
+        fold_right ~f l ~init:(f ~key:v ~data:d (fold_right ~f r ~init:accu))
 
   let filter ~f t =
     fold ~init:Empty t ~f:(fun ~key ~data accu ->
@@ -275,7 +339,7 @@ module Raw_impl
     | Node (l, _, _, r, _) -> cardinal l + cardinal r + 1
 
   let combine_alist alist ~init ~f =
-    List.fold_left alist ~init:empty
+    List.fold alist ~init:empty
       ~f:(fun accum (key, data) ->
         let prev_data =
           match find accum key with
@@ -286,42 +350,29 @@ module Raw_impl
         add accum ~key ~data
       )
 
-  let keys t = rev_fold ~f:(fun ~key ~data:_ list -> key::list) t ~init:[]
+  let keys t = fold_right ~f:(fun ~key ~data:_ list -> key::list) t ~init:[]
   let has_key = mem
-  let data t = rev_fold ~f:(fun ~key:_ ~data list -> data::list) t ~init:[]
+  let data t = fold_right ~f:(fun ~key:_ ~data list -> data::list) t ~init:[]
 
-  
-  module Z = struct
-    exception Local_break
+  let of_alist alist =
+    with_return (fun r ->
+      let map =
+        List.fold alist ~init:empty ~f:(fun t (key,data) ->
+          if mem t key then r.return (`Duplicate_key key)
+          else add ~key ~data t)
+      in
+      `Ok map)
 
-    let of_alist alist =
-      
-      let bad_key = ref None in
-      try
-        `Ok (List.fold_left alist ~init:empty ~f:(fun t (key,data) ->
-          if mem t key then (bad_key := Some key; raise Local_break)
-          else add ~key ~data t))
-      with
-        Local_break ->
-          match !bad_key with None -> assert false | Some x -> `Duplicate_key x
-    ;;
+  let for_all ~f t =
+    with_return (fun r ->
+      iter t ~f:(fun ~key:_ ~data -> if not (f data) then r.return false);
+      true)
 
-    let for_all ~f t =
-      try
-        iter t ~f:(fun ~key:_ ~data -> if not (f data) then raise Local_break);
-        true
-      with Local_break -> false
+  let exists ~f t =
+    with_return (fun r ->
+      iter t ~f:(fun ~key:_ ~data -> if f data then r.return true);
+      false)
 
-    let exists ~f t =
-      try
-        iter t ~f:(fun ~key:_ ~data -> if f data then raise Local_break);
-        false
-      with Local_break -> true
-  end
-  let of_alist = Z.of_alist
-  let for_all  = Z.for_all
-  let exists   = Z.exists
-  
   let of_alist_exn alist =
     match of_alist alist with
     | `Ok x -> x
@@ -329,25 +380,60 @@ module Raw_impl
   ;;
 
   let of_alist_multi alist =
+    let alist = List.rev alist in
     combine_alist alist ~init:[] ~f:Core_list.cons
   ;;
 
   let to_alist t =
-    rev_fold t ~init:[] ~f:(fun ~key ~data x -> (key,data)::x)
+    fold_right t ~init:[] ~f:(fun ~key ~data x -> (key,data)::x)
   ;;
-  
+
   
   let merge ~f t1 t2 =
     let all_keys =
       Core_list.dedup ~compare:Key.compare (Core_list.append (keys t1) (keys t2))
     in
-    List.fold_left ~init:empty all_keys
+    List.fold ~init:empty all_keys
       ~f:(fun t key ->
             match f ~key (find t1 key) (find t2 key) with
             | None -> t
             | Some data -> add ~key ~data t)
 
-  
+  let rec next_key t k =
+    match t with
+    | Empty -> None
+    | Node (l, k', _, r, _) ->
+      let c = Key.compare k' k in
+      if c = 0 then Option.map ~f:fst (min_elt r)
+      else if c < 0 then next_key r k
+      else begin match next_key l k with
+      | None -> Some k'
+      | Some answer -> Some answer
+      end
+
+  let rec prev_key t k =
+    match t with
+    | Empty -> None
+    | Node (l, k', _, r, _) ->
+      let c = Key.compare k' k in
+      if c = 0 then Option.map ~f:fst (max_elt l)
+      else if c > 0 then prev_key l k
+      else begin match prev_key r k with
+      | None -> Some k'
+      | Some answer -> Some answer
+      end
+
+  let rec rank t k =
+    match t with
+    | Empty -> None
+    | Node (l, k', _, r, _) ->
+      let c = Key.compare k' k in
+      if c = 0
+      then Some (cardinal l)
+      else if c > 0
+      then rank l k
+      else Option.map (rank r k) ~f:(fun rank -> rank + 1 + (cardinal l))
+
   let t_of_sexp key_of_sexp value_of_sexp = function
     | Type.List lst ->
         let coll t = function
@@ -358,15 +444,13 @@ module Raw_impl
               else add ~key ~data:value t
           | sexp -> Conv.of_sexp_error "Map.t_of_sexp: tuple list needed" sexp
         in
-        List.fold_left ~f:coll ~init:empty lst
+        List.fold ~f:coll ~init:empty lst
     | sexp ->
         Conv.of_sexp_error "Map.t_of_sexp: list needed" sexp
 
   let sexp_of_t sexp_of_key sexp_of_value t =
     let f ~key ~data acc = Type.List [sexp_of_key key; sexp_of_value data] :: acc in
-    Type.List (rev_fold ~f t ~init:[])
-
-
+    Type.List (fold_right ~f t ~init:[])
 end
 
 module Make (Key : Key) = struct
@@ -400,7 +484,7 @@ include Bin_prot.Utils.Make_iterable_binable2 (struct
   type ('a, 'b) acc = ('a , 'b) t
   let module_name = Some "Core.Core_map"
   let length = cardinal
-  let iter ~f t = iter ~f:(fun ~key ~data -> f (key, data)) t
+  let iter t ~f = iter ~f:(fun ~key ~data -> f (key, data)) t
   let init _n = empty
 
   let insert acc (key, data) _i =
@@ -411,10 +495,21 @@ include Bin_prot.Utils.Make_iterable_binable2 (struct
 end)
 
 module Make_binable (Key : sig
-  type t
+  include Key
   include Binable.S with type binable = t
 end) = struct
+  include Raw_impl (struct
+    type 'a t = Key.t
+    let compare = Key.compare
+  end)
+
+  type key = Key.t
+
   type +'v dummy = (Key.t, 'v) t with bin_io
   type +'v t = 'v dummy with bin_io
   type +'v binable = 'v t
+
+  type +'v sexpable = 'v t
+  let t_of_sexp v_of_sexp sexp = t_of_sexp Key.t_of_sexp v_of_sexp sexp
+  let sexp_of_t sexp_of_v t = sexp_of_t Key.sexp_of_t sexp_of_v t
 end

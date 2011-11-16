@@ -1,4 +1,50 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 (** doubly-linked lists *)
+
+(**
+ * There is a fundamental problem with a data structure (like doubly-linked
+ * lists) that is both mutable and provides iteration function that call back
+ * to user-supplied functions.  If those user-supplied functions modify the
+ * data structure, what is the semantics of the remainder of the iteration?
+ * This module sidesteps this issue by detecting attempts by user-supplied
+ * functions to modify a doubly-linked list while in the middle of iterating
+ * over it.
+ *
+ * Modification functions include:
+ *   insert_*, remove*, transfer
+ * Iteration functions include:
+ *   exists, fold*, for_all, find
+ *
+ * Calls to modification functions detect if the list is being iterated over,
+ * and if so raise an exception rather than modify the list.  For example, a
+ * use like the following would raise.
+ *
+ *  iter t ~f:(fun _ -> ... remove t e ...)
+ *)
+
 open Sexplib
 
 module Elt : sig

@@ -1,35 +1,41 @@
----------------------------------------------------------------------------
+(* OASIS_START *)
+(* DO NOT EDIT (digest: a8516e902d8d5c0d98d6c7f9e20ecdec) *)
+This is the INSTALL file for the core distribution.
 
-                                  INSTALL
+This package uses OASIS to generate its build system. See section OASIS for
+full information. 
 
----------------------------------------------------------------------------
+Dependencies
+============
 
-  1) If there is anything non-standard about your OCaml-installation,
-     look at the default settings in "OCamlMakefile" and set them to
-     the values that are valid on your system, you can do this also by
-     setting environment variables. This is greatly simplified if you
-     normally use "OCamlMakefile" and have already configured your shell
-     environment in startup files appropriately.
+In order to compile this package, you will need:
+* ocaml (>= 3.12) for all, test test_runner, doc core
+* findlib (>= 1.2.7)
+* sexplib for library core
+* fieldslib for library core
+* bin_prot for library core
+* res for library core
+* oUnit (>= 1.0.2) for executable test_runner
 
-     You will need Gerd Stolpmann's "findlib"-tool!
+Installing
+==========
 
-       http://www.ocaml-programming.de/programming/download-caml.html
+1. Uncompress the source archive and go to the root of the package
+2. Run 'ocaml setup.ml -configure'
+3. Run 'ocaml setup.ml -build'
+4. Run 'ocaml setup.ml -install'
 
-  2) Don't forget: you will need GNU-make!
+Uninstalling
+============
 
-     Enter "make" in the top directory to compile the library.
+1. Go to the root of the package 
+2. Run 'ocaml setup.ml -uninstall'
 
-  3) Enter "make install" to install the library.
+OASIS
+=====
 
----------------------------------------------------------------------------
+OASIS is a program that generates a setup.ml file using a simple '_oasis'
+configuration file. The generated setup only depends on the standard OCaml
+installation: no additional library is required.
 
-                                 UNINSTALL
-
----------------------------------------------------------------------------
-
-  1) Easy: just enter "make uninstall". This will remove all files
-     installed by "make install".
-
----------------------------------------------------------------------------
-
-Jane Street Holding, LLC  <opensource@janestcapital.com>
+(* OASIS_STOP *)

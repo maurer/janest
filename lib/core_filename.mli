@@ -1,106 +1,140 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 (**
    Warning! this library assumes we are in a POSIX compliant OS. It will not work properly under
-   windows (it doesn't handle drivenames).
+   windows.
+
 *)
 
+
+
+(**  The path of the root.*)
 val root : string
-(**
-   The path of the root.
+
+(** {2 Pathname resolution} *)
+
+(** [realpath path] @return the canonicalized absolute pathname of [path].
+    @raise Unix_error on errors. *)
+val realpath : string -> string
+
+(** [is_posix_pathname_component f]
+   @return true if [f] is a valid filename in a POSIX compliant OS (a path
+   component and not a full path).
+
+   http://www.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap03.html#tag_03_169
 *)
+val is_posix_pathname_component : string -> bool
 
-val normalize : string -> string
-(**
-   [normalize path]
-   Removes as much "." and ".." from the path as possible. If the path is
-   absolute they will all be removed.
-*)
-
-
-val expand : ?cwd:string -> string -> string
-(**
-   [expand]
-   Makes a path absolute by expanding . to cwd and ~ to home directories.
-   In case of error (e.g.: path home of a none existing user) raises [Failure]
-   with a (hopefully) helpful message.
-*)
-
-val parent : string -> string
-(**
-   [parent path]
-   @return the path to the parent of [path] the result is normalized
-   The parent of the root directory is the root directory
-*)
-
-
-val unroot : path:string -> string -> string
-(**
-   [unroot ~path f]
-   returns [f] relative to [path].
-
-   @raise Failure if [is_relative f <> is_relative path]
-*)
-
-val is_posix_valid : string -> bool
-
-(**
-   [is_posix_valid f]
-   @return true if [f] is a valid name in a POSIX compliant OS
-*)
-
-
-val temp_file: ?temp_dir: string -> string -> string -> string
-(**
-   [temp_file ?temp_dir_name prefix suffix]
+(** [temp_file ?perm ?in_dir_name prefix suffix]
 
    Returns the name of a fresh temporary file in the temporary directory. The
    base name of the temporary file is formed by concatenating prefix, then, if
    needed, a 6-digit hex number, then suffix. The temporary file is created
-   empty, with permissions [0o600] (readable and writable only by the file
-   owner).  The file is guaranteed to be fresh, i.e. not already existing in
-   the directory.
+   empty. The file is guaranteed to be fresh, i.e. not already existing in the
+   directory.
 
-   @param temp_dir the directory in which to create the temporary file
+   @param in_dir the directory in which to create the temporary file
+   @param perm the permission of the temporary file. The default value is
+   [0o600] (readable and writable only by the file owner)
 
    Note that prefix and suffix will be changed when necessary to make the final filename
    valid POSIX.
 *)
 
-(* Splits a given path in a list of strings. *)
-val explode : string -> string list
-(* dual to explode *)
-val implode : string list -> string
-val normalize_path : string list -> string list
-
-val temp_dir: ?in_dir:string -> string -> string -> string
-(**
-   Same as temp_file but creates a temporary directory.
-*)
 
 
-val open_temp_file :
-  ?temp_dir: string -> string -> string -> string * out_channel
+val temp_file: ?perm:int -> ?in_dir: string -> string -> string -> string
+
+(** Same as temp_file but creates a temporary directory. *)
+val temp_dir: ?perm:int -> ?in_dir:string -> string -> string -> string
+
 (** Same as {!Core_filename.temp_file}, but returns both the name of a fresh
    temporary file, and an output channel opened (atomically) on
    this file.  This function is more secure than [temp_file]: there
    is no risk that the temporary file will be modified (e.g. replaced
    by a symbolic link) before the program opens it. *)
+val open_temp_file :
+  ?perm: int -> ?in_dir: string -> string -> string -> string * out_channel
 
-
-(** {3 functions from the standard library}
-    For these function definitions check the standard library
-*)
+(** The conventional name for the current directory (e.g. [.] in Unix). *)
 val current_dir_name : string
+
+(** The conventional name for the parent of the current directory
+   (e.g. [..] in Unix). *)
 val parent_dir_name : string
-(* [concat] isn't quite like the standard library.  you should read the code until we fix
- * this comment *)
+
+(** The directory separator (e.g. [/] in Unix). *)
+val dir_sep : string
+
+(** [concat p1 p2] returns a path equivalent to [p1 ^ "/" ^ p2].
+    In the resulting path p1 (resp. p2) has all its trailing (resp. leading)
+    "." and "/" removed. eg:
+    concat "a/." ".//b" => "a/b"
+    concat "." "b" => "./b"
+    concat "a" "." => "a/."
+    concat "a" "/b" => "a/b"
+
+    @throws Failure if [p1] is empty.
+*)
 val concat : string -> string -> string
+
+(** Return [true] if the file name is relative to the current
+   directory, [false] if it is absolute (i.e. in Unix, starts
+   with [/]). *)
 val is_relative : string -> bool
+
+val is_absolute : string -> bool
+
+(** Return [true] if the file name is relative and does not start
+   with an explicit reference to the current directory ([./] or
+   [../] in Unix), [false] if it starts with an explicit reference
+   to the root directory or the current directory. *)
 val is_implicit : string -> bool
+
+(** [check_suffix name suff] returns [true] if the filename [name]
+   ends with the suffix [suff]. *)
 val check_suffix : string -> string -> bool
+
+(** [chop_suffix name suff] removes the suffix [suff] from
+   the filename [name]. The behavior is undefined if [name] does not
+   end with the suffix [suff]. *)
 val chop_suffix : string -> string -> string
+
+(** Return the given file name without its extension. The extension
+   is the shortest suffix starting with a period and not including
+   a directory separator, [.xyz] for instance.
+
+   Raise [Invalid_argument] if the given name does not contain
+   an extension. *)
 val chop_extension : string -> string
 
-val basename : string -> string
+
+(** [split_extension fn] return the portion of the filename before the
+    extension and the (optional) extension *)
+val split_extension : string -> (string * string option)
+
 (** Respects the posix semantic.
 
    Split a file name into directory name / base file name.
@@ -112,11 +146,26 @@ val basename : string -> string
 
    The result is not specified if the argument is not a valid file name
    (for example, under Unix if there is a NUL character in the string). *)
+val basename : string -> string
 
-val dirname : string -> string
 (** See {!Filename.basename}. *)
+val dirname : string -> string
 
 (** [split filename] returns (dirname filename, basename filename) *)
 val split : string -> string * string
+
+(** The name of the temporary directory:
+    Under Unix, the value of the [TMPDIR] environment variable, or "/tmp"
+    if the variable is not set.
+    Under Windows, the value of the [TEMP] environment variable, or "."
+    if the variable is not set.
+*)
 val temp_dir_name : string
+
+(** Return a quoted version of a file name, suitable for use as
+    one argument in a command line, escaping all meta-characters.
+    Warning: under Windows, the output is only suitable for use
+    with programs that follow the standard Windows quoting
+    conventions.
+ *)
 val quote : string -> string

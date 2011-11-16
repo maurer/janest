@@ -1,9 +1,28 @@
-(*pp $(pwd)/pp.sh *)
-(*
-#include <unistd.h>
-end-pp-include*)
-(* Error-checking mutexes. *)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
+INCLUDE "config.mlh"
 type t = Mutex.t
 
 val create : unit -> t
@@ -24,8 +43,7 @@ val lock : t -> unit
 *)
 val try_lock : t -> bool
 
-
-#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS > 0)
+IFDEF MUTEX_TIMED_LOCK THEN
 (** [timedlock mtx timeout] like [lock], but takes a [timeout] parameter.
     @return [true] if the mutex was acquired, or [false] when [timeout]
     expires otherwise.
@@ -33,9 +51,7 @@ val try_lock : t -> bool
     @raise Unix_error if [timedlock] attempts to acquire [mtx] recursively.
 *)
 val timedlock : t -> Time.t -> bool
-#else
-#warning "POSIX TMO not present; Core_mutex.timedlock unavailable"
-#endif
+ENDIF
 
 (** [unlock mtx] unlocks [mtx].
 
@@ -47,6 +63,10 @@ val unlock : t -> unit
 val am_holding_mutex : t -> bool
 
 val critical_section : t -> f:(unit -> 'a) -> 'a
+
+(* [sychronize f] returns a new function that is identical except that at most one thread
+   can execute in it at a time. *)
+val synchronize : ('a -> 'b) -> ('a -> 'b)
 
 (** [update_signal mtx cnd ~f] updates some state within a critical
     section protected by mutex [mtx] using function [f] and signals

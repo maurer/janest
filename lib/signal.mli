@@ -1,4 +1,27 @@
-(*pp camlp4o -I `ocamlfind query sexplib` -I `ocamlfind query type-conv` -I `ocamlfind query bin_prot` pa_type_conv.cmo pa_sexp_conv.cmo pa_bin_prot.cmo *)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 type t
 
 include Comparable.S with type comparable = t
@@ -41,11 +64,10 @@ type behavior = [
   | `Handle of t -> unit
 ]
 
-
-(** [sys_behavior t]
+(** [default_sys_behavior t]
     Query the default system behavior for a signal.
 *)
-val sys_behavior : t -> sys_behavior
+val default_sys_behavior : t -> sys_behavior
 
 (** [signal t]
     Set the behavior of the system on receipt of a given signal.  The
@@ -67,14 +89,19 @@ val handle_default : t -> unit
 (** [ignore t] is [set t `Ignore]. *)
 val ignore : t -> unit
 
-(** [send signal ~pid] sends [signal] to the process whose process id is [pid].
- * In Caml's standard library, this is called [Unix.kill].
- *
- * Sending a signal to a zombie and/or nonexistent process will result in a
- * ESRCH unix error unless [process_must_exist] is false.  By default,
- * [process_must_exist] is true.
+(** [send signal ~pid] sends [signal] to the process whose process id is [pid]. *)
+val send : t -> pid:int -> [ `Ok | `No_such_process ]
+
+(** [send_i signal ~pid] sends [signal] to the process whose process id is [pid].
+ * No exception will be raised if [pid] is a zombie or nonexistent.
  *)
-val send : ?process_must_exist:bool -> t -> pid:int -> unit
+val send_i : t -> pid:int -> unit
+
+(** [send_exn signal ~pid] sends [signal] to the process whose process id is
+ * [pid].  In Caml's standard library, this is called [Unix.kill].  Sending a
+ * signal to a zombie and/or nonexistent process will raise an exception.
+ *)
+val send_exn : t -> pid:int -> unit
 
 type sigprocmask_command = [ `Set | `Block | `Unblock ]
 
@@ -123,3 +150,5 @@ val ttou : t (** Terminal write from background process *)
 val usr1 : t (** Application-defined signal 1 *)
 val usr2 : t (** Application-defined signal 2 *)
 val vtalrm : t (** Timeout in virtual time *)
+val zero : t (** No-op; can be used to test whether the target process exists and the
+                current process has permission to signal it *)

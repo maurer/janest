@@ -1,3 +1,29 @@
+/******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************/
+
+#include "config.h"
+#ifdef JSC_LINUX_EXT
 #define _FILE_OFFSET_BITS 64
 #define _GNU_SOURCE
 
@@ -11,6 +37,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <time.h>
+#include <sched.h>
 #include <termios.h>
 #include <sys/ioctl.h>
 
@@ -68,12 +95,6 @@ CAMLprim value linux_sysinfo(value __unused v_unit)
 
 static int linux_tcpopt_bool[] = { TCP_CORK };
 
-/* The interface to get/set sockopt changed in ocaml 3.11.
-   We pulled the enum option_type out of the unix stubs in
-   the OCaml compiler sources (for 3.11), this is because
-   it isn't exported in a header file. We have a bug report
-   in with INRIA about this.
- */
 enum option_type {
   TYPE_BOOL = 0,
   TYPE_INT = 1,
@@ -156,64 +177,6 @@ CAMLprim value linux_sendmsg_nonblocking_no_sigpipe_stub(
   return Val_long(ret);
 }
 
-CAMLprim value linux_clock_process_cputime_id_stub(value __unused v_unit)
-{
-  return caml_copy_nativeint(CLOCK_PROCESS_CPUTIME_ID);
-}
-
-CAMLprim value linux_clock_thread_cputime_id_stub(value __unused v_unit)
-{
-  return caml_copy_nativeint(CLOCK_THREAD_CPUTIME_ID);
-}
-
-/**/
-
-CAMLprim value linux_get_terminal_size_stub(value __unused v_unit)
-{
-  int fd;
-  struct winsize ws;
-  int ret;
-  value v_res;
-
-  caml_enter_blocking_section();
-
-  fd = open("/dev/tty", O_RDWR);
-
-  if (fd == -1) {
-    caml_leave_blocking_section();
-    uerror("get_terminal_size__open", Nothing);
-  }
-
-  ret = ioctl(fd, TIOCGWINSZ, &ws);
-
-  if (ret == -1) {
-    int old_errno = errno;
-    do ret = close(fd);
-    while (ret == -1 && errno == EINTR);
-    caml_leave_blocking_section();
-    if (ret == -1) uerror("get_terminal_size__ioctl_close", Nothing);
-    else {
-      errno = old_errno;
-      uerror("get_terminal_size__ioctl", Nothing);
-    }
-  }
-
-  do ret = close(fd);
-  while (ret == -1 && errno == EINTR);
-
-  caml_leave_blocking_section();
-
-  if (ret == -1) uerror("get_terminal_size__close", Nothing);
-
-  v_res = caml_alloc_small(2, 0);
-  Field(v_res, 0) = Val_int(ws.ws_row);
-  Field(v_res, 1) = Val_int(ws.ws_col);
-
-  return v_res;
-}
-
-/**/
-
 CAMLprim value linux_pr_set_pdeathsig_stub(value v_sig)
 {
   int sig = caml_convert_signal_number(Int_val(v_sig));
@@ -227,3 +190,43 @@ CAMLprim value linux_pr_get_pdeathsig_stub(value __unused v_unit)
   if (prctl(PR_GET_PDEATHSIG, &sig) == -1) uerror("pr_get_pdeathsig", Nothing);
   return Val_int(caml_rev_convert_signal_number(sig));
 }
+
+static void cpulist_to_cpuset(value cpulist, cpu_set_t * cpuset)
+{
+  value l;
+  CPU_ZERO(cpuset);
+  for (l = cpulist; l != Val_int(0); l = Field(l, 1)) {
+    int cpu = Int_val(Field(l, 0));
+    CPU_SET(cpu, cpuset);
+  }
+}
+
+CAMLprim value linux_sched_setaffinity(value v_pid, value cpulist)
+{
+  cpu_set_t set;
+  pid_t pid;
+  pid = Int_val(v_pid);
+  cpulist_to_cpuset(cpulist, &set);
+  if (sched_setaffinity(pid, sizeof(cpu_set_t), &set) != 0)
+    uerror("setaffinity", Nothing);
+  return Val_unit;
+}
+
+CAMLprim value linux_pr_set_name(value v_name)
+{
+  char *buf = String_val(v_name);
+  if (prctl(PR_SET_NAME, (unsigned long) buf) == -1)
+    uerror("pr_set_name", Nothing);
+  return Val_unit;
+}
+
+CAMLprim value linux_pr_get_name(value __unused v_unit)
+{
+  char buf[17];
+
+  buf[16] = 0;
+  if (prctl(PR_GET_NAME, (unsigned long) buf) == -1)
+    uerror("pr_get_name", Nothing);
+  return caml_copy_string(buf);
+}
+#endif /* JSC_LINUX_EXT */

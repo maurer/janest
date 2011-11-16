@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 (** Core_queue is a wrapper around OCaml's standard Queue module that
     follows Core idioms and adds some functions.
 
@@ -65,3 +89,13 @@ val of_list : 'a list -> 'a t
 
 (** [partial_iter t ~f] iterates through t until f returns `Stop *)
 val partial_iter : 'a t -> f:('a -> [`Continue | `Stop]) -> unit
+
+val map : 'a t -> f:('a -> 'b) -> 'b t
+
+val filter_map : 'a t -> f:('a -> 'b option) -> 'b t
+
+val of_array : 'a array -> 'a t
+
+val fold : 'a t -> init:'b -> f:('b -> 'a -> 'b) -> 'b
+
+val to_list : 'a t -> 'a list

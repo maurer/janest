@@ -1,78 +1,25 @@
-type t = float
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
-include Sexpable.S with type sexpable = t
-include Binable.S with type binable = t
-include Floatable.S with type floatable = t
-include Stringable.S with type stringable = t
-include Hashable.S with type hashable = t
-(* [max] and [min] will return nan if either argument is nan *)
-include Comparable.S with type comparable = t
-(* The results of robust comparisons on [nan] should be considered undefined. *)
-include Robustly_comparable.S with type robustly_comparable = t
-
-val max_value : t                   (* infinity *)
-val min_value : t                   (* neg_infinity *)
-val zero : t
-val epsilon : t
-
-
-
-val of_int : int -> t
-val to_int : t -> int
-val of_int64 : int64 -> t
-val to_int64 : t -> int64
-
-(* overrides of Pervasives functions *)
-val truncate : t -> int                 (* closer to 0 *)
-val round : t -> t                    (* nearest *)
-val iround : t -> int option
-val iround_exn : t -> int
-
-(** Ordinary t-only nan test. *)
-val is_nan : t -> bool
-
-(** Ordinary t-only infinity test. *)
-val is_inf : t -> bool
-
-(** min that returns the other value if one of the values is a [nan]. *)
-val min_inan : t -> t -> t
-(** max that returns the other value if one of the values is a [nan]. *)
-val max_inan : t -> t -> t
-
-val (+) : t -> t -> t
-val (-) : t -> t -> t
-val ( * ) : t -> t -> t
-val (/) : t -> t -> t
-
-val modf : float -> float * float
-val floor : float -> float
-val ceil : float -> float
-
-val mod_float : float -> float -> float
-
-(* mostly modules that inherit from t, since the infix operators are more convenient *)
-val add : t -> t -> t
-val sub : t -> t -> t
-val scale : t -> t -> t
-val abs : t -> t
-
-module Class : sig
-  type t =
-  | Infinite
-  | Nan
-  | Normal
-  | Subnormal
-  | Zero
-
-  include Binable.S with type binable = t
-  include Sexpable.S with type sexpable = t
-  include Stringable.S with type stringable = t
-end
-
-val classify : t -> Class.t
-
-module Sign : sig
-  type t = Neg | Zero | Pos
-end
-
-val sign : t -> Sign.t
+include Float_intf.S with type t = float

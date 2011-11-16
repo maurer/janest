@@ -1,55 +1,85 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 open Std_internal
 
 module Mutex = Mutex0
 
 type interval =
   | INone
-  | INormal of Time.Span.t
-  | IRandom of Time.Span.t * float
+  | INormal of Span.t
+  | IRandom of Span.t * float
 
 type status = Activated | Deactivating | Deactivated
 
+(* Mutex [mtx] must be held when modifying [status] and [events].  Such
+   modifications require that the timer thread and other threads potentially
+   waiting on the condition variable be woken up.  Hence the condition
+   variable always needs to be broadcast thereafter.  [wrap_update] makes
+   this safe and easy.  The timer thread may also wake up while waiting on
+   the condition variable when the timer expires. *)
 type t =
   {
     mutable status : status;
     events : event Heap.t;
-    
     mtx : Mutex.t;
     cnd : Condition.t;
     mutable now : Time.t;
   }
 
 and event =
-    {
-      mutable time : Time.t;
-      mutable interval : interval;
-      handler : event -> Time.t -> unit;
-      timer : t;
-      mutable t_event_opt : event Heap.heap_el option;
-    }
- 
+  {
+    mutable time : Time.t;
+    mutable interval : interval;
+    handler : event -> Time.t -> unit;
+    timer : t;
+    mutable t_event_opt : event Heap.heap_el option;
+  }
+
 let run_timer timer =
   let mtx = timer.mtx in
   let rec handle_events () =
     (* Assumes that mutex is held *)
-    if timer.status = Deactivating then begin
-      timer.status <- Deactivated;
-      Condition.broadcast timer.cnd;
-      Mutex.unlock mtx;
-    end else begin
-      begin match Heap.top_heap_el timer.events with
+    match timer.status with
+    | Deactivating ->
+        timer.status <- Deactivated;
+        Condition.broadcast timer.cnd;
+        Mutex.unlock mtx
+    | Deactivated -> assert false  (* impossible *)
+    | Activated ->
+      match Heap.top_heap_el timer.events with
       | None ->
           Condition.wait timer.cnd mtx;
-          timer.now <- Time.now ()
+          timer.now <- Time.now ();
+          handle_events ()
       | Some event ->
           let ev = Heap.heap_el_get_el event in
           let sched_time = ev.time in
           let now = timer.now in
           if Time.(<) now sched_time then begin
             (* Event in the future, wait until then or until signal *)
-            ignore (
-              Unix_ext.condition_timedwait timer.cnd mtx
-                (Time.to_float sched_time));
+            ignore (Core_condition.timedwait timer.cnd mtx sched_time : bool);
             timer.now <- Time.now ()
           end else begin
             (* Update event on the heap as necessary *)
@@ -61,7 +91,7 @@ let run_timer timer =
             | IRandom (span, max_ratio) ->
                 let p2 = Random.float 2.0 in
                 let p = p2 -. 1. in
-                let confusion = Time.Span.scale (max_ratio *. p) span in
+                let confusion = Span.scale span (max_ratio *. p) in
                 ev.time <- Time.add (Time.add now span) confusion;
                 Heap.update event ev
             end;
@@ -73,10 +103,8 @@ let run_timer timer =
                  (Exn.to_string e)
             end;
             Mutex.lock mtx
-          end
-      end;
-      handle_events ()
-    end
+          end;
+          handle_events ()
   in
   Mutex.lock mtx;
   handle_events ()
@@ -97,6 +125,9 @@ let create ?(min_size = 1000) () =
   ignore (Thread.create run_timer timer);
   timer
 
+let size timer =
+  Mutex.critical_section timer.mtx ~f:(fun () -> Heap.length timer.events)
+
 let deactivate timer =
   Mutex.critical_section timer.mtx ~f:(fun () ->
     let rec wait () = Condition.wait timer.cnd timer.mtx; check ()
@@ -112,7 +143,7 @@ let deactivate timer =
     check ())
 
 let check_span loc span =
-  if Time.Span.(<) span Time.Span.zero then
+  if Span.(<) span Span.zero then
     invalid_arg (sprintf "Timer.%s: span < 0" loc)
 
 let get_interval_param loc randomize = function
@@ -143,7 +174,7 @@ let wrap_update timer ~f =
             Condition.broadcast timer.cnd;
             res
         | Some top_before_f ->
-            if top_before_f.time <= top_after_f.time then res
+            if Time.(<=) top_before_f.time top_after_f.time then res
             else (
               (* Earlier event time at top: we have to wake up *)
               Condition.broadcast timer.cnd;

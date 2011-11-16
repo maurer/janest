@@ -1,3 +1,27 @@
+/******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************/
+
 #define _FILE_OFFSET_BITS 64
 
 #include <string.h>
@@ -5,14 +29,14 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <assert.h>
-#ifdef HAVE_MALLOC_H
+
+#ifdef __GLIBC__
 #include <malloc.h>
-#else
-#warning "No malloc.h found"
 #endif
 
 #include "ocaml_utils.h"
 #include "unix_utils.h"
+#include "socketaddr.h"
 
 /* Initialisation */
 
@@ -25,15 +49,13 @@ CAMLprim value bigstring_init_stub(value __unused v_unit)
   bigstring_exc_IOError = caml_named_value("Bigstring.IOError");
   bigstring_exc_End_of_file = caml_named_value("Bigstring.End_of_file");
   unix_error_exn = caml_named_value("Unix.Unix_error");
+#ifdef __GLIBC__
   /* GLIBC uses a threshold internally as a cutoff between brk and mmap.
      Sadly, it nowadays employs a heuristic that may change this value
      dynamically.  The call to mallopt suppresses this behavior, which
      made it hard to prevent C-heap fragmentation (e.g. in the writer).
   */
-#ifdef HAVE_MALLOC_H
   mallopt(M_MMAP_THRESHOLD, 131072);
-#else
-#warning "no malloc.h, not calling mallopt"
 #endif
   if (unix_error_exn == NULL)
     caml_invalid_argument(
@@ -223,12 +245,40 @@ CAMLprim value bigstring_really_recv_stub(
   }
 }
 
+CAMLprim value bigstring_recvfrom_assume_fd_is_nonblocking_stub(
+  value v_sock, value v_pos, value v_len, value v_bstr)
+{
+  CAMLparam1(v_bstr);
+  CAMLlocal1(v_addr);
+  struct caml_ba_array *ba = Caml_ba_array_val(v_bstr);
+  char *bstr = (char *) ba->data + Long_val(v_pos);
+  size_t len = Long_val(v_len);
+  ssize_t n_read;
+  union sock_addr_union addr;
+  socklen_param_type addr_len = sizeof(addr);
+  value v_res;
+  if (len > THREAD_IO_CUTOFF) {
+    caml_enter_blocking_section();
+      n_read = recvfrom(Int_val(v_sock), bstr, len, 0, &addr.s_gen, &addr_len);
+    caml_leave_blocking_section();
+  }
+  else n_read = recvfrom(Int_val(v_sock), bstr, len, 0, &addr.s_gen, &addr_len);
+  if (n_read == -1)
+    uerror("bigstring_recvfrom_assume_fd_is_nonblocking", Nothing);
+  v_addr = alloc_sockaddr(&addr, addr_len, -1);
+  v_res = caml_alloc_small(2, 0);
+  Field(v_res, 0) = Val_long(n_read);
+  Field(v_res, 1) = v_addr;
+  CAMLreturn(v_res);
+}
+
 
 /* I/O of bigstrings from channels */
 
 typedef off_t file_offset;
 
 #define IO_BUFFER_SIZE 4096
+
 
 struct channel {
   int fd;                       /* Unix file descriptor */
@@ -573,6 +623,23 @@ CAMLprim value bigstring_send_nonblocking_no_sigpipe_stub(
   return Val_long(ret);
 }
 
+CAMLprim value bigstring_sendto_nonblocking_no_sigpipe_stub(
+  value v_fd, value v_pos, value v_len, value v_bstr, value v_addr)
+{
+  char *bstr = get_bstr(v_bstr, v_pos);
+  union sock_addr_union addr;
+  socklen_param_type addr_len = sizeof(addr);
+  ssize_t ret;
+  get_sockaddr(v_addr, &addr, &addr_len);
+  ret =
+    sendto(
+      Int_val(v_fd), bstr, Long_val(v_len),
+      nonblocking_no_sigpipe_flag, &addr.s_gen, addr_len);
+  if (ret == -1 && errno != EAGAIN && errno != EWOULDBLOCK)
+    uerror("sendto_nonblocking_no_sigpipe", Nothing);
+  return Val_long(ret);
+}
+
 CAMLprim value bigstring_sendmsg_nonblocking_no_sigpipe_stub(
   value v_fd, value v_iovecs, value v_count)
 {
@@ -604,6 +671,23 @@ CAMLprim value bigstring_sendmsg_nonblocking_no_sigpipe_stub(
 #warning "MSG_NOSIGNAL not defined; bigstring_send{,msg}_noblocking_no_sigpipe not implemented"
 #warning "Try compiling on Linux?"
 #endif
+
+/* Search */
+
+CAMLprim value bigstring_find(value v_str, value v_needle,
+                              value v_pos, value v_len)
+{
+  char *start, *r;
+  long ret;
+
+  start = get_bstr(v_str, v_pos);
+  r = (char*) memchr(start, Int_val(v_needle), Long_val(v_len));
+
+  if (!r) return Val_long(-1);
+
+  ret = Long_val(v_pos) + r - start;
+  return Val_long(ret);
+}
 
 /* Destruction */
 

@@ -1,13 +1,41 @@
-(** There are four variants of thread-safe queue, depending on whether there are one/many
-    readers or one/many writers.  All the variants allow (at least) one reader and (at
-    least) one writer simultaneously, unlike the default Queue.t.  A create function
-    returns a pair (read, write), where read gets an element from the front of the queue
-    and write adds an element to the back of the queue.  *)
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
-type 'a create = unit -> (unit -> 'a option) * ('a -> unit)
+(* A thread-safe non-blocking queue of unbounded size.
 
+   The implementation does not use mutexes, so operations are quite fast, just
+   a handful of instructions.
+*)
 
-val one_reader_one_writer : 'a create   (* lock-free implementation *)
-val one_reader_many_writers : 'a create
-val many_readers_one_writer : 'a create
-val many_readers_many_writers : 'a create
+type 'a t
+
+(* [create ()] returns an empty queue. *)
+val create : unit -> 'a t
+
+(* [create' ()] is a variant of create that returns a pair of functions
+   [(dequeue, enqueue)] for operating on the queue. *)
+val create' : unit -> (unit -> 'a option) * ('a -> unit)
+
+val dequeue : 'a t -> 'a option
+val enqueue : 'a t -> 'a -> unit

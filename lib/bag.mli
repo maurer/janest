@@ -1,9 +1,36 @@
-(** A bag is a data structure like a set, except that:
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
 
-    * It doesn't require anything (hashable, comparable) of elements in the bag.
-    * Duplicates are allowed.
-    * Addition and removal are constant time.
-*)
+(** A bag is a data structure like a set, except that:
+ *
+ *   - It doesn't require anything (hashable, comparable) of elements in the bag.
+ *   - Duplicates are allowed.
+ *   - Addition and removal are constant time.
+ *
+ * It is an error to modify a bag (add, remove, remove_one, ...) during iteration
+ * (fold, iter, ...).
+ *)
 open Std_internal
 
 module Elt : sig

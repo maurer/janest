@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 
 open Core.Std
 open OUnit;;
@@ -193,35 +217,35 @@ let test =
             (Invalid_argument "drop_prefix expecting nonnegative argument")
             (fun () -> test (-1) "");
         );
-        "chop_suffix" >::
+        "chop_suffix_exn" >::
           (fun () ->
-            "simple" @? (S.chop_suffix str1 ~suffix:"7890" = "123456");
-            "end" @? (S.chop_suffix str1 ~suffix:"" = "1234567890");
+            "simple" @? (S.chop_suffix_exn str1 ~suffix:"7890" = "123456");
+            "end" @? (S.chop_suffix_exn str1 ~suffix:"" = "1234567890");
             assert_raises
               ~msg:"not a suffix"
-              (Invalid_argument "Core_string.chop_suffix \"1234567890\" \"abc\"")
-              (fun () -> S.chop_suffix str1 ~suffix:"abc")
+              (Invalid_argument "Core_string.chop_suffix_exn \"1234567890\" \"abc\"")
+              (fun () -> S.chop_suffix_exn str1 ~suffix:"abc")
+        );
+        "chop_prefix_exn" >::
+          (fun () ->
+            "simple" @? (S.chop_prefix_exn str1 ~prefix:"123" = "4567890");
+            "end" @? (S.chop_prefix_exn str1 ~prefix:"" = "1234567890");
+            assert_raises
+              ~msg:"not a prefix"
+              (Invalid_argument "Core_string.chop_prefix_exn \"1234567890\" \"abc\"")
+              (fun () -> S.chop_prefix_exn str1 ~prefix:"abc")
+        );
+        "chop_suffix" >::
+          (fun () ->
+            "simple" @? (S.chop_suffix str1 ~suffix:"7890" = Some "123456");
+            "end" @? (S.chop_suffix str1 ~suffix:"" = Some "1234567890");
+            "not a suffix" @? (S.chop_suffix str1 ~suffix:"abc" = None)
         );
         "chop_prefix" >::
           (fun () ->
-            "simple" @? (S.chop_prefix str1 ~prefix:"123" = "4567890");
-            "end" @? (S.chop_prefix str1 ~prefix:"" = "1234567890");
-            assert_raises
-              ~msg:"not a prefix"
-              (Invalid_argument "Core_string.chop_prefix \"1234567890\" \"abc\"")
-              (fun () -> S.chop_prefix str1 ~prefix:"abc")
-        );
-        "chop_suffix_opt" >::
-          (fun () ->
-            "simple" @? (S.chop_suffix_opt str1 ~suffix:"7890" = Some "123456");
-            "end" @? (S.chop_suffix_opt str1 ~suffix:"" = Some "1234567890");
-            "not a suffix" @? (S.chop_suffix_opt str1 ~suffix:"abc" = None)
-        );
-        "chop_prefix_opt" >::
-          (fun () ->
-            "simple" @? (S.chop_prefix_opt str1 ~prefix:"123" = Some "4567890");
-            "end" @? (S.chop_prefix_opt str1 ~prefix:"" = Some "1234567890");
-            "not a prefix" @? (S.chop_prefix_opt str1 ~prefix:"abc" = None)
+            "simple" @? (S.chop_prefix str1 ~prefix:"123" = Some "4567890");
+            "end" @? (S.chop_prefix str1 ~prefix:"" = Some "1234567890");
+            "not a prefix" @? (S.chop_prefix str1 ~prefix:"abc" = None)
         );
         "to_list_and_to_list_rev" >::
           (fun () ->
@@ -234,4 +258,90 @@ let test =
             assert (S.to_list empty = []);
             assert (S.to_list_rev empty = [])
         );
+        ("mem" >::: [
+          ("default" >:: fun () ->
+            let test t c b =
+              (sprintf "%c in %s = %b" c t b) @? (S.mem t c = b)
+            in
+            (let t = "abc" in
+              test t 'a' true;
+              test t 'b' true;
+              test t 'c' true;
+              test t 'x' false);
+            (let t = "ab" in
+              test t 'a' true;
+              test t 'b' true;
+              test t 'x' false);
+            (let t = "a" in
+              test t 'a' true;
+              test t 'x' false);
+            (let t = "" in
+              test t 'x' false);
+          );
+          ("equals-is-always-true" >:: fun () ->
+            let equal (_ : char) (_ : char) = true in
+            let test t c b =
+              (sprintf "%c in %s = %b" c t b) @? (S.mem ~equal t c = b)
+            in
+            (let t = "abc" in
+              test t 'a' true;
+              test t 'b' true;
+              test t 'c' true;
+              test t 'x' true);
+            (let t = "ab" in
+              test t 'a' true;
+              test t 'x' true);
+            (let t = "a" in
+              test t 'a' true;
+              test t 'x' true);
+            (let t = "" in
+              test t 'x' false);
+          );
+          ("equals-is-always-false" >:: fun () ->
+            let equal (_ : char) (_ : char) = false in
+            let test t c =
+              (sprintf "%c in %s = false" c t) @? (not (S.mem ~equal t c))
+            in
+            (let t = "abc" in
+              test t 'a';
+              test t 'b';
+              test t 'c';
+              test t 'x');
+            (let t = "ab" in
+              test t 'a';
+              test t 'x');
+            (let t = "a" in
+              test t 'a';
+              test t 'x');
+            (let t = "" in
+              test t 'x');
+          );
+          ("equals-is-strange" >:: fun () ->
+            let equal c1 c2 = c1 = c2 || c1 = 'U' || c2 = 'U' in
+            let test t c b =
+              (sprintf "%c in %s = %b" c t b) @? (S.mem ~equal t c = b)
+            in
+            (let t = "abc" in
+              test t 'a' true;
+              test t 'b' true;
+              test t 'c' true;
+              test t 'x' false;
+              test t 'U' true);
+            (let t = "ab" in
+              test t 'a' true;
+              test t 'x' false;
+              test t 'U' true);
+            (let t = "a" in
+              test t 'a' true;
+              test t 'x' false;
+              test t 'U' true);
+            (let t = "" in
+              test t 'x' false;
+              test t 'U' false);
+            (let t = "U" in
+              test t 'a' true;
+              test t 'x' true;
+              test t 'U' true);
+          );
+        ]);
     ]

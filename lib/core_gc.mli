@@ -1,3 +1,35 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This file is derived from source code of the Ocaml compiler.               *
+ * which has additional copyrights:                                           *
+ *                                                                            *
+ *    Damien Doligez, projet Cristal, INRIA Rocquencourt                      *
+ *                                                                            *
+ *    Copyright 1996 Institut National de Recherche en Informatique et        *
+ *    en Automatique.                                                         *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 (***********************************************************************)
 (*                                                                     *)
 (*                           Objective Caml                            *)
@@ -71,6 +103,9 @@ module Stat : sig
 
     top_heap_words : int;
     (** Maximum size reached by the major heap, in words. *)
+
+    stack_size : int
+    (** Current size of the stack, in words. *)
   }
   include Binable.S with type binable = t
   include Sexpable.S with type sexpable = t
@@ -98,7 +133,7 @@ module Control : sig
 
     mutable space_overhead : int;
     (** The major GC speed is computed from this parameter.
-       This is the memory that will be "wasted" because the GC does not
+        This is the memory that will be "wasted" because the GC does not
        immediatly collect unreachable blocks.  It is expressed as a
        percentage of the memory used for live data.
        The GC will work more (use more CPU time and collect
@@ -284,13 +319,15 @@ val delete_alarm : alarm -> unit
 (** [delete_alarm a] will stop the calls to the function associated
    to [a].  Calling [delete_alarm a] again has no effect. *)
 
-val tune : ?logger:(string -> unit) ->
-  ?minor_heap_size:int ->
-  ?major_heap_increment:int ->
-  ?space_overhead:int ->
-  ?verbose:int ->
-  ?max_overhead:int ->
-  ?stack_limit:int ->
-  ?allocation_policy:int -> unit -> unit
 (** Adjust the specified GC parameters. *)
-
+val tune :
+  ?logger:(string -> unit)
+  -> ?minor_heap_size:int
+  -> ?major_heap_increment:int
+  -> ?space_overhead:int
+  -> ?verbose:int
+  -> ?max_overhead:int
+  -> ?stack_limit:int
+  -> ?allocation_policy:int
+  -> unit
+  -> unit

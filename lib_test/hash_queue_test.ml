@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 open OUnit;;
 open Core.Std
 
@@ -20,16 +44,15 @@ let test =
         inv ();
         assert (Hq.is_empty hq);
         assert (Hq.dequeue hq = None);
-        assert (try ignore (Hq.dequeue_exn hq); false with Not_found -> true | _ -> false);
+        assert (try ignore (Hq.dequeue_exn hq); false with _ -> true);
         assert (Hq.dequeue_with_key hq = None);
-        assert (try ignore (Hq.dequeue_with_key_exn hq); false with Not_found -> true | _ -> false);
+        assert (try ignore (Hq.dequeue_with_key_exn hq); false with _ -> true);
         Hq.dequeue_all hq ~f:(fun _ -> assert false);
         assert (Hq.remove hq "foobar" = `No_such_key);
-        assert (try ignore (Hq.remove_exn hq "foobar"); false with
-          | Not_found -> true | _ -> false);
+        assert (try ignore (Hq.remove_exn hq "foobar"); false with | _ -> true);
         assert (Hq.replace hq "foobar" 0 = `No_such_key);
         assert (try ignore (Hq.replace_exn hq "foobar" 0); false with
-          | Not_found -> true | _ -> false);
+          | _ -> true);
         assert
           ([] = Hq.foldi hq ~init:[] ~f:(fun ac ~key:_ ~data:_ -> () :: ac));
         assert ([] = Hq.fold hq ~init:[] ~f:(fun ac _ -> () :: ac));
@@ -37,8 +60,8 @@ let test =
 
         (* test with 10 elems *)
         let n = 10 in
-        for i = 1 to n do 
-          assert (Hq.enqueue hq (string_of_int i) i = `Ok); 
+        for i = 1 to n do
+          assert (Hq.enqueue hq (string_of_int i) i = `Ok);
           inv ();
         done;
         assert (Hq.length hq = n);
@@ -79,15 +102,15 @@ let test =
         assert (Hq.is_empty hq);
 
         (* add 100 *)
-        for i = 1 to 100 do 
-          assert (Hq.enqueue hq (string_of_int i) i = `Ok); 
+        for i = 1 to 100 do
+          assert (Hq.enqueue hq (string_of_int i) i = `Ok);
         done;
         (* double booking *)
         assert (Hq.enqueue hq "42" 42 = `Key_already_present);
         assert (try
             Hq.enqueue_exn hq "42" 42; false
           with
-          | Failure _ -> true | _ -> false);
+          | _ -> true);
         assert (Hq.replace hq "1" 42 = `Ok);
         assert (Hq.lookup hq "1" = Some 42);
         assert (Hq.lookup_exn hq "1" = 42);
@@ -96,13 +119,24 @@ let test =
         assert (try
             Hq.replace_exn hq "1" 42; false
           with
-          | Not_found -> true
-          | _ -> false);
+          | _ -> true);
         assert (Hq.lookup hq "1" = None);
         assert (try ignore (Hq.lookup_exn hq "1"); false with
           | Not_found -> true | _ -> false);
-          
+
         Hq.clear hq;
         assert (Hq.is_empty hq);
+
+        let add i = Hq.enqueue_exn hq (Int.to_string i) i in
+        List.iter [1; 2; 3] ~f:add;
+        assert (["1"; "2"; "3" ] = Hq.keys hq);
+        begin
+          try Hq.iter hq ~f:(fun _ -> add 13); assert false
+          with _ -> ();
+        end;
+        begin
+          try Hq.iter hq ~f:(fun _ -> ignore (Hq.remove hq "foo")); assert false
+          with _ -> ();
+        end;
       )
     ]

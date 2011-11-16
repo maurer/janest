@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 (** In_channel collects all of the pervasive functions that work on in_channels.
     * It adds some new functions (like [input_all] and [input_lines]).
     * It names things using the fact that there is no worry about toplevel name
@@ -10,10 +34,21 @@ type t = in_channel
 
 val stdin : t
 
-val create : ?binary:bool -> string -> t
+(** Channels are opened in binary mode iff [binary] is true.  This only has an effect on
+    Windows.
+*)
+
+
+type 'a with_create_args = ?binary:bool -> 'a
+
+val create : (string -> t) with_create_args
+
+(** [with_file ~f fname] executes [~f] on the open channel from
+    [fname], and closes it afterwards. *)
+val with_file : (string -> f:(t -> 'a) -> 'a) with_create_args
 
 val close : t -> unit
-val close_noerr : t -> unit
+val close_noerr : t -> unit             
 
 val input : t -> buf:string -> pos:int -> len:int -> int
 val really_input : t -> buf:string -> pos:int -> len:int -> unit option
@@ -21,7 +56,8 @@ val input_byte : t -> int option
 val input_char : t -> char option
 
 val input_binary_int : t -> int option
-val input_value : t -> 'a option
+
+val input_value : t -> _ option
 val input_all : t -> string
 
 
@@ -42,6 +78,10 @@ val fold_lines :
 *)
 val input_lines : ?fix_win_eol:bool -> t -> string list
 
+(** Completely reads an input channel and returns the results as a list of
+    strings. Each line in one string. *)
+val input_lines : ?fix_win_eol:bool -> t -> string list
+
 (** [iter_lines ?fix_win_eol t ~f] applies [f] to each line read from [t] using
     [input_line]. *)
 val iter_lines : ?fix_win_eol:bool -> t -> f:(string -> unit) -> unit
@@ -51,3 +91,7 @@ val pos : t -> int64
 val length : t -> int64
 
 val set_binary_mode : t -> bool -> unit
+
+(** convenience function -- [read_lines filename] Opens filename, reads
+    all lines, and closes the file. *)
+val read_lines : string -> string list

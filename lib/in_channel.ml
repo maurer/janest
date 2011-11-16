@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 module String = Core_string
 
 type t = in_channel
@@ -8,14 +32,19 @@ let length = Pervasives.LargeFile.in_channel_length
 
 let stdin = Pervasives.stdin
 
-let create ?(binary = false) file =
+type 'a with_create_args = ?binary:bool -> 'a
+
+let create ?(binary = true) file =
   let flags = [Open_rdonly] in
   let flags = if binary then Open_binary :: flags else flags in
-  Pervasives.open_in_gen flags 0o000 file
+  Sys_open_patch.open_in_gen flags 0o000 file
 ;;
 
-let close = Pervasives.close_in
-let close_noerr = Pervasives.close_in_noerr
+external close : t -> unit = "fixed_close_channel";;
+let close_noerr t = try close t with _ -> ()
+
+let with_file ?(binary = true) file ~f =
+  Exn.protectx (create ~binary file) ~f ~finally:close
 
 let may_eof f = try Some (f ()) with End_of_file -> None
 
@@ -77,3 +106,5 @@ let input_lines ?fix_win_eol t =
 let iter_lines ?fix_win_eol t ~f =
   fold_lines ?fix_win_eol t ~init:() ~f:(fun () line -> f line)
 ;;
+
+let read_lines fname = with_file fname ~f:input_lines

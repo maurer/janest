@@ -1,24 +1,41 @@
-(** Bigbuffer
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This file is derived from source code of the Ocaml compiler.               *
+ * which has additional copyrights:                                           *
+ *                                                                            *
+ *    Pierre Weis and Xavier Leroy, projet Cristal, INRIA Rocquencourt        *
+ *                                                                            *
+ *    Copyright 1999 Institut National de Recherche en Informatique et        *
+ *    en Automatique.                                                         *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
+(* Bigbuffer
 
     NOTE: implementation uses Bigstrings instead of strings.
     This removes the 16MB limit on buffer size, and improves
     I/O-performance when reading/writing from/to channels.
 *)
-
-(***********************************************************************)
-(*                                                                     *)
-(*                           Objective Caml                            *)
-(*                                                                     *)
-(*  Pierre Weis and Xavier Leroy, projet Cristal, INRIA Rocquencourt   *)
-(*                                                                     *)
-(*  Copyright 1999 Institut National de Recherche en Informatique et   *)
-(*  en Automatique.  All rights reserved.  This file is distributed    *)
-(*  under the terms of the GNU Library General Public License, with    *)
-(*  the special exception on linking described in file ../LICENSE.     *)
-(*                                                                     *)
-(***********************************************************************)
-
-(* $Id: buffer.mli,v 1.21 2005/10/25 18:34:07 doligez Exp $ *)
 
 (** Extensible string buffers.
 
@@ -30,7 +47,6 @@
 
 type t
 (** The abstract type of buffers. *)
-
 val create : int -> t
 (** [create n] returns a fresh buffer, initially empty.
    The [n] parameter is the initial size of the internal string
@@ -41,9 +57,7 @@ val create : int -> t
    as the number of characters that are expected to be stored in
    the buffer (for instance, 80 for a buffer that holds one output
    line).  Nothing bad will happen if the buffer grows beyond that
-   limit, however. In doubt, take [n = 16] for instance.
-   If [n] is not between 1 and {!Sys.max_string_length}, it will
-   be clipped to that interval. *)
+   limit, however. In doubt, take [n = 16] for instance. *)
 
 val contents : t -> string
 (** Return a copy of the current contents of the buffer.
@@ -53,11 +67,28 @@ val big_contents : t -> Bigstring.t
 (** Return a copy of the current contents of the buffer as a bigstring.
    The buffer itself is unchanged. *)
 
+
+val volatile_contents : t -> Bigstring.t
+(** Return the actual underlying bigstring used by this bigbuffer.  This
+    means that there is no copy, but it also means that the contents of
+    this Bigstring.t may/will be changed by further operations on the
+    Bigbuffer *)
+
 val sub : t -> int -> int -> string
-(** [Buffer.sub b off len] returns (a copy of) the substring of the
+(** [Bigbuffer.sub b off len] returns (a copy of) the substring of the
 current contents of the buffer [b] starting at offset [off] of length
 [len] bytes. May raise [Invalid_argument] if out of bounds request. The
 buffer itself is unaffected. *)
+
+val blit :
+  src : t -> src_pos : int -> dst : string -> dst_pos : int -> len : int -> unit
+(** [blit ~src ~src_pos ~dst ~dst_pos ~len] copies [len] characters from
+   the current contents of the buffer [src], starting at offset [src_pos]
+   to string [dst], starting at character [dst_pos].
+
+   Raise [Invalid_argument] if [src_pos] and [len] do not designate a valid
+   substring of [src], or if [dst_pos] and [len] do not designate a valid
+   substring of [dst]. *)
 
 val nth : t -> int -> char
 (** get the (zero-based) n-th character of the buffer. Raise
@@ -72,7 +103,7 @@ val clear : t -> unit
 val reset : t -> unit
 (** Empty the buffer and deallocate the internal string holding the
    buffer contents, replacing it with the initial internal string
-   of length [n] that was allocated by {!Buffer.create} [n].
+   of length [n] that was allocated by {!Bigbuffer.create} [n].
    For long-lived buffers that may have grown a lot, [reset] allows
    faster reclamation of the space used by the buffer. *)
 

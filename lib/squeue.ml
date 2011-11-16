@@ -1,3 +1,27 @@
+(******************************************************************************
+ *                             Core                                           *
+ *                                                                            *
+ * Copyright (C) 2008- Jane Street Holding, LLC                               *
+ *    Contact: opensource@janestreet.com                                      *
+ *    WWW: http://www.janestreet.com/ocaml                                    *
+ *                                                                            *
+ *                                                                            *
+ * This library is free software; you can redistribute it and/or              *
+ * modify it under the terms of the GNU Lesser General Public                 *
+ * License as published by the Free Software Foundation; either               *
+ * version 2 of the License, or (at your option) any later version.           *
+ *                                                                            *
+ * This library is distributed in the hope that it will be useful,            *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
+ * Lesser General Public License for more details.                            *
+ *                                                                            *
+ * You should have received a copy of the GNU Lesser General Public           *
+ * License along with this library; if not, write to the Free Software        *
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
+ *                                                                            *
+ ******************************************************************************)
+
 open Std_internal
 
 module Mutex = Core_mutex
@@ -6,30 +30,37 @@ module Mutex = Core_mutex
 type 'a t = {
   ev_q: 'a Queue.t;
   maxsize: int;
-  mutex: Mutex.t;
-  not_empty: Condition.t;
-  not_full: Condition.t;
-}
+  mutex: Mutex.t sexp_opaque;
+  not_empty: Condition.t sexp_opaque;
+  not_full: Condition.t sexp_opaque;
+  finally:unit -> unit;
+} with sexp_of
 
 let create maxsize =
+  let ev_q = Queue.create () in
+  let mutex = Mutex.create () in
+  let not_empty = Condition.create () in
+  let not_full = Condition.create () in
   {
-    ev_q = Queue.create ();
-    mutex = Mutex.create ();
-    not_empty = Condition.create ();
-    not_full = Condition.create ();
+    ev_q = ev_q;
+    mutex = mutex;
+    not_empty = not_empty;
+    not_full = not_full;
     maxsize = maxsize;
+    finally = (fun () ->
+      let len = Queue.length ev_q in
+      if len <> 0 then Condition.signal not_empty;
+      if len < maxsize then Condition.signal not_full;
+      Mutex.unlock mutex);
   }
+;;
 
 let id () = Thread.id (Thread.self ())
 
+
 let wrap q run =
   Mutex.lock q.mutex;
-  protect ~f:run
-    ~finally:(fun () ->
-      let len = Queue.length q.ev_q in
-      if len <> 0 then Condition.signal q.not_empty;
-      if len < q.maxsize then Condition.signal q.not_full;
-      Mutex.unlock q.mutex)
+  protect ~f:run ~finally:q.finally
 ;;
 
 let clear q =
