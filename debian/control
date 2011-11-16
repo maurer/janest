@@ -90,6 +90,7 @@ Description: Jane Street's standard library for OCaml (runtime)
 Package: libcore-ocaml-doc
 Section: doc
 Architecture: all
+Depends: ${misc:Depends}
 Enhances:
  libcore-ocaml-dev,
  ${misc:Depends}
