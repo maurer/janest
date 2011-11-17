@@ -1,3 +1,9 @@
+janest-core (107.01-5) unstable; urgency=low
+
+  * Fix FTBFS on some architectures by forcing link with -lrt
+
+ -- Stéphane Glondu <glondu@debian.org>  Thu, 17 Nov 2011 08:02:17 +0100
+
 janest-core (107.01-4) unstable; urgency=low
 
   [ Stéphane Glondu ]
