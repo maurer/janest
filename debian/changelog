@@ -1,3 +1,9 @@
+janest-core (107.01-6) UNRELEASED; urgency=low
+
+  * Add bc to Build-Depends (thanks to Thorsten Glaser)
+
+ -- Stéphane Glondu <glondu@debian.org>  Mon, 22 Apr 2013 11:10:15 +0200
+
 janest-core (107.01-5) unstable; urgency=low
 
   * Fix FTBFS on some architectures by forcing link with -lrt
