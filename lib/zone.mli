@@ -1,48 +1,120 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+(** Time-zone handling. *)
+open Std_internal
 
-(*
+(** {1 User-friendly interface} *)
+
+(** The type of a time-zone.
+
+    bin_io and sexp representations of Zone.t are the name of the zone, and not the full
+    data that is read from disk when Zone.find is called.  The full Zone.t is
+    reconstructed on the receiving/reading side by reloading the zone file from disk.  Any
+    zone name that is accepted by [find] is acceptable in the bin_io and sexp
+    representations. *)
+type t
+
+include Identifiable.S with type t := t
+
+(** [find name] looks up a [t] by its name and returns it.  *)
+val find : string -> t option
+
+(** [find_office office] a more type-safe interface for pulling timezones related to
+    existing Jane Street offices/locations. *)
+val find_office : [ `chi | `hkg | `ldn | `nyc ] -> t
+val find_exn : string -> t
+
+(** [machine_zone ?refresh ()] returns the machines zone (t).  It does this by first
+    looking for a value in the environment variable "TZ", and loading the named zone if
+    it is set.  If "TZ" is not set it reads /etc/localtime directly.
+
+    The first call to machine_zone is cached, so there is no need to cache it locally.
+    The cache can be bypassed and refreshed by setting ~refresh to true.
+
+    Note that this function can throw an exception if the TZ time variable is
+    misconfigured or if the appropriate timezone files can't be found because of the way
+    the box is configured.  We don't put an _exn on this function because that
+    misconfiguration is quite rare.
+*)
+val machine_zone : ?refresh:bool (* defaults to false *) -> unit -> t
+
+(** [likely_machine_zones] is a list of zone names that will be searched first when trying
+    to determine the machine zone of a box.  Setting this to a likely set of zones for
+    your application will speed the very first call to machine_zone *)
+val likely_machine_zones : string list ref
+
+(** [of_utc_offset offset] returns a timezone with a static UTC offset (given in
+    hours). *)
+val of_utc_offset : hours:int -> t
+
+(** [default_utc_offset] returns the UTC offset of default regime for timezone [t] in
+    seconds.  Note: the default utc offset may not reflect the current utc offset. *)
+val default_utc_offset_deprecated : t -> int
+
+(** [utc] the UTC time zone.  Included for convenience *)
+val utc : t
+
+(** [abbreviation zone t] returns t abbreviation name such as EDT, EST, JST of given
+    [zone] at the time [t].  This string conversion is one-way only, and cannot reliably
+    be turned back into a t *)
+val abbreviation : t -> float -> string
+
+(** [name zone] returns the name of the time zone *)
+val name : t -> string
+
+(* {1 Low-level functions}
+
+  The functions below are lower level and should be used more rarely. *)
+
+(** [init ()] pre-load all available time zones from disk, this function has no effect if
+    it is called multiple times.  Time zones will otherwise be loaded at need from the
+    disk on the first call to find/find_exn. *)
+val init : unit -> unit
+
+(** [digest t] return the MD5 digest of the file the t was created from (if any) *)
+val digest : t -> string option
+
+(** [initialized_zones ()] returns a sorted list of time zone names that have been loaded
+    from disk thus far. *)
+val initialized_zones : unit -> (string * t) list
+
+(** [shift_epoch_time zone [`Local | `UTC] time] Takes an epoch (aka "unix") time given
+    either in local or in UTC (as indicated in the arguments) and shifts it according to
+    the local time regime in force in zone.  That is, given a Local epoch time it will
+    return the corresponding UTC timestamp and vice versa.  This function is low level,
+    and is not intended to be called by most client code.  Use the high level functions
+    provided in Time instead. *)
+val shift_epoch_time : t -> [`Local | `UTC] -> float -> float
+
+exception Unknown_zone of string
+exception Invalid_file_format of string
+
+module Stable : sig
+  module V1 : sig
+    type t with sexp, bin_io
+  end with type t = t
+end
+
+(** {1 Notes on time}
+
   This library replicates and extends the functionality of the standard Unix time handling
   functions (currently exposed in the Unix module, and indirectly through the Time
-  module).  It has some room for speed improvement because the code uses the simplest
-  algorithm available wherever possible, but even as it stands it is somewhere between 7%
-  and 13% faster at simple time to string conversions.  On a vmware machine as of early
-  2009 this translated to 164,233 time -> string conversions per second.
+  module).
 
-  Some general resources (summarized information also appears below):
+  Things you should know before delving into the mess of time...
+
+  {2 Some general resources (summarized information also appears below) }
+
+  {v
     general overview   - http://www.twinsun.com/tz/tz-link.htm
-    leap seconds       - http://www.thedjbway.org/clockspeed/leapsecs.html
     zone abbreviations - http://blogs.msdn.com/oldnewthing/archive/2008/03/07/8080060.aspx
+    leap seconds       - http://en.wikipedia.org/wiki/Leap_second
     epoch time         - http://en.wikipedia.org/wiki/Unix_time
     UTC/GMT time       - http://www.apparent-wind.com/gmt-explained.html
     TAI time           - http://en.wikipedia.org/wiki/International_Atomic_Time
     Almost every possible time measurement -
       http://www.ucolick.org/~sla/leapsecs/timescales.html
+  v}
 
-  Things you should know before delving into the mess of time...
-
-  # Standards for measuring time
+  {2 Standards for measuring time }
 
   - Epoch time/Unix time/Posix time: Defined as the number of seconds that have passed
     since midnight, January 1st, 1970 GMT.  However, under epoch time, a day is always
@@ -52,7 +124,6 @@
     managed.  It either ignores it, replays the second, or causes a second to last longer
     than a second (retards the second).  The important thing to remember is that however
     the transition is managed, all days start on an evenly divisible multiple of 86,400.
-
   - GMT/Greenwich Mean Time/Greenwich Civil Time: The time based on the movement of the
     sun relative to the meridian through the Old Greenwich Observatory (0 degrees).  The
     movement of the sun in this case is a "mean" movement of the sun to adjust for slight
@@ -61,21 +132,17 @@
     year.  GMT is often used synonymously with the term UTC (see below), but may also be
     used to refer to the time system described here, which differs from UTC (as of 2009)
     by ~1 second.
-
   - Standard Time: The time based on the adjusted (as in GMT) movement of the sun over a
     point on the earth that is not Greenwich.  Colloquially, the time in a time zone
     without accounting for any form of daylight savings time.
-
   - Wall Clock Time: The time as it appears on a clock on the wall in a given time zone.
     Essentially this is standard time with DST adjustments.
-
   - TAI: International atomic time.  The time based on a weighted average of the time kept
     by roughly 300 atomic clocks worldwide.  TAI is written using the same format as
     normal solar (also called civil) times, but is not based on, or adjusted for the
     apparent solar time.  Thus, as of 2009 TAI appears to be ahead of most other time
     systems by ~34 seconds when written out in date/time form (2004-09-17T00:00:32 TAI is
     2004-09-17T00:00:00 UTC)
-
   - UTC/Universal Coordinated Time: Often taken as just another term for GMT, UTC is
     actually TAI adjusted with leap seconds to keep it in line with apparent solar time.
     Each UTC day is not an exact number of seconds long (unlike TAI or epoch time), and
@@ -87,7 +154,6 @@
     long baseline interferometry, and Navstar Global Positioning System (GPS) stations.
     This isn't important for using UTC, but is very cool.  UTC is not well defined before
     about 1960.
-
   - Windows File Time: The number of 100-nanosecond intervals that have elapsed since
     12:00 A.M. January 1, 1601, UTC.  This is great because UTC has no meaning in 1601
     (being based on atomic timekeeping technologies that didn't exist then), and also
@@ -97,7 +163,6 @@
     active at the time Windows NT was being designed. In other words, it was chosen to
     make the math come out nicely."
     (http://blogs.msdn.com/oldnewthing/archive/2009/03/06/9461176.aspx)
-
   - VBScript (this is my favorite):
     http://blogs.msdn.com/ericlippert/archive/2003/09/16/eric-s-complete-guide-to-vt-date.aspx
 
@@ -108,24 +173,27 @@
   (old) and the Gregorian calendar, which happened at different times in history in
   different places in the world.
 
-  # How does a system determine what time zone it is in?
+  {2 How does a system determine what time zone it is in? }
 
-  1. Check to see if the TZ environment variable is set.  If it is, it can be set to one
-  of three forms, two of which are rarely, if ever used see:
-    http://www.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html
-  for more information on the obscure forms.  The common form represents a relative path
-  from the base /usr/share/zoneinfo/posix, and is generally in the form of a continent or
-  country name paired with a city name (Europe/London, America/New_York).  This is used to
-  load the specified file from disk, which contains a time zone database in zic format
-  (man tzfile).
-  2. If TZ is not set, the system will try to read the file located at /etc/localtime,
-  which must be a zic timezone database (and which is often just a symlink into
-  /usr/share/zoneinfo/posix).
-  3. If /etc/localtime cannot be found, then the system is assumed to be in GMT.
+  + Check to see if the TZ environment variable is set.  If it is, it can be set to one
+    of three forms, two of which are rarely, if ever used see:
+
+      http://www.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html
+
+    for more information on the obscure forms.  The common form represents a relative path
+    from the base /usr/share/zoneinfo/posix, and is generally in the form of a continent
+    or country name paired with a city name (Europe/London, America/New_York).  This is
+    used to load the specified file from disk, which contains a time zone database in zic
+    format (man tzfile).
+
+  + If TZ is not set, the system will try to read the file located at /etc/localtime,
+    which must be a zic timezone database (and which is often just a symlink into
+    /usr/share/zoneinfo/posix).
+  + If /etc/localtime cannot be found, then the system is assumed to be in GMT.
 
   It's worth noting that under this system there is no place on the system to go to get
   the name of the file you are using (/etc/localtime may not be a link, and may just be a
-  copy, or it's own database not represented in /usr/share/zoneinfo).  Additionally, the
+  copy, or its own database not represented in /usr/share/zoneinfo).  Additionally, the
   names of the files in the system zoneinfo database follow an internal standard, and
   there is no established standard for naming timezones.  So even if you were using one of
   these files, and you did know its name, you cannot assume that that name matches any
@@ -149,13 +217,13 @@
   database are duplicated under several names.  It returns an option because of the
   problems mentioned above.
 
-  # The problems with string time conversions
+  {2 The problems with string time conversions }
 
   There are two cases where string time conversions are problematic, both related to
   daylight savings time.
 
   In the case where time jumps forward one hour, there are possible representations of
-  times that never happened (2006-04-02T02:30:00 in the eastern U.S. never happened for
+  times that never happened 2006-04-02T02:30:00 in the eastern U.S. never happened for
   instance, because the clock jumped forward one hour directly from 2 to 3.  Unix time
   zone libraries asked to convert one of these times will generally produce the epoch time
   that represents the time 1/2 hour after 2 am, which when converted back to a string
@@ -171,84 +239,3 @@
   The existence of both cases make a strong argument for serializing all times in UTC,
   which doesn't suffer from these issues.
 *)
-
-open Std_internal
-
-exception Unknown_zone of string
-exception Invalid_file_format of string
-
-(* A time zone file consists (conceptually - the representation is more compact) of an
-   ordered list of (float * [local_time_type]) that mark the boundaries (marked from the
-   epoch) at which various time adjustment regimes are in effect.  This can also be
-   thought of as breaking down all time past the epoch into ranges with a
-   [local_time_type] that describes the offset from GMT to apply to each range to get
-   local time.
-*)
-
-(* bin_io and sexp representations of Zone.t are the name of the zone, and not the full
-   data that is read from disk when Zone.find is called.  The full Zone.t is reconstructed
-   on the recieving/reading side by reloading the zone file from disk. *)
-type t with sexp, bin_io
-
-(* User friendly functions *)
-
-(** [find name] looks up a t by its name and returns it.  [find] and [find_exn] also
-    support the following helper zones that correspond to our standard office mnemonics:
-    - "hkg" -> Asia/Hong_Kong
-    - "lon" -> Europe/London
-    - "ldn" -> Europe/London
-    - "nyc" -> America/New_York
-    - "tyo" -> Asia/Tokyo *)
-val find : string -> t option
-
-
-(** [find_office office] a more type-safe interface for pulling timezones related to our
-    offices *)
-val find_office : [ `hkg | `ldn | `nyc ] -> t
-val find_exn : string -> t
-
-(** [machine_zone ()] returns the machines current zone (t) by reading /etc/localtime.
-    The first call to machine_zone is cached, so there is no need to cache it locally. *)
-val machine_zone : unit -> t
-
-(** [of_utc_offset offset] returns a timezone with a static UTC offset (given in
-    hours). *)
-val of_utc_offset : int -> t
-
-(** [utc] the UTC time zone.  Included for convenience *)
-val utc : t
-
-(** [abbreviation zone t] returns t abbreviation name such as EDT, EST, JST of given
-    [zone] at the time [t].  This string conversion is one-way only, and cannot reliably
-    be turned back into a t *)
-val abbreviation : t -> float -> string
-
-(** [name zone] returns the name of the time zone *)
-val name : t -> string
-
-
-(* End user friendly functions - functions below are low level and generally should not be
-   called by clients. *)
-
-(** [init ()] pre-load all available time zones from disk, this function has no effect if
-    it is called multiple times.  Time zones will otherwise be loaded at need from the
-    disk on the first call to find/find_exn. *)
-val init : unit -> unit
-
-(** [digest t] return the MD5 digest of the file the t was created from (if any) *)
-val digest : t -> string option
-
-(** [to_utc_offset] returns the UTC offset of timezone [t], in seconds *)
-val to_utc_offset : t -> int
-
-(** [initialized_zones ()] returns a sorted list of time zone names that have been loaded
-    from disk thus far. *)
-val initialized_zones : unit -> (string * t) list
-
-(* [shift_epoch_time zone [`Local | `UTC] time] Takes an epoch (aka "unix") time given
-   either in local or in UTC (as indicated in the arguments) and shifts it according to
-   the local time regime in force in zone.  That is, given a Local epoch time it will
-   return the corresponding UTC timestamp and vice versa.  This function is low level, and
-   is not intended to be called by most client code.  Use the high level functions
-   provided in Time instead. *)
-val shift_epoch_time : t -> [`Local | `UTC] -> float -> float

@@ -1,91 +1,104 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (** Floating-point representation and utilities. *)
+
+module Binable = Binable0
 
 module type S = sig
   type t
   type outer = t
+  with bin_io, sexp
 
-  include Sexpable.S with type sexpable = t
-  include Binable.S with type binable = t
-  include Floatable.S with type floatable = t
-  include Stringable.S with type stringable = t
-  include Hashable.S_binable with type hashable = t
-  (* [max] and [min] will return nan if either argument is nan *)
-  include Comparable.S_binable with type comparable = t
-  (* The results of robust comparisons on [nan] should be considered undefined. *)
-  include Robustly_comparable.S with type robustly_comparable = t
 
-  val max_value : t                   (* infinity *)
-  val min_value : t                   (* neg_infinity *)
+  include Floatable.S with type t := t
+  include Stringable.S with type t := t
+  include Hashable.S_binable with type t := t
+  (** [max] and [min] will return nan if either argument is nan.
+
+      The [validate_*] functions always fail if class is [Nan] or [Infinite]. *)
+  include Comparable.S_binable with type t := t
+  include Comparable.With_zero with type t := t
+  (** The results of robust comparisons on [nan] should be considered undefined. *)
+  include Robustly_comparable.S with type t := t
+
+  (** [validate_ordinary] fails if class is [Nan] or [Infinite]. *)
+  val validate_ordinary : t Validate.check
+
+  val nan : t
+
+  val infinity : t
+  val neg_infinity : t
+
+  val max_value : t                   (* Float.infinity *)
+  val min_value : t                   (* Float.neg_infinity *)
   val zero : t
-  
-  val epsilon : t         (* WARNING: This is not [epsilon_float].  See Robust_compare. *)
+  val epsilon : t   (* WARNING: This is not [Float.epsilon_float].  See Robust_compare. *)
+
+  (* The difference between 1.0 and the smallest exactly representable floating-point
+     number greater than 1.0. *)
+  val epsilon_float : t
 
   val max_finite_value : t
-  val min_finite_value : t
+  val min_positive_value : t
 
   val of_int : int -> t
-  
   val to_int : t -> int
   val of_int64 : int64 -> t
   val to_int64 : t -> int64
 
-  (** round_towards_zero_exn raises Invalid_argument when either trying to handle nan or
-      trying to handle a float outside the range (-. 2. ** 52., 2. ** 52.)
-      (since floats have 52 significant bits) or outside the range
-      (float min_int, float max_int) *)
-  val round_towards_zero_exn : t -> int           (* closer to 0 *)
-  (** round_towards_zero returns None if round_towards_zero_exn raises an exception *)
-  val round_towards_zero : t -> int option        (* closer to 0 *)
-  val round : t -> t                    (* nearest integer *)
-  (* round_down[_exn] rounds towards neg_infinity *)
-  val round_down_exn : t -> int
-  val round_down : t -> int option
-  (* round_up[_exn] rounds toward infinity *)
-  val round_up_exn : t -> int
-  val round_up : t -> int option
-  
-  (** iround_exn raises Invalid_argument in the same cases as round_towards_zero_exn *)
-  val iround_exn : t -> int
-  (** iround returns None if iround_exn raises an exception *)
-  (** [iround t] rounds t to the nearest int.  Returns None when t is too large to round to
-      an int. *)
-  val iround : t -> int option
+  (* [round] rounds a float to an integer float.  [iround{,_exn}] rounds a float to an
+     int.  Both round according to a direction [dir], with default [dir] being [`Nearest].
 
-  
-  (** Ordinary float-only nan test. *)
+     | `Down    | rounds toward Float.neg_infinity |
+     | `Up      | rounds toward Float.infinity     |
+     | `Nearest | rounds to the nearest int        |
+     | `Zero    | rounds toward zero               |
+
+     iround[_exn] raises Invalid_argument when either trying to handle nan or trying to
+     handle a float outside the range (-. 2. ** 52., 2. ** 52.) (since floats have 52
+     significant bits) or outside the range (float min_int, float_max_int)
+
+     Caveat: If the absolute value of the input float is very large, then it could be that
+     |round ~dir:`Down x - round ~dir:`Up x| > 1.
+
+     Here are some examples for [round] for each of the directions.
+
+     | `Down    | [-2.,-1.)   to -2. | [-1.,0.)   to -1. | [0.,1.) to 0., [1.,2.) to 1. |
+     | `Up      | (-2.,-1.]   to -1. | (-1.,0.]   to -0. | (0.,1.] to 1., (1.,2.] to 2. |
+     | `Zero    | (-2.,-1.]   to -1. | (-1.,1.)   to 0.  | [1.,2.) to 1.                |
+     | `Nearest | [-1.5,-0.5) to -1. | [-0.5,0.5) to 0.  | [0.5,1.5) to 1.              |
+
+     For convenience, versions of these functions with the [dir] argument hard-coded are
+     provided. *)
+  val round      : ?dir:[`Zero|`Nearest|`Up|`Down] -> t -> t
+  val iround     : ?dir:[`Zero|`Nearest|`Up|`Down] -> t -> int option
+  val iround_exn : ?dir:[`Zero|`Nearest|`Up|`Down] -> t -> int
+
+  (* See [round] for a description of these functions. *)
+  val round_towards_zero : t -> t
+  val round_down         : t -> t
+  val round_up           : t -> t
+  val round_nearest      : t -> t
+
+  (* See [round] for a description of these functions. *)
+  val iround_towards_zero : t -> int option
+  val iround_down         : t -> int option
+  val iround_up           : t -> int option
+  val iround_nearest      : t -> int option
+
+  (* See [round] for a description of these functions. *)
+  val iround_towards_zero_exn : t -> int
+  val iround_down_exn         : t -> int
+  val iround_up_exn           : t -> int
+  val iround_nearest_exn      : t -> int
+
+
   val is_nan : t -> bool
 
-  (** Ordinary float-only infinity test. *)
+  (** includes positive and negative Float.infinity *)
   val is_inf : t -> bool
 
-  (** min that returns the other value if one of the values is a [nan]. *)
+  (** min and max that return the other value if one of the values is a [nan]. Returns
+      [nan] if both arguments are [nan]. *)
   val min_inan : t -> t -> t
-
-  (** max that returns the other value if one of the values is a [nan]. *)
   val max_inan : t -> t -> t
 
   val (+) : t -> t -> t
@@ -102,27 +115,40 @@ module type S = sig
   end
   val modf : t -> Parts.t
 
-  
-  (* Caveat: If the absolute value of the input float is very large, then it could be that
-     |floor x - ceil x| > 1. *)
-  val floor : t -> t              (* rounds down, e.g. [floor (-3.1)] is [-4.] *)
-  val ceil : t -> t               (* rounds up, e.g. [floor (-3.1)] is [-3.] *)
-
-  (** [mod_float x y] returns a result with the same sign as [x].  It returns [nan] if [y] is
-     [0].  It is basically
-     [let mod_float x y = x -. float(truncate(x/.y)) *. y]
-     not
-     [let mod_float x y = x -. floor(x/.y) *. y]
-     and therefore resembles [mod] on integers more than [%].
+  (** [mod_float x y] returns a result with the same sign as [x].  It returns [nan] if [y]
+      is [0].  It is basically
+      [let mod_float x y = x -. float(truncate(x/.y)) *. y]
+      not
+      [let mod_float x y = x -. floor(x/.y) *. y]
+      and therefore resembles [mod] on integers more than [%].
   *)
   val mod_float : t -> t -> t
 
-  (* mostly for modules that inherit from t, since the infix operators are more convenient *)
+  (* mostly for modules that inherit from t, since the infix operators are more
+     convenient *)
   val add : t -> t -> t
   val sub : t -> t -> t
   val neg : t -> t
   val scale : t -> t -> t
   val abs : t -> t
+
+  (** Pretty print float, for example [to_string_hum ~decimals:3 1234.1999 = "1_234.200"]
+      [to_string_hum ~decimals:3 ~strip_zero:true 1234.1999 = "1_234.2" ]. No delimiters
+      are inserted to the right of the decimal. *)
+  val to_string_hum
+    :  ?delimiter:char  (* defaults to '_' *)
+    -> ?decimals:int    (* defaults to 3 *)
+    -> ?strip_zero:bool (* defaults to false *)
+    -> float
+    -> string
+
+  (* [ldexp x n] returns x *. 2 ** n *)
+  val ldexp : t -> int -> t
+
+  (* [frexp f] returns the pair of the significant and the exponent of f. When f is zero,
+     the significant x and the exponent n of f are equal to zero. When f is non-zero, they
+     are defined by f = x *. 2 ** n and 0.5 <= x < 1.0. *)
+  val frexp : t -> t * int
 
   module Class : sig
     type t =
@@ -131,22 +157,27 @@ module type S = sig
     | Normal
     | Subnormal
     | Zero
+    with bin_io, sexp
 
-    include Binable.S with type binable = t
-    include Sexpable.S with type sexpable = t
-    include Stringable.S with type stringable = t
+    include Stringable.S with type t := t
   end
 
-  (* Don't forget about subnormals: there exist strictly positive numbers representable
-     in floating point such that [classify f = Normal && f >. 0.] does *not* hold, and
-     likewise for strictly negative numbers.  Here is the number line:
-
-           ...  normals | -ve subnormals | (-/+) zero | +ve subnormals | normals  ...
+  (* return the Class.t.  Excluding nan the floating-point "number line" looks like:
+       t                Class.t    example
+     ^ neg_infinity     Infinite   neg_infinity
+     | neg normals      Normal     -3.14
+     | neg subnormals   Subnormal  -.2. ** -1023.
+     | (-/+) zero       Zero       0.
+     | pos subnormals   Subnormal  2. ** -1023.
+     | pos normals      Normal     3.14
+     v infinity         Infinite   infinity
   *)
   val classify : t -> Class.t
 
+  (* [is_finite t] returns [true] iff [classify t] is in [Normal; Subnormal; Zero;]. *)
+  val is_finite : t -> bool
+
   module Sign : sig
-    
     type t = Neg | Zero | Pos with sexp
   end
 
@@ -154,9 +185,8 @@ module type S = sig
 
   (* S-expressions contain at most 8 significant digits. *)
   module Terse : sig
-    type t = outer
-    include Binable.S with type binable = t
-    include Sexpable.S with type sexpable = t
-    include Stringable.S with type stringable = t
+    type t = outer with bin_io, sexp
+    include Stringable.S with type t := t
   end
+
 end

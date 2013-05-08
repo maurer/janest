@@ -1,39 +1,15 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Std_internal
 
 (* Represented as a number of seconds since midnight *)
-type t = private float
+type t = private float with bin_io, sexp
 
-include Binable with type binable = t
-include Comparable_binable with type comparable = t
-include Floatable with type floatable = t (* seconds since midnight *)
-include Hashable_binable with type hashable = t
-include Robustly_comparable with type robustly_comparable = t
-include Sexpable with type sexpable = t
-include Stringable with type stringable = t
+include Comparable_binable   with type t := t
+include Comparable.With_zero with type t := t
+include Floatable            with type t := t
+include Hashable_binable     with type t := t
+include Pretty_printer.S     with type t := t
+include Robustly_comparable  with type t := t
+include Stringable           with type t := t
 
 val create : ?hr:int -> ?min:int -> ?sec:int -> ?ms:int -> ?us:int -> unit -> t
 
@@ -59,12 +35,6 @@ val sub : t -> Span.t -> t option
     the same day *)
 val diff : t -> t -> Span.t
 
-(** since midnight *)
-val to_sec : t -> float
-val of_sec : float -> t
-
-val pp : Format.formatter -> t -> unit
-
 (* Returns the time-span separating the two of-days, ignoring the hour information, and
    assuming that the of-days represent times that are within a half-hour of each other.
    This is useful for comparing two ofdays in unknown time-zones. *)
@@ -80,3 +50,9 @@ val of_string_iso8601_extended : ?pos:int -> ?len:int -> string -> t
 
 (** with milliseconds *)
 val to_millisec_string : t -> string
+
+module Stable : sig
+  module V1 : sig
+    type t with bin_io, sexp
+  end with type t = t
+end

@@ -1,45 +1,25 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
-include Bin_prot.Binable
-open Sexplib.Std
 open Bin_prot.Std
+open Sexplib.Std
 
-module Of_stringable (M : Stringable.S) =
-  Bin_prot.Utils.Make_binable (struct
-    module Binable = struct
-      type t = string with bin_io
-      type binable = t
-    end
-    type t = M.stringable
-    let to_binable = M.to_string
+include Binable0
 
-    (* Wrap exception for improved diagnostics. *)
-    exception Of_binable of string * exn with sexp
-    let of_binable s =
-      try
-        M.of_string s
-      with x ->
-        raise (Of_binable (s, x))
-  end)
+(* [of_string] and [to_string] can't go in binable0.ml due to a cyclic dependency. *)
+let of_string m string = of_bigstring m (Bigstring.of_string string)
+
+let to_string m t = Bigstring.to_string (to_bigstring m t)
+
+TEST_UNIT =
+  let module M = struct type t = int with bin_io end in
+  let m = (module M : S with type t = int) in
+  List.iter [ min_int; min_int / 2; -1; 0; 1; max_int / 2; max_int; ]
+    ~f:(fun i ->
+      let check name of_x to_x =
+        let i' = of_x m (to_x m i) in
+        if i <> i' then
+          Error.failwiths (Printf.sprintf "Binable.{of,to}_%s failure" name)
+            (i, `Round_tripped_to i') <:sexp_of< int * [ `Round_tripped_to of int ] >>
+      in
+      check "string"    of_string    to_string;
+      check "bigstring" of_bigstring to_bigstring;
+    )
+;;

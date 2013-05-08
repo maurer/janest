@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Bin_prot.Std
 module List = Core_list
 
@@ -31,10 +7,6 @@ type 'a t = {
   mutable elts : 'a list;
   mutable length : int;
 } with bin_io
-
-type 'a binable = 'a t
-type 'a container = 'a t
-type 'a sexpable = 'a t
 
 let invariant t =
   assert (t.length = List.length t.elts);
@@ -65,7 +37,6 @@ let top_exn t =
 
 let top t = try Some (top_exn t) with Empty -> None
 
-
 let clear t = set t [] 0
 
 let copy t = { elts = t.elts; length = t.length; }
@@ -78,11 +49,17 @@ let iter t ~f = List.iter t.elts ~f
 
 let fold t ~init ~f = List.fold t.elts ~init ~f
 
+let count t ~f = List.count t.elts ~f
+
 let exists t ~f = List.exists t.elts ~f
+
+let mem ?equal t a = List.mem ?equal t.elts a
 
 let for_all t ~f = List.for_all t.elts ~f
 
 let find t ~f = List.find t.elts ~f
+
+let find_map t ~f = List.find_map t.elts ~f
 
 let to_list t = t.elts
 
@@ -102,15 +79,91 @@ let until_empty t f =
   loop ()
 ;;
 
-let container = {
-  Container.
-  length = length;
-  is_empty = is_empty;
-  iter = iter;
-  fold = fold;
-  exists = exists;
-  for_all = for_all;
-  find = find;
-  to_list = to_list;
-  to_array = to_array;
-}
+TEST_MODULE = struct
+  let empty = create ()
+
+  TEST = is_empty empty
+
+  TEST = length empty = 0
+
+  TEST =
+    try ignore (top_exn empty); false
+    with _ -> true
+  ;;
+
+  TEST =
+    try ignore (pop_exn empty); false
+    with _ -> true
+  ;;
+
+  TEST = pop empty = None
+  TEST = top empty = None
+
+  let t =
+    let t = create () in
+    push t 0;
+    push t 1;
+    push t 2;
+    t
+  ;;
+
+  TEST = not (is_empty t)
+  TEST = length t = 3
+  TEST = top t = Some 2
+  TEST = top_exn t = 2
+
+  let t' = copy t
+
+  TEST = pop_exn t' = 2
+  TEST = pop_exn t' = 1
+  TEST = pop_exn t' = 0
+
+  TEST = length t' = 0
+  TEST = is_empty t'
+
+  let t' = copy t
+
+  TEST = pop t' = Some 2
+  TEST = pop t' = Some 1
+  TEST = pop t' = Some 0
+
+  TEST = length t' = 0
+  TEST = is_empty t'
+
+  (* test that t was not modified by pops applied to copies *)
+  TEST = length t = 3
+  TEST = top_exn t = 2
+
+  TEST =
+    let n = ref 0 in
+    iter t ~f:(fun x -> n := !n + x);
+    !n = 3
+  ;;
+
+  TEST = fold t ~init:0 ~f:(+) = 3
+  TEST = count t ~f:(fun x -> x > 1) = 1
+  TEST = mem t 0
+  TEST = not (mem t 5)
+  TEST = for_all t ~f:(fun x -> x >= 0)
+  TEST = not (for_all t ~f:(fun x -> x > 0))
+  TEST = find t ~f:(fun x -> x < 2) = Some 1
+  TEST = find t ~f:(fun x -> x < 0) = None
+  TEST = find_map t ~f:(fun x -> if x < 2 then Some (x + 5) else None) = Some 6
+  TEST = find_map t ~f:(fun x -> if x < 0 then Some (x + 5) else None) = None
+  TEST = to_list t = [2; 1; 0]
+  TEST = to_array t = [|2; 1; 0|]
+
+  TEST = length t = 3
+  TEST = top_exn t = 2
+
+  let t' = copy t
+
+  TEST =
+    let n = ref 0 in
+    until_empty t' (fun x -> n := !n + x);
+    !n = 3
+  ;;
+
+  TEST = is_empty t'
+  TEST = length t' = 0
+end

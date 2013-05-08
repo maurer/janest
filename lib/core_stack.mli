@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (** Core_stack is a replacement for OCaml's standard Stack module that follows
     Core idioms and adds some functions.
 
@@ -31,16 +7,12 @@
       [push] takes the stack argument first.
       [length] is O(1)
 *)
-open Sexplib
 
 exception Empty
 
-type 'a t
+type 'a t with bin_io, sexp
 
-include Binable.S1 with type 'a binable = 'a t
-include Sexpable.S1 with type 'a sexpable = 'a t
-
-include Container.S1 with type 'a container = 'a t
+include Container.S1 with type 'a t := 'a t
   (** [to_list] and [to_array] returns the elements in order from the top of
       the stack to the bottom. *)
 

@@ -1,49 +1,20 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (** doubly-linked lists *)
 
-(**
- * There is a fundamental problem with a data structure (like doubly-linked
- * lists) that is both mutable and provides iteration function that call back
- * to user-supplied functions.  If those user-supplied functions modify the
- * data structure, what is the semantics of the remainder of the iteration?
- * This module sidesteps this issue by detecting attempts by user-supplied
- * functions to modify a doubly-linked list while in the middle of iterating
- * over it.
- *
- * Modification functions include:
- *   insert_*, remove*, transfer
- * Iteration functions include:
- *   exists, fold*, for_all, find
- *
- * Calls to modification functions detect if the list is being iterated over,
- * and if so raise an exception rather than modify the list.  For example, a
- * use like the following would raise.
- *
- *  iter t ~f:(fun _ -> ... remove t e ...)
- *)
+(** There is a fundamental problem with a data structure (like doubly-linked lists) that
+    is both mutable and provides iteration function that call back to user-supplied
+    functions.  If those user-supplied functions modify the data structure, what is the
+    semantics of the remainder of the iteration?  This module sidesteps this issue by
+    detecting attempts by user-supplied functions to modify a doubly-linked list while in
+    the middle of iterating over it.
+
+    Modification functions include: insert_*, remove*, transfer
+    Iteration functions include: exists, fold*, for_all, find
+
+    Calls to modification functions detect if the list is being iterated over, and if so
+    raise an exception rather than modify the list.  For example, a use like the following
+    would raise.
+
+    iter t ~f:(fun _ -> ... remove t e ...) *)
 
 open Sexplib
 
@@ -55,20 +26,18 @@ module Elt : sig
   val sexp_of_t : ('a -> Sexp.t) -> 'a t -> Sexp.t
 end
 
-type 'a t
+type 'a t with sexp
 
-include Container.S1 with type 'a container = 'a t
-include Sexpable.S1 with type 'a sexpable = 'a t
+include Container.S1 with type 'a t := 'a t
 
 val invariant : 'a t -> unit
 
 (** creating doubly-linked lists *)
 val create : unit -> 'a t
 
-(** [of_list l] returns a doubly-linked list [t] with the same elements as [l]
-    and in the same order (i.e. the first element of [l] is the first element
-    of [t]).  It is always the case that [l = to_list (of_list l)].
-*)
+(** [of_list l] returns a doubly-linked list [t] with the same elements as [l] and in the
+    same order (i.e. the first element of [l] is the first element of [t]).  It is always
+    the case that [l = to_list (of_list l)]. *)
 val of_list : 'a list -> 'a t
 
 (** predicates *)
@@ -86,26 +55,34 @@ val last : 'a t -> 'a option
 val next : 'a t -> 'a Elt.t -> 'a Elt.t option
 val prev : 'a t -> 'a Elt.t -> 'a Elt.t option
 
-(** constant-time insertion of a new element.
-    It is an error to call [insert_before t e a] or [insert_after t e a] if [e]
-    is not an element in [t], and will break invariants.
- *)
+(** constant-time insertion of a new element.  It is an error to call [insert_before t e
+    a] or [insert_after t e a] if [e] is not an element in [t]. *)
 val insert_before : 'a t -> 'a Elt.t -> 'a -> 'a Elt.t
 val insert_after : 'a t -> 'a Elt.t -> 'a -> 'a Elt.t
 val insert_first : 'a t -> 'a -> 'a Elt.t
 val insert_last : 'a t -> 'a -> 'a Elt.t
 
-(** constant-time removal of an element.
-    It is an error to call [remove t e] when [e] is not in [t], and will break
-    [invariant].
- *)
+(** constant-time removal of an element.  It is an error to call [remove t e] when [e] is
+    not in [t]. *)
 val remove : 'a t -> 'a Elt.t -> unit
 val remove_first : 'a t -> 'a option
 val remove_last : 'a t -> 'a option
 
-(** [find_elt t ~f] finds the first element in [t] that satisfies [f], by
-    testing each of element of [t] in turn until [f] succeeds.
-*)
+
+(** [fold_elt t ~init ~f] is the same as fold, except [f] is called with the ['a Elt.t]'s
+    from the list instead of the contained ['a] values.
+
+    Note that like other iteration functions, it is an error to mutate [t] inside the
+    fold. If you'd like to call [remove] on any of the ['a Elt.t]'s, accumulate them here
+    and do so after [fold_elt] returns. *)
+val fold_elt : 'a t -> init:'b -> f:('b -> 'a Elt.t -> 'b) -> 'b
+
+val iter_elt : 'a t -> f:('a Elt.t -> unit) -> unit
+
+val fold_right : 'a t -> init:'b -> f:('a -> 'b -> 'b) -> 'b
+
+(** [find_elt t ~f] finds the first element in [t] that satisfies [f], by testing each of
+    element of [t] in turn until [f] succeeds. *)
 val find_elt : 'a t -> f:('a -> bool) -> 'a Elt.t option
 
 (** [clear t] removes all elements from the list in constant time. *)
@@ -120,9 +97,16 @@ val copy : 'a t -> 'a t
 
     If [s = to_list src] and [d = to_list dst], then after [transfer ~src ~dst]:
       [to_list src = []]
-      [to_list dst = d @ s]
-*)
+      [to_list dst = d @ s] *)
 val transfer : src:'a t -> dst:'a t -> unit
 
 (** [filter_inplace t ~f] removes all elements of [t] that don't satisfy [f]. *)
 val filter_inplace : 'a t -> f:('a -> bool) -> unit
+
+(** [unchecked_iter t ~f] behaves like [iter t ~f] except that [f] is allowed to modify
+    [t].  Adding or removing elements before the element currently being visited has no
+    effect on the traversal.  Elements added after the element currently being visited
+    will be traversed.  Elements deleted after the element currently being visited will
+    not be traversed.  Deleting the element currently visited is an error that is not
+    detected (presumably leading to an infinite loop) . *)
+val unchecked_iter : 'a t -> f:('a -> unit) -> unit

@@ -1,47 +1,39 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (* Conversions between units of measure based on bytes. *)
 
 module Measure : sig
   type t = [ `Bytes | `Kilobytes | `Megabytes | `Gigabytes | `Words ]
+  with sexp, bin_io
 end
 
-type t
+type t with bin_io, sexp
 
-(* [create measure float] creates a [t] that will use [measure] when converting [t] to
-   a string or sexp. *)
+(** [create measure value] creates a [t] from [value] units of the given measure. *)
 val create : Measure.t -> float -> t
 
-include Binable.S with type binable = t
-include Comparable.S with type comparable = t
-include Hashable.S with type hashable = t
-include Sexpable.S with type sexpable = t
-include Stringable.S with type stringable = t
+include Comparable.S with type t := t
+include Hashable  .S with type t := t
+include Stringable.S with type t := t
+
+(** [to_string_hum ?measure t] returns a string representation of [t].  If [measure] is
+    not given then the largest measure (excluding [`Words]) is used that causes the
+    translated value to exceed 1. *)
+val to_string_hum : ?measure:Measure.t -> t -> string
 
 val bytes     : t -> float
 val kilobytes : t -> float
 val megabytes : t -> float
 val gigabytes : t -> float
 val words     : t -> float
+
+(** [scale t mul] scale the measure [t] by [mul] *)
+val scale : t -> float -> t
+
+module Infix : sig
+  val ( - ) : t -> t -> t
+  val ( + ) : t -> t -> t
+  (** [( / ) t mul] scales [t] by [1/mul] *)
+  val (/)   : t -> float -> t
+
+  (** [( // ) t1 t2] returns the ratio of t1 to t2 *)
+  val (//)  : t -> t -> float
+end

@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 module Avltree = Core.Avltree
 open OUnit
 open Core.Std
@@ -45,6 +21,10 @@ let test_f t s test_data f =
 ;;
 
 let do_add ~set ~t ~present ~i ~added =
+  (* Set added to be the opposite of the expected value, so we
+   can verify that it in fact does get set and it is set to the
+   right value (as opposed to the value being correct to start
+   with, and we made no write to it.) *)
   added := present;
   let res = Avltree.add !t ~compare ~added ~key:i ~data:i in
   if present
@@ -58,6 +38,23 @@ let test_add t s test_data =
   let added = ref false in
   test_f t s test_data (fun ~set ~t ~present ~i ->
     do_add ~set ~t ~present ~i ~added)
+;;
+
+let do_add_if_not_exists ~set ~t ~present ~i ~added =
+  added := present;
+  let res = Avltree.add !t ~replace:false ~compare ~added ~key:i
+    ~data:(if present then i+1 else i) in
+  if present
+  then assert (not !added)
+  else assert (!added);
+  if not present then set := Set.add !set i;
+  res
+;;
+
+let test_add_if_not_exists t s test_data =
+  let added = ref false in
+  test_f t s test_data (fun ~set ~t ~present ~i ->
+    do_add_if_not_exists ~set ~t ~present ~i ~added)
 ;;
 
 let do_remove ~set ~t ~present ~i ~removed =
@@ -87,8 +84,9 @@ let test_add_remove t s test_data =
 
 let test name dset add_remove_dset =
   let t = ref Avltree.empty in
-  let s = ref Set.empty in
+  let s = ref Set.Poly.empty in
   [ ("add_lookup_" ^ name) >:: (fun () -> test_add t s dset);
+    ("add_if_not_exists_lookup_" ^ name) >:: (fun () -> test_add_if_not_exists t s dset);
     ("add_remove_lookup_" ^ name) >:: (fun () -> test_add_remove t s add_remove_dset);
     ("remove_lookup_" ^ name) >:: (fun () -> test_remove t s dset) ]
 ;;

@@ -1,28 +1,3 @@
-/******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************/
-
-
 
 #include <stdlib.h>
 #include <time.h>
@@ -34,93 +9,6 @@
 #include <caml/memory.h>
 #include <caml/callback.h>
 #include "ocaml_utils.h"
-
-/* The code for crc_octets and the constants involded is taken from
-   RFC2440 http://sunsite.icm.edu.pl/gnupg/rfc2440-6.html
- */
-#define CRC24_INIT 0xb704ceL
-#define CRC24_POLY 0x1864cfbL
-
-typedef long crc24;
-crc24 crc_octets(unsigned char *octets, size_t len) {
-  crc24 crc = CRC24_INIT;
-  int i;
-
-  while (len--) {
-    crc ^= (*octets++) << 16;
-    for (i = 0; i < 8; i++) {
-      crc <<= 1;
-      if (crc & 0x1000000)
-        crc ^= CRC24_POLY;
-    }
-  }
-  return crc & 0xffffffL;
-}
-
-value caml_crc_octets(value v_str)
-{
-  unsigned char *octets = (unsigned char *) String_val(v_str);
-  size_t len = caml_string_length(v_str);
-  long crc = crc_octets(octets, len);
-  return Val_int(crc);
-}
-
-/* Copyright abandoned; this code is in the public domain. */
-/* Provided to GNUnet by peter@horizon.com */
-
-/**
- * @file util/crc32.c
- * @brief implementation of CRC32
- **/
-
-/* #include "gnunet_util.h" */
-
-#define POLYNOMIAL (uLong)0xedb88320
-typedef unsigned int uLong;
-static uLong crc_table[256];
-
-/*
- * This routine writes each crc_table entry exactly once,
- * with the ccorrect final value.  Thus, it is safe to call
- * even on a table that someone else is using concurrently.
- */
-static void make_crc_table() {
-  unsigned int i, j;
-  uLong h = 1;
-  crc_table[0] = 0;
-  for (i = 128; i; i >>= 1) {
-    h = (h >> 1) ^ ((h & 1) ? POLYNOMIAL : 0);
-    /* h is now crc_table[i] */
-    for (j = 0; j < 256; j += 2*i)
-      crc_table[i+j] = crc_table[j] ^ h;
-  }
-}
-
-/*
- * This computes the standard preset and inverted CRC, as used
- * by most networking standards.  Start by passing in an initial
- * chaining value of 0, and then pass in the return value from the
- * previous crc32() call.  The final return value is the CRC.
- * Note that this is a little-endian CRC, which is best used with
- * data transmitted lsbit-first, and it should, itself, be appended
- * to data in little-endian byte and bit order to preserve the
- * property of detecting all burst errors of length 32 bits or less.
- */
-static uLong crc32(uLong crc, char const *buf, size_t len) {
-  if (crc_table[255] == 0)
-    make_crc_table();
-  crc ^= 0xffffffff;
-  while (len--)
-    crc = (crc >> 8) ^ crc_table[(crc ^ *buf++) & 0xff];
-  return crc ^ 0xffffffff;
-}
-
-value caml_crc32(value v_str) {
-  char *octets = String_val(v_str);
-  size_t len = caml_string_length(v_str);
-  uLong crc = crc32(0, octets, len);
-  return caml_copy_int64(crc);
-}
 
 /* Improved localtime implementation
 
@@ -201,7 +89,7 @@ WRAP_TIME_FUN(gmtime, "gmtime")
 /* Fix the broken close_(in/out) function which does not release the
    caml lock. */
 
-#define IO_BUFFER_SIZE 4096
+#define IO_BUFFER_SIZE 65536
 
 typedef long file_offset;
 
@@ -226,43 +114,26 @@ CAMLprim value fixed_close_channel(value vchannel)
 {
   int result;
   int tmp_fd = -1;
+  int tries = 0;
   struct channel *channel = Channel(vchannel);
 
-  if (channel->fd == -1) result = 0;
-  else {
+  if (channel->fd != -1) {
     tmp_fd = channel->fd;
     channel->fd = -1;
 
     caml_enter_blocking_section();
-    result = close(tmp_fd);
+    do {
+      tries++;
+      result = close(tmp_fd);
+    } while(result == -1 && (errno == EINTR || errno == EAGAIN) && tries < 1000);
     caml_leave_blocking_section();
 
-    channel->curr = channel->max = channel->end;
+    if(result == -1) {
+      channel->fd = tmp_fd;
+      uerror("error closing channel", Nothing);
+    } else
+      channel->curr = channel->max = channel->end;
   }
 
-  if (result == -1) caml_failwith("error closing channel");
   return Val_unit;
-}
-
-
-/* It is assumed that all parameters have been checked for sanity in
-   OCaml.  The returned index is a global offset in the string.  Since
-   this function does not access the OCaml runtime, we can attach the
-   "noalloc" qualifier to its external declaration for faster function
-   calls.  This function returns the offset of the wanted character or
-   the index after the last character of the searched range if it
-   could not be found.  OCaml code has to check for this case and
-   handle it accordingly.  Don't raise an exception here in C-code,
-   otherwise we cannot use the "noalloc" qualifier! */
-CAMLprim value caml_string_index(
-  value v_str, value v_ofs, value v_len, value v_char)
-{
-  char *str = String_val(v_str);
-  size_t ofs = Long_val(v_ofs);
-  size_t len = Long_val(v_len);
-  char c = Int_val(v_char);
-  char *s = str + ofs;
-  char *e = s + len;
-  while (s < e && *s != c) ++s;
-  return Val_long(s - str);
 }

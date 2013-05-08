@@ -1,36 +1,9 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Std_internal
-
 
 module type Contents =
 sig
-  type t
-  include Sexpable with type sexpable = t
-  include Binable with type binable = t
-  include Comparable with type comparable = t
+  type t with bin_io, sexp
+  include Comparable with type t := t
   val zero : t
   val (+) : t -> t -> t
   val (-) : t -> t -> t
@@ -38,9 +11,7 @@ end
 
 module type S = sig
   type contents
-  type t
-  include Sexpable with type sexpable = t
-  include Binable with type binable = t
+  type t with bin_io, sexp
 
   (* Fails if init_level is not within bounds [zero;size]. *)
   val create : size:contents -> init_level:contents -> t
@@ -71,8 +42,6 @@ struct
   }
   with sexp, bin_io
 
-  type sexpable = t
-  type binable = t
 
   let create ~size ~init_level =
     let error msg =

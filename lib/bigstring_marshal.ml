@@ -1,31 +1,5 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
-INCLUDE "config.mlh"
-IFDEF LINUX_EXT THEN
-
 open Bigstring
+open Std_internal
 
 (* Marshalling to/from bigstrings *)
 
@@ -37,6 +11,7 @@ let marshal_blit ?(flags = []) v ?(pos = 0) ?len bstr =
   let len = get_opt_len bstr ~pos len in
   check_args ~loc:"marshal" bstr ~pos ~len;
   unsafe_marshal_blit v ~pos ~len bstr flags
+;;
 
 external marshal : 'a -> Marshal.extern_flags list -> t
   = "bigstring_marshal_stub"
@@ -75,6 +50,7 @@ let unmarshal_next ?pos bstr =
     else
       let v = unsafe_unmarshal ~pos ~len:block_len bstr in
       v, next_pos
+;;
 
 let unmarshal ?pos bstr = fst (unmarshal_next ?pos bstr)
 
@@ -97,16 +73,7 @@ let skip ?pos bstr =
     if next_pos > len
     then invalid_arg "Bigstring.skip: pos + block_len > len"
     else next_pos
-
-let marshal_to_sock ?buf ?flags sock v =
-  let buf, len =
-    match buf with
-    | None ->
-        let buf = marshal ?flags v in
-        buf, length buf
-    | Some buf -> buf, marshal_blit ?flags v buf
-  in
-  really_send_no_sigpipe sock buf ~len
+;;
 
 let unmarshal_from_sock ?buf sock =
   match buf with
@@ -134,5 +101,38 @@ let unmarshal_from_sock ?buf sock =
           "Bigstring.unmarshal_from_sock: buffer cannot hold header + data";
       really_recv sock ~pos:Marshal.header_size ~len:data_len buf;
       unsafe_unmarshal ~pos:0 ~len:all_len buf
+;;
+
+let marshal_to_gen ?buf ?flags dest v ~f =
+  let buf, len =
+    match buf with
+    | None ->
+        let buf = marshal ?flags v in
+        buf, length buf
+    | Some buf -> buf, marshal_blit ?flags v buf
+  in
+  f dest buf ~len
+;;
+
+let marshal_to_fd ?buf ?flags fd v =
+  marshal_to_gen ?buf ?flags fd v ~f:(fun fd buf ~len ->
+    Bigstring.really_write fd buf ~len)
+
+INCLUDE "config.mlh"
+
+IFDEF MSG_NOSIGNAL THEN
+
+let really_send_no_sigpipe = Or_error.ok_exn Bigstring.really_send_no_sigpipe
+
+let marshal_to_sock_no_sigpipe ?buf ?flags fd v =
+  marshal_to_gen ?buf ?flags fd v ~f:(fun fd buf ~len ->
+    really_send_no_sigpipe fd ?pos:None ?len:(Some len) buf)
+
+let marshal_to_sock_no_sigpipe = Ok marshal_to_sock_no_sigpipe
+
+ELSE
+
+let marshal_to_sock_no_sigpipe =
+  unimplemented "Bigstring_marshal.marshal_to_sock_no_sigpipe"
 
 ENDIF

@@ -1,34 +1,8 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
 
 
-
-TYPE_CONV_PATH "Table_new_intf"
 
 open Core.Std
 
-type 'k hashable = {
   hash: 'k -> int;
   compare: 'k -> 'k -> int;
 }
@@ -80,7 +54,7 @@ module type S = sig
 
   module Specialize (Key: sig
     type t
-    include Core.Std.Sexpable with type sexpable = t
+    include Core.Std.Sexpable with type t := t
 
     val hash : t -> int
     val compare : t -> t -> int
@@ -164,7 +138,6 @@ end
 module Make (Basic : Basic) : S with type ('k, 'v) t = ('k, 'v) Basic.t = struct
   include Basic
 
-  type ('k, 'v) sexpable = ('k, 'v) t
 
   let find_exn t id =
     match find t id with
@@ -255,7 +228,6 @@ module Make (Basic : Basic) : S with type ('k, 'v) t = ('k, 'v) Basic.t = struct
     List.iter rows ~f:(fun r ->
       let key = get_key r in
       let data = get_data r in
-      
       add res ~key ~data);
     res
   ;;
@@ -319,7 +291,7 @@ module Make (Basic : Basic) : S with type ('k, 'v) t = ('k, 'v) Basic.t = struct
 
   module Specialize (Key: sig
     type t
-    include Sexpable with type sexpable = t
+    include Sexpable with type t := t
 
     val hash : t -> int
     val compare : t -> t -> int
@@ -333,8 +305,6 @@ module Make (Basic : Basic) : S with type ('k, 'v) t = ('k, 'v) Basic.t = struct
     module Table = struct
       type ('k, 'v) z = ('k, 'v) t
       type 'v t = (Key.t, 'v) z
-      type 'a sexpable = 'a t
-
       let sexp_of_t sexp_of_d t = sexp_of_t Key.sexp_of_t sexp_of_d t
 
       let t_of_sexp d_of_sexp sexp =

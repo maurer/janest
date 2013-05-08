@@ -1,27 +1,3 @@
-/******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************/
-
 /* Core_unix support functions written in C. */
 
 #define _GNU_SOURCE
@@ -29,8 +5,10 @@
 #include <string.h>
 #include <pthread.h>
 /* Darwin needs this to be included before if.h*/
-#ifdef __APPLE__
+#if defined(__APPLE__)
 #define _POSIX_SOURCE
+#include <sys/socket.h>
+#elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/socket.h>
 #endif
 #include <sys/uio.h>
@@ -50,7 +28,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fnmatch.h>
-#include <wordexp.h>
 #include <stdio.h>
 #include <assert.h>
 #include <time.h>
@@ -60,7 +37,19 @@
 #include <sys/mman.h>
 #include <math.h>
 
+#if defined(__FreeBSD__) || defined(__NetBSD__)
+#define stat64 stat
+#define lstat64 lstat
+#define fstat64 fstat
+#endif
+
 #include "ocaml_utils.h"
+#include "config.h"
+#include "timespec.h"
+
+#if defined(JSC_WORDEXP)
+#include <wordexp.h>
+#endif
 
 CAMLprim value unix_error_stub(value v_errcode, value v_cmdname, value cmd_arg)
 {
@@ -96,6 +85,59 @@ static void report_error(int fd, const char* str)
    arguments. */
 /* Note: the ARG_MAX defined in sys/limits.h can be huge */
 #define ML_ARG_MAX (4096 + 1)
+
+#define UNIX_INT63_CONST(CONST) DEFINE_INT63_CONSTANT(unix_##CONST,CONST)
+
+UNIX_INT63_CONST(F_GETFL)
+UNIX_INT63_CONST(F_SETFL)
+
+UNIX_INT63_CONST(O_APPEND)
+UNIX_INT63_CONST(O_ASYNC)
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0
+#endif
+UNIX_INT63_CONST(O_CLOEXEC)
+UNIX_INT63_CONST(O_CREAT)
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
+UNIX_INT63_CONST(O_DIRECT)
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0
+#endif
+UNIX_INT63_CONST(O_DIRECTORY)
+#ifndef O_DSYNC
+#define O_DSYNC 0
+#endif
+UNIX_INT63_CONST(O_DSYNC)
+UNIX_INT63_CONST(O_EXCL)
+#ifndef O_NOATIME
+#define O_NOATIME 0
+#endif
+UNIX_INT63_CONST(O_NOATIME)
+UNIX_INT63_CONST(O_NOCTTY)
+UNIX_INT63_CONST(O_NOFOLLOW)
+UNIX_INT63_CONST(O_NONBLOCK)
+UNIX_INT63_CONST(O_RDONLY)
+UNIX_INT63_CONST(O_RDWR)
+#ifndef O_RSYNC
+#define O_RSYNC 0
+#endif
+UNIX_INT63_CONST(O_RSYNC)
+UNIX_INT63_CONST(O_SYNC)
+UNIX_INT63_CONST(O_TRUNC)
+UNIX_INT63_CONST(O_WRONLY)
+
+CAMLprim value unix_fcntl (value fd, value v_cmd, value v_arg) {
+  int63 result;
+  int cmd  = Int63_val(v_cmd); /* extract before blocking section */
+  long arg = Int63_val(v_arg); /* extract before blocking section */
+  caml_enter_blocking_section();
+  result = fcntl(Int_val(fd), cmd, arg);
+  caml_leave_blocking_section();
+  if (result == -1) uerror("unix_fcntl", Nothing);
+  return caml_alloc_int63(result);
+}
 
 void close_on_exec(int fd)
 {
@@ -149,10 +191,8 @@ static inline int safe_close_idem(int fd)
    robust and, hopefully, correct.  Changes should not be undertaken lightly.
 */
 
-
-
-CAMLprim value ml_create_process(value v_prog, value v_args, value v_env,
-                                 value v_search_path)
+CAMLprim value ml_create_process(value v_working_dir, value v_prog, value v_args,
+                                 value v_env, value v_search_path)
 {
   /* No need to protect the arguments or other values: we never release
      the O'Caml lock, and we never use O'Caml values after other values
@@ -177,6 +217,8 @@ CAMLprim value ml_create_process(value v_prog, value v_args, value v_env,
   char *args[ML_ARG_MAX];
   int n_args = Wosize_val(v_args);
   int n_env  = Wosize_val(v_env);
+
+  char *working_dir = NULL;
 
   /* Note that the executable name also counts as an argument, and we
      also have to subtract one more for the terminating NULL! */
@@ -246,7 +288,6 @@ CAMLprim value ml_create_process(value v_prog, value v_args, value v_env,
 
        3. We have not closed any fds between the calls to [pipe] above and
           this point.  */
-    
     int temp_stdin = dup(stdin_pfds[READ_END]);
     int temp_stdout = dup(stdout_pfds[WRITE_END]);
     int temp_stderr = dup(stderr_pfds[WRITE_END]);
@@ -260,14 +301,16 @@ CAMLprim value ml_create_process(value v_prog, value v_args, value v_env,
       exit(254);
     }
 
-    
     /* We are going to replace stdin, stdout, and stderr for this child
        process so we close the existing descriptors now.  They may be
        closed already so we ignore EBADF from close. */
-    
-    if (safe_close_idem(0) == -1
-        || safe_close_idem(1) == -1
-        || safe_close_idem(2) == -1) {
+    /* We don't have to do this ([dup2] closes the newfd if it is open
+       before splatting the oldfd on it), but maybe we get a more
+       informative error message if there is a problem closing a descriptor
+       rather than with the dup operation itself. */
+    if (safe_close_idem(STDIN_FILENO) == -1
+        || safe_close_idem(STDOUT_FILENO) == -1
+        || safe_close_idem(STDERR_FILENO) == -1) {
       report_error(temp_stderr,
                    "could not close standard descriptors in child process");
       exit(254);
@@ -286,9 +329,9 @@ CAMLprim value ml_create_process(value v_prog, value v_args, value v_env,
 
     /* We must dup2 after closing the pfds, because the latter might
        have been standard descriptors. */
-    if (dup2(temp_stdin, 0 /* stdin */) == -1
-        || dup2(temp_stdout, 1 /* stdout */) == -1
-        || dup2(temp_stderr, 2 /* stderr */) == -1) {
+    if (dup2(temp_stdin, STDIN_FILENO) == -1
+        || dup2(temp_stdout, STDOUT_FILENO) == -1
+        || dup2(temp_stderr, STDERR_FILENO) == -1) {
       report_error(temp_stderr, "could not dup2 fds in child process");
       exit(254);
     }
@@ -300,8 +343,15 @@ CAMLprim value ml_create_process(value v_prog, value v_args, value v_env,
     environ = NULL;
     while (n_env) putenv(String_val(Field(v_env, --n_env)));
 
+    if (Is_block(v_working_dir))
+      working_dir = String_val(Field(v_working_dir, 0));
+    if (working_dir && chdir(working_dir) == -1) {
+      report_error(STDERR_FILENO, "chdir failed in child process");
+      exit(254);
+    }
+
     if ((search_path ? execvp : execv)(prog, args) == -1) {
-      report_error(2 /* stderr */, "execvp/execv failed in child process");
+      report_error(STDERR_FILENO, "execvp/execv failed in child process");
       exit(254);
     }
   }
@@ -340,7 +390,6 @@ CAMLprim value ml_create_process(value v_prog, value v_args, value v_env,
 }
 
 
-
 /* Replacement for broken stat functions */
 
 static int file_kind_table[] = {
@@ -362,9 +411,20 @@ static value core_stat_aux_64(struct stat64 *buf)
   CAMLparam0();
   CAMLlocal5(atime, mtime, ctime, offset, v);
 
-  atime = caml_copy_double((double) buf->st_atime);
-  mtime = caml_copy_double((double) buf->st_mtime);
-  ctime = caml_copy_double((double) buf->st_ctime);
+  #if defined _BSD_SOURCE || defined _SVID_SOURCE
+    atime = caml_copy_double((double) buf->st_atime + (buf->st_atim.tv_nsec / 1000000000.0f));
+    mtime = caml_copy_double((double) buf->st_mtime + (buf->st_mtim.tv_nsec / 1000000000.0f));
+    ctime = caml_copy_double((double) buf->st_ctime + (buf->st_ctim.tv_nsec / 1000000000.0f));
+  #elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+    atime = caml_copy_double((double) buf->st_atime + (buf->st_atimespec.tv_nsec / 1000000000.0f));
+    mtime = caml_copy_double((double) buf->st_mtime + (buf->st_mtimespec.tv_nsec / 1000000000.0f));
+    ctime = caml_copy_double((double) buf->st_ctime + (buf->st_ctimespec.tv_nsec / 1000000000.0f));
+  #else
+    atime = caml_copy_double((double) buf->st_atime + (buf->st_atimensec / 1000000000.0f));
+    mtime = caml_copy_double((double) buf->st_mtime + (buf->st_mtimensec / 1000000000.0f));
+    ctime = caml_copy_double((double) buf->st_ctime + (buf->st_ctimensec / 1000000000.0f));
+  #endif
+
   offset = Val_file_offset(buf->st_size);
   v = caml_alloc_small(12, 0);
   Field (v, 0) = Val_int (buf->st_dev);
@@ -456,11 +516,8 @@ CAMLprim value core_getpwent(value v_unit)
 
   caml_enter_blocking_section();
   errno = 0;
-  
   entry = getpwent();
   caml_leave_blocking_section();
-
-  
 
   if (entry == NULL) {
     if (errno == 0)
@@ -483,7 +540,6 @@ CAMLprim value core_getpwent(value v_unit)
 
 #define FLOCK_BUF_LENGTH 80
 
-
 CAMLprim value core_unix_flock(value v_fd, value v_lock_type)
 {
   CAMLparam2(v_fd, v_lock_type);
@@ -491,9 +547,9 @@ CAMLprim value core_unix_flock(value v_fd, value v_lock_type)
   int lock_type = Int_val(v_lock_type);
   int operation;
   int res;
-  int num_attempts = 0;
   char error[FLOCK_BUF_LENGTH];
 
+  /* The [lock_type] values are defined in core_unix.ml. */
   switch(lock_type) {
     case 0:
       operation = LOCK_SH;
@@ -506,45 +562,23 @@ CAMLprim value core_unix_flock(value v_fd, value v_lock_type)
       break;
     default:
       snprintf(error, FLOCK_BUF_LENGTH,
-               "bug in flock C stub unknown lock type: %d", lock_type);
+               "bug in flock C stub: unknown lock type: %d", lock_type);
       caml_invalid_argument(error);
   };
 
-  
   /* always try a non-blocking lock */
   operation = operation | LOCK_NB;
 
   caml_enter_blocking_section();
-    do {
-      num_attempts++;
-      if (num_attempts > 1000) {
-        caml_leave_blocking_section();
-        CAMLreturn(Val_false);
-      }
-
-      res = flock(fd, operation);
-    } while (res != 0 && errno == EINTR);
+  res = flock(fd, operation);
   caml_leave_blocking_section();
 
-  
-  if (res != 0) {
-    
+  if (res) {
     switch(errno) {
-      case EBADF:
-        caml_failwith ("invalid file descriptor");
-      case EINTR: /* == EAGAIN on glibc, it would seem */
-        assert(0);
-        break;
-      case EINVAL:
-        caml_failwith ("invalid operation in flock");
-      case ENOLCK:
-        caml_failwith ("out of memory for allocating lock records");
       case EWOULDBLOCK:
         CAMLreturn(Val_false);
       default:
-        snprintf(error, FLOCK_BUF_LENGTH,
-                 "flock unexpected error (errno %d)", errno);
-        caml_failwith(error);
+        unix_error(errno, "core_unix_flock", Nothing);
     };
   };
 
@@ -595,7 +629,6 @@ CAMLprim value unix_mknod_stub(
 
 /* I/O functions */
 
-#define DIR_Val(v) *((DIR **) &Field(v, 0))
 typedef struct dirent directory_entry;
 
 CAMLprim value unix_sync(value v_unit)
@@ -627,7 +660,11 @@ CAMLprim value unix_fdatasync(value v_fd)
   return Val_unit;
 }
 #else
-#warning "_POSIX_SYNCHRONIZED_IO undefined or <= 0; unix_fdatasync undefined"
+#warning "_POSIX_SYNCHRONIZED_IO undefined or <= 0; aliasing unix_fdatasync to unix_fsync"
+CAMLprim value unix_fdatasync(value v_fd)
+{
+  return unix_fsync(v_fd);
+}
 #endif
 
 CAMLprim value unix_dirfd(value v_dh)
@@ -755,7 +792,6 @@ static inline value fdset_to_fdlist(value fdlist, fd_set *fdset)
   value l;
   value res = Val_int(0);
 
-  
   Begin_roots2(l, res);
     for (l = fdlist; l != Val_int(0); l = Field(l, 1)) {
       int fd = Int_val(Field(l, 0));
@@ -800,9 +836,7 @@ CAMLprim value unix_pselect_stub(
 
     if (tm < 0.0) tsp = (struct timespec *) NULL;
     else {
-      
-      ts.tv_sec = (int) tm;
-      ts.tv_nsec = (int) (1e9 * (tm - ts.tv_sec));
+      ts = timespec_of_double(tm);
       tsp = &ts;
     }
 
@@ -827,7 +861,7 @@ CAMLprim value unix_pselect_stub(
 
 /* Clock functions */
 
-#if defined(_POSIX_MONOTONIC_CLOCK) && (_POSIX_MONOTONIC_CLOCK > -1)
+#ifdef JSC_POSIX_TIMERS
 #define clockid_t_val(v_cl) ((clockid_t) Nativeint_val(v_cl))
 
 CAMLprim value unix_clock_gettime(value v_cl)
@@ -835,15 +869,12 @@ CAMLprim value unix_clock_gettime(value v_cl)
   struct timespec ts;
   if (clock_gettime(clockid_t_val(v_cl), &ts))
     uerror("clock_gettime", Nothing);
-  return caml_copy_double((double) ts.tv_sec + (double) ts.tv_nsec / 1e9);
+  return caml_copy_double(timespec_to_double(ts));
 }
 
 CAMLprim value unix_clock_settime(value v_cl, value v_t)
 {
-  double t = Double_val(v_t);
-  struct timespec ts;
-  ts.tv_sec = t;
-  ts.tv_nsec = (t - ts.tv_sec) * 1e9;
+  struct timespec ts = timespec_of_double(Double_val(v_t));
   if (clock_settime(clockid_t_val(v_cl), &ts))
     uerror("clock_settime", Nothing);
   return Val_unit;
@@ -854,20 +885,23 @@ CAMLprim value unix_clock_getres(value v_cl)
   struct timespec ts;
   if (clock_getres(clockid_t_val(v_cl), &ts))
     uerror("clock_getres", Nothing);
-  return caml_copy_double((double) ts.tv_sec + (double) ts.tv_nsec / 1e9);
+  return caml_copy_double(timespec_to_double(ts));
 }
-
 
 /* Unfortunately, it is currently not possible to
    extract the POSIX thread id given the OCaml-thread id due to lack of
    support for this feature in the OCaml-runtime.  The below function
    clearly does not do what is intended in the general case, but will
-   probably usually do the right thing. */
+   probably usually do the right thing.
+
+   mshinwell: I'll see about trying to fix the runtime.
+*/
 static inline pthread_t pthread_t_val(value __unused v_tid)
 {
   return pthread_self();
 }
 
+#if defined(JSC_THREAD_CPUTIME)
 CAMLprim value unix_pthread_getcpuclockid(value v_tid)
 {
   clockid_t c;
@@ -875,21 +909,31 @@ CAMLprim value unix_pthread_getcpuclockid(value v_tid)
     uerror("pthread_getcpuclockid", Nothing);
   return caml_copy_nativeint(c);
 }
+#endif
+
+#if defined(CLOCK_PROCESS_CPUTIME_ID)
+#define CLOCK CLOCK_PROCESS_CPUTIME_ID
+#elif defined(CLOCK_PROF)
+#define CLOCK CLOCK_PROF
+#else
+#define CLOCK CLOCK_REALTIME
+#endif
 
 CAMLprim value unix_clock_process_cputime_id_stub(value __unused v_unit)
 {
-  return caml_copy_nativeint(CLOCK_PROCESS_CPUTIME_ID);
+  return caml_copy_nativeint(CLOCK);
 }
 
 CAMLprim value unix_clock_thread_cputime_id_stub(value __unused v_unit)
 {
-  return caml_copy_nativeint(CLOCK_THREAD_CPUTIME_ID);
+  return caml_copy_nativeint(CLOCK);
 }
 
-#else
-#warning "POSIX MON not present; clock functions undefined"
-#endif
+#undef CLOCK
 
+#else
+#warning "posix timers not present; clock functions undefined"
+#endif
 
 /* Resource limits */
 
@@ -904,6 +948,9 @@ static inline int resource_val(value v_resource)
     case 4 : resource = RLIMIT_NOFILE; break;
     case 5 : resource = RLIMIT_STACK; break;
     case 6 : resource = RLIMIT_AS; break;
+#ifdef RLIMIT_NICE
+    case 7 : resource = RLIMIT_NICE; break;
+#endif
     default :
       /* impossible */
       caml_failwith("resource_val: unknown sum tag");
@@ -926,7 +973,6 @@ static value Val_rlim_t(rlim_t lim)
   if (lim == RLIM_INFINITY) v_rl = Val_int(0);
   else {
     value v_arg = caml_copy_int64(lim);
-    
     Begin_roots1(v_arg);
       v_rl = caml_alloc_small(1, 0);
     End_roots();
@@ -1074,10 +1120,7 @@ CAMLprim value unix_mutex_timedlock(value v_mtx, value v_timeo)
   pthread_mutex_t *mtx = Mutex_val(v_mtx);
   ret = pthread_mutex_trylock(mtx);
   if (ret == EBUSY) {
-    double timeo = Double_val(v_timeo);
-    struct timespec ts;
-    ts.tv_sec = timeo;
-    ts.tv_nsec = (timeo - ts.tv_sec) * 1e9;
+    struct timespec ts = timespec_of_double(Double_val(v_timeo));
     Begin_roots1(v_mtx);
     caml_enter_blocking_section();
       ret = pthread_mutex_timedlock(mtx, &ts);
@@ -1094,15 +1137,11 @@ CAMLprim value unix_mutex_timedlock(value v_mtx, value v_timeo)
 
 CAMLprim value unix_condition_timedwait(value v_cnd, value v_mtx, value v_timeo)
 {
-  
   CAMLparam2(v_cnd, v_mtx);
     int ret;
     pthread_cond_t *cnd = Condition_val(v_cnd);
     pthread_mutex_t *mtx = Mutex_val(v_mtx);
-    double timeo = Double_val(v_timeo);
-    struct timespec ts;
-    ts.tv_sec = timeo;
-    ts.tv_nsec = (timeo - ts.tv_sec) * 1e9;
+    struct timespec ts = timespec_of_double(Double_val(v_timeo));
     caml_enter_blocking_section();
       ret = pthread_cond_timedwait(cnd, mtx, &ts);
     caml_leave_blocking_section();
@@ -1138,7 +1177,7 @@ static struct custom_operations caml_mutex_ops = {
 
 };
 
-#if defined(_XOPEN_UNIX) && (_XOPEN_UNIX > 0)
+#if defined(_POSIX_THREADS) && _POSIX_THREADS >= 200112L
 CAMLprim value unix_create_error_checking_mutex(value __unused v_unit)
 {
   pthread_mutex_t *mtx;
@@ -1147,7 +1186,6 @@ CAMLprim value unix_create_error_checking_mutex(value __unused v_unit)
   pthread_mutexattr_init(&attrs);
   pthread_mutexattr_settype(&attrs, PTHREAD_MUTEX_ERRORCHECK);
   mtx = caml_stat_alloc(sizeof(pthread_mutex_t));
-  
   caml_pthread_check(
     pthread_mutex_init(mtx, &attrs), "Mutex.create_error_checking");
   pthread_mutexattr_destroy(&attrs);
@@ -1157,7 +1195,7 @@ CAMLprim value unix_create_error_checking_mutex(value __unused v_unit)
   return v_res;
 }
 #else
-#warn "XOPEN_UNIX not defined or = 0; unix_create_error_checking_mutex not available"
+#warning "_POSIX_THREADS not defined or < 200112; unix_create_error_checking_mutex not available"
 #endif
 
 /* Pathname resolution */
@@ -1267,6 +1305,32 @@ CAMLprim value unix_initgroups(value v_user, value v_group)
   return Val_unit;
 }
 
+CAMLprim value unix_getgrouplist(value v_user, value v_group)
+{
+  int n;
+  int ngroups = NGROUPS_MAX;
+  gid_t groups[NGROUPS_MAX];
+  value ret;
+  char *c_user;
+
+  assert(Is_block(v_user) && Tag_val(v_user) == String_tag);
+  assert(!Is_block(v_group));
+
+  c_user = strdup(String_val(v_user));
+
+  caml_enter_blocking_section();
+    n = getgrouplist(c_user, Long_val(v_group), groups, &ngroups);
+    free(c_user);
+  caml_leave_blocking_section();
+
+  if (n == -1) uerror ("getgrouplist", Nothing);
+
+  ret = caml_alloc_small(n, 0);
+  for (n = n - 1; n >= 0; n--)
+    Field(ret, n) = Val_long(groups[n]);
+
+  return ret;
+}
 
 /* Globbing and shell string expansion */
 
@@ -1278,7 +1342,7 @@ CAMLprim value unix_fnmatch_make_flags(value v_flags)
       case 0 : flags |= FNM_NOESCAPE; break;
       case 1 : flags |= FNM_PATHNAME; break;
       case 2 : flags |= FNM_PERIOD; break;
-      case 3 : flags |= FNM_FILE_NAME; break;
+      case 3 : flags |= FNM_PATHNAME; break;
       case 4 : flags |= FNM_LEADING_DIR; break;
       default : flags |= FNM_CASEFOLD; break;
     }
@@ -1299,6 +1363,8 @@ CAMLprim value unix_fnmatch(value v_flags, value v_glob, value v_str)
   }
 }
 
+#if defined(JSC_WORDEXP)
+
 CAMLprim value unix_wordexp_make_flags(value v_flags)
 {
   int flags = 0, i = Wosize_val(v_flags);
@@ -1314,7 +1380,6 @@ CAMLprim value unix_wordexp_make_flags(value v_flags)
 
 CAMLprim value unix_wordexp(value v_flags, value v_str)
 {
-  
   CAMLparam0();
   CAMLlocal1(v_res);
   int flags = Int32_val(v_flags);
@@ -1345,6 +1410,7 @@ CAMLprim value unix_wordexp(value v_flags, value v_str)
   }
 }
 
+#endif /* defined(JSC_WORDEXP) */
 
 /* System information */
 
@@ -1355,7 +1421,6 @@ CAMLprim value unix_uname(value v_unit __unused)
     struct utsname u;
     if (uname(&u)) uerror("uname", Nothing);
     v_utsname = caml_alloc(5, 0);
-    
     Store_field(v_utsname, 0, caml_copy_string(u.sysname));
     Store_field(v_utsname, 1, caml_copy_string(u.nodename));
     Store_field(v_utsname, 2, caml_copy_string(u.release));
@@ -1363,7 +1428,6 @@ CAMLprim value unix_uname(value v_unit __unused)
     Store_field(v_utsname, 4, caml_copy_string(u.machine));
   CAMLreturn(v_utsname);
 }
-
 
 /* Additional IP functionality */
 
@@ -1420,6 +1484,50 @@ CAMLprim value unix_if_indextoname(value v_index)
 MK_MCAST(join, ADD)
 MK_MCAST(leave, DROP)
 
+/* Similar to it's use in linux_ext, these are unfortunately not exported presently. It seems we
+   should either get the functions exported, or have all portable ip level options (such as
+   IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_MULTICAST_TTL, IP_MULTICAST_LOOP, and
+   IP_MULTICAST_IF) added to the stdlib. */
+enum option_type {
+  TYPE_BOOL = 0,
+  TYPE_INT = 1,
+  TYPE_LINGER = 2,
+  TYPE_TIMEVAL = 3,
+  TYPE_UNIX_ERROR = 4
+};
+
+extern value unix_getsockopt_aux(
+  char *name,
+  enum option_type ty, int level, int option,
+  value v_socket);
+extern value unix_setsockopt_aux(
+  char *name,
+  enum option_type ty, int level, int option,
+  value v_socket, value v_status);
+
+CAMLprim value unix_mcast_get_ttl(value v_socket)
+{
+  return
+    unix_getsockopt_aux("getsockopt", TYPE_INT, IPPROTO_IP, IP_MULTICAST_TTL, v_socket);
+}
+
+CAMLprim value unix_mcast_set_ttl(value v_socket, value v_ttl)
+{
+  return
+    unix_setsockopt_aux( "setsockopt", TYPE_INT, IPPROTO_IP, IP_MULTICAST_TTL, v_socket, v_ttl);
+}
+
+CAMLprim value unix_mcast_get_loop(value v_socket)
+{
+  return
+    unix_getsockopt_aux("getsockopt", TYPE_BOOL, IPPROTO_IP, IP_MULTICAST_LOOP, v_socket);
+}
+
+CAMLprim value unix_mcast_set_loop(value v_socket, value v_loop)
+{
+  return
+    unix_setsockopt_aux( "setsockopt", TYPE_BOOL, IPPROTO_IP, IP_MULTICAST_LOOP, v_socket, v_loop);
+}
 
 /* Scheduling */
 
@@ -1445,7 +1553,7 @@ CAMLprim value unix_sched_setscheduler(
 #else
 #warning "_POSIX_PRIORITY_SCHEDULING not present; sched_setscheduler undefined"
 CAMLprim value unix_sched_setscheduler(
-  value v_pid, value v_policy, value v_priority)
+  value __unused v_pid, value __unused v_policy, value __unused v_priority)
 {  invalid_argument("sched_setscheduler unimplemented"); }
 #endif
 
@@ -1461,47 +1569,6 @@ CAMLprim value unix_nice(value v_inc)
   else return Val_int(new_nice);
 }
 
-
-/* Number of open file descriptors */
-
-
-CAMLprim value unix_get_num_open_fds(value v_unit __unused)
-{
-  int n = 0, flags;
-  unsigned int fd;
-  struct rlimit rl;
-  caml_enter_blocking_section();
-  if (getrlimit(RLIMIT_NOFILE, &rl)) {
-    caml_leave_blocking_section();
-    uerror("getrlimit", Nothing);
-  }
-  for (fd = 0; fd < rl.rlim_cur; ++fd) {
-    /* From the fcntl manual page:
-
-         A limitation of the Linux system call conventions  on  some  architectures
-         (notably  x86)  means that if a (negative) process group ID to be returned
-         by F_GETOWN falls in the range -1 to  -4095,  then  the  return  value  is
-         wrongly  interpreted by glibc as an error in the system call; that is, the
-         return value of fcntl() will be -1, and errno will contain the  (positive)
-         process group ID.
-
-       This is why we have the unusual setting and checking of [errno] below.
-    */
-    errno = 0;
-    flags = fcntl(fd, F_GETFD, 0);
-    if (flags == -1 && errno != 0) {
-      if (errno != EBADF) {
-        caml_leave_blocking_section();
-        uerror("fcntl", Nothing);
-      }
-      else continue;
-    }
-    ++n;
-  }
-  caml_leave_blocking_section();
-  return Val_int(n);
-}
-
 CAMLprim value unix_unsetenv(value var)
 {
   if (unsetenv(String_val(var)) != 0) uerror("unsetenv", var);
@@ -1509,11 +1576,20 @@ CAMLprim value unix_unsetenv(value var)
 }
 
 
+static int mman_mcl_flags_table[] = { MCL_CURRENT, MCL_FUTURE };
+
 CAMLprim value unix_mlockall(value v_flags)
 {
-  if (mlockall(Int_val(v_flags)) < 0)
+  CAMLparam1(v_flags);
+  size_t i, mask;
+
+  for (i = 0, mask = 0; i < Wosize_val(v_flags); i++)
+    mask |= mman_mcl_flags_table[Int_val(Field(v_flags, i))];
+
+  if (mlockall(mask) < 0)
     uerror("mlockall", Nothing);
-  return Val_unit;
+
+  CAMLreturn(Val_unit);
 }
 
 CAMLprim value unix_munlockall()
@@ -1523,64 +1599,52 @@ CAMLprim value unix_munlockall()
   return Val_unit;
 }
 
-
-CAMLprim value unix_get_terminal_size(value __unused v_unit)
+static value alloc_tm(struct tm *tm)
 {
-  int fd;
-  struct winsize ws;
-  int ret;
-  value v_res;
+  value res;
+  res = caml_alloc_small(9, 0);
+  Field(res,0) = Val_int(tm->tm_sec);
+  Field(res,1) = Val_int(tm->tm_min);
+  Field(res,2) = Val_int(tm->tm_hour);
+  Field(res,3) = Val_int(tm->tm_mday);
+  Field(res,4) = Val_int(tm->tm_mon);
+  Field(res,5) = Val_int(tm->tm_year);
+  Field(res,6) = Val_int(tm->tm_wday);
+  Field(res,7) = Val_int(tm->tm_yday);
+  Field(res,8) = tm->tm_isdst ? Val_true : Val_false;
+  return res;
+}
 
-  caml_enter_blocking_section();
+CAMLprim value unix_strptime(value v_fmt, value v_s)
+{
+  CAMLparam2(v_s, v_fmt);
 
-  fd = open("/dev/tty", O_RDWR);
+  struct tm tm;
+  tm.tm_sec  = 0;
+  tm.tm_min  = 0;
+  tm.tm_hour = 0;
+  tm.tm_mday = 0;
+  tm.tm_mon  = 0;
+  tm.tm_year = 0;
+  tm.tm_wday = 0;
+  tm.tm_yday = 0;
+  tm.tm_isdst = 0;
 
-  if (fd == -1) {
-    caml_leave_blocking_section();
-    uerror("get_terminal_size__open", Nothing);
-  }
+  if (strptime(String_val(v_s), String_val(v_fmt), &tm) == NULL)
+    caml_failwith("unix_strptime: match failed");
 
-  ret = ioctl(fd, TIOCGWINSZ, &ws);
-
-  if (ret == -1) {
-    int old_errno = errno;
-    do ret = close(fd);
-    while (ret == -1 && errno == EINTR);
-    caml_leave_blocking_section();
-    if (ret == -1) uerror("get_terminal_size__ioctl_close", Nothing);
-    else {
-      errno = old_errno;
-      uerror("get_terminal_size__ioctl", Nothing);
-    }
-  }
-
-  do ret = close(fd);
-  while (ret == -1 && errno == EINTR);
-
-  caml_leave_blocking_section();
-
-  if (ret == -1) uerror("get_terminal_size__close", Nothing);
-
-  v_res = caml_alloc_small(2, 0);
-  Field(v_res, 0) = Val_int(ws.ws_row);
-  Field(v_res, 1) = Val_int(ws.ws_col);
-
-  return v_res;
+  CAMLreturn(alloc_tm(&tm));
 }
 
 CAMLprim value unix_strftime(value v_tm, value v_fmt)
 {
-  static const unsigned int buf_len = 20000;
-
   struct tm tm;
   size_t len;
   char* buf;
+  int buf_len;
   value v_str;
 
-  /* See below to understand why we check the length. */
-  if (caml_string_length(v_fmt) > buf_len / 2)
-    caml_failwith("unix_strftime: format string is too long");
-
+  buf_len = 128*1024 + caml_string_length(v_fmt);
   buf = malloc(buf_len);
   if (!buf) caml_failwith("unix_strftime: malloc failed");
 
@@ -1593,9 +1657,10 @@ CAMLprim value unix_strftime(value v_tm, value v_fmt)
   tm.tm_wday = Int_val(Field(v_tm, 6));
   tm.tm_yday = Int_val(Field(v_tm, 7));
   tm.tm_isdst = Bool_val(Field(v_tm, 8));
-  
-  tm.tm_gmtoff = 0; /* GNU extension, may not be visible everywhere */
+#ifdef __USE_BSD
+  tm.tm_gmtoff = 0;  /* GNU extension, may not be visible everywhere */
   tm.tm_zone = NULL; /* GNU extension, may not be visible everywhere */
+#endif
 
   len = strftime(buf, buf_len, String_val(v_fmt), &tm);
 
@@ -1603,8 +1668,8 @@ CAMLprim value unix_strftime(value v_tm, value v_fmt)
     /* From the man page:
          "Note that the return value 0 does not necessarily indicate an error;
           for example, in many locales %p yields an empty string."
-       Given how large our buffer is and that we have checked the length of the
-       format string (above) we just assume that 0 always indicates an empty string. */
+       Given how large our buffer is we just assume that 0 always indicates
+       an empty string. */
     v_str = caml_copy_string("");
     free(buf);
     return v_str;
@@ -1613,23 +1678,6 @@ CAMLprim value unix_strftime(value v_tm, value v_fmt)
   v_str = caml_copy_string(buf);  /* [strftime] always null terminates the string */
   free(buf);
   return v_str;
-}
-
-
-
-static struct timespec timespec_of_double(double seconds)
-{
-  struct timespec ts;
-
-  ts.tv_sec = (time_t) floor(seconds);
-  ts.tv_nsec = (long) (1e9 * (seconds - ts.tv_sec));
-
-  return ts;
-}
-
-static double double_of_timespec(struct timespec ts)
-{
-  return (double) ts.tv_sec + ((double) ts.tv_nsec / 1e9);
 }
 
 CAMLprim value unix_nanosleep(value v_seconds)
@@ -1646,10 +1694,28 @@ CAMLprim value unix_nanosleep(value v_seconds)
     return caml_copy_double(0.0);
   else if (retval == -1) {
     if (errno == EINTR)
-      return caml_copy_double(double_of_timespec(rem));
+      return caml_copy_double(timespec_to_double(rem));
     else
       uerror("nanosleep", Nothing);
   }
   else
     caml_failwith("unix_nanosleep: impossible return value from nanosleep(2)");
 }
+
+CAMLprim value core_unix_remove(value v_path)
+{
+  CAMLparam1(v_path);
+  int retval;
+  char *path = core_copy_to_c_string(v_path);
+
+  caml_enter_blocking_section();
+  retval = remove(path);
+  caml_stat_free(path);
+  caml_leave_blocking_section();
+
+  if (retval)
+    uerror("remove", v_path);
+
+  CAMLreturn(Val_unit);
+}
+

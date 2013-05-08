@@ -1,36 +1,9 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (** Lightweight threads. *)
 
-
-type t = Thread.t
 (** The type of thread handles. *)
-
+type t
 
 (** {6 Thread creation and termination} *)
-
 
 val create : ('a -> 'b) -> 'a -> t
 (** [Thread.create funct arg] creates a new thread of control,
@@ -90,24 +63,6 @@ val wait_timed_write : Unix.file_descr -> float -> bool
    the amount of time given as second argument (in seconds).
    Return [true] if the file descriptor is ready for input/output
    and [false] if the timeout expired. *)
-
-val select :
-  Unix.file_descr list -> Unix.file_descr list -> Unix.file_descr list ->
-    float ->
-    Unix.file_descr list * Unix.file_descr list * Unix.file_descr list
-(** Suspend the execution of the calling thead until input/output
-   becomes possible on the given Unix file descriptors.
-   The arguments and results have the same meaning as for
-   {!Core_unix.select}. *)
-
-val wait_pid : int -> int * Unix.process_status
-(** [wait_pid p] suspends the execution of the calling thread
-   until the Unix process specified by the process identifier [p]
-   terminates. A pid [p] of [-1] means wait for any child.
-   A pid of [0] means wait for any child in the same process group
-   as the current process. Negative pid arguments represent
-   process groups. Returns the pid of the child caught and
-   its termination status, as per {!Core_unix.wait}. *)
 
 val yield : unit -> unit
 (** Re-schedule the calling thread without suspending it.

@@ -1,35 +1,11 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+(** A simple polymorphic functional queue.
 
-(** Simple implementation of a polymorphic functional queue.
-    Push and top and bottom are O(1).  Pop and take are O(1) amortized.
-    to_list is O(n). length is O(1).
-*)
+    Amortized running times assumes that enqueue/dequeue are used sequentially, threading
+    the changing Fqueue through the calls. *)
 
 exception Empty
 
-type 'a t with bin_io, sexp
+type 'a t with bin_io, sexp, compare
 
 (** test via asserts whether invariants hold *)
 val test_invariants : 'a t -> unit
@@ -37,47 +13,43 @@ val test_invariants : 'a t -> unit
 (** The empty queue *)
 val empty : 'a t
 
+(** [enqueue t x] returns a queue with adds [x] to the end of [t]. Complexity: O(1) *)
+val enqueue : 'a t -> 'a -> 'a t
 
-(** push a single element on queue *)
-val push : 'a -> 'a t -> 'a t
-
-(** push a single element on the *top* of the queue *)
-val push_top : 'a -> 'a t -> 'a t
-
-(** alias for push *)
-val enq : 'a -> 'a t -> 'a t
+(** enqueue a single element on the *top* of the queue.  Complexity: amortized O(1) *)
+val enqueue_top : 'a t -> 'a -> 'a t
 
 (** returns the bottom (most-recently enqueued element).  Raises [Empty] if no element is
-    found. *)
+    found.  Complexity: O(1) *)
 val bot_exn : 'a t -> 'a
 
-(** like [bot_exn], but returns result optionally, without exception *)
+(** like [bot_exn], but returns result optionally, without exception.  Complexity: O(1) *)
 val bot : 'a t -> 'a option
 
-(** Like [bot_exn], except returns top (least-recently enqueued element *)
+(** Like [bot_exn], except returns top (least-recently enqueued element.  Complexity:
+    O(1) *)
 val top_exn : 'a t -> 'a
 
-(** like [top_exn], but returns result optionally, without exception *)
+(** like [top_exn], but returns result optionally, without exception, Complexity: O(1) *)
 val top : 'a t -> 'a option
 
-(** Like [top_exn], but returns pair of the top element, and a new queue with the top element
-    removed *)
-val pop_exn : 'a t -> 'a * 'a t
+(** [dequeue_exn t] removes and returns the front of [t], raising [Empty] if [t]
+    is empty.  Complexity: amortized O(1)*)
+val dequeue_exn : 'a t -> 'a * 'a t
 
-(** Like [pop_exn], but returns result optionally, without exception *)
-val pop : 'a t -> ('a * 'a t) option
+(** Like [dequeue_exn], but returns result optionally, without exception.  Complexity:
+    amortized O(1) *)
+val dequeue : 'a t -> ('a * 'a t) option
 
-(** alias for pop *)
-val deq : 'a t -> ('a * 'a t) option
-
-(** alias for pop_exn *)
-val deq_exn : 'a t -> 'a * 'a t
-
-(** Returns version of queue with top element removed *)
+(** Returns version of queue with top element removed.  Complexity: amortized O(1) *)
 val discard_exn : 'a t -> 'a t
 
-(** [to_list t] returns a list of the elements in [t] in order from
-    least-recently-added (at the head) to most-recently added (at the tail). *)
+(** [to_list t] returns a list of the elements in [t] in order from least-recently-added
+    (at the head) to most-recently added (at the tail). Complexity: O(n) *)
 val to_list : 'a t -> 'a list
+
+(** complexity: O(1) *)
 val length : 'a t -> int
+(** complexity: O(1) *)
 val is_empty : 'a t -> bool
+

@@ -1,30 +1,40 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
+open Core.Std;;
 open OUnit;;
 
-let () = if not (Core.Local_utest.run_tests ()) then
-    exit 1
-let main () = ignore (run_test_tt_main Test.all)
+let rec count acc = function
+  | TestCase _ -> acc + 1
+  | TestLabel (_,test) -> count acc test
+  | TestList l ->
+    List.fold_left l
+      ~f:count
+      ~init:acc
+
+let count_pa_ounit = function
+  | TestList l ->
+    List.fold_left l
+      ~f:(fun (pa_ounit,total) test ->
+        match test with
+        | TestLabel (s,tst) when String.is_suffix ~suffix:".ml" s ->
+          let cnt = count 0 tst in
+          (pa_ounit+cnt,total+cnt)
+        | test ->
+          pa_ounit,count total test)
+      ~init:(0,0)
+  | v ->
+    0,count 0 v
+
+let main () =
+  let cnt_ounit =
+    "-cnt",
+     Arg.Unit (fun () ->
+       let pa_ounit,total = count_pa_ounit (Test.all ()) in
+       Printf.printf "converted: %i total: %i\n%!" pa_ounit total;
+       exit 0
+     ),
+     " Count how many of the tests were converted to pa_ounit (for \
+ informational purposes only)"
+  in
+  ignore (run_test_tt_main
+            ~arg_specs:[cnt_ounit]
+            (Test.all ()):OUnit.test_result list)
 let () = Core.Exn.handle_uncaught ~exit:true main

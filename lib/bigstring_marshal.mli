@@ -1,34 +1,7 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (** Utility functions for marshalling to and from bigstring
 
     @author Markus Mottl <mmottl\@janestreet.com>
 *)
-INCLUDE "config.mlh"
-
-IFDEF LINUX_EXT THEN
 
 
 open Bigstring
@@ -99,25 +72,38 @@ val unmarshal_next : ?pos : int -> t -> 'a * int
 *)
 val skip : ?pos : int -> t -> int
 
-(** [marshal_to_sock ?buf sock v] marshals data [v] to socket [sock]
+(** [marshal_to_fd ?buf fd v] marshals data [v] to file descriptor [fd]
     using marshalling buffer [buf], and marshalling flags [flags].
-    Raises input errors as in {!really_send_no_sigpipe_bigstring}.
+    Raises input errors as in {!Bigstring.really_write}.
 
     @raise Failure if [buf] cannot hold enough data for marshalling.
 
     @param flags default = []
     @param buf default = determined dynamically
 *)
-val marshal_to_sock :
-  ?buf : t -> ?flags : Marshal.extern_flags list -> Unix.file_descr -> 'a -> unit
+val marshal_to_fd
+  :  ?buf : t
+  -> ?flags : Marshal.extern_flags list
+  -> Unix.file_descr
+  -> 'a
+  -> unit
+
+(** [marshal_to_sock_no_sigpipe ?buf sock v] same as {!marshal_to_fd}, but
+    writes to sockets only and uses {!Bigstring.really_send_no_sigpipe}
+    to avoid [SIGPIPE] on sockets. *)
+val marshal_to_sock_no_sigpipe
+  : (?buf : t
+     -> ?flags : Marshal.extern_flags list
+     -> Unix.file_descr
+     -> 'a
+     -> unit) Or_error.t
 
 (** [unmarshal_from_sock ?buf sock] unmarshals data from socket [sock]
     using unmarshalling buffer [buf].  Raises input errors as in
-    {!really_recv_bigstring}.
+    {!Bigstring.really_recv}.
 
     @raise Failure if [buf] cannot hold enough data for unmarshalling.
 
     @param buf default = determined dynamically
 *)
 val unmarshal_from_sock : ?buf : t -> Unix.file_descr -> 'a
-ENDIF

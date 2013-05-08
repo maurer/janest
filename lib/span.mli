@@ -1,33 +1,9 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Std_internal
 
-type t = private float                  (* number of seconds *)
+type t = private float with bin_io, sexp (* number of seconds *)
 
 (* Parts represents the individual parts of a Span as if it were written out (it is the
-   counterpart to create).  For example, (Span.of_sec 90.) is represented by {Parts.hr = 0;
+   counterpart to create).  For example, (sec 90.) is represented by {Parts.hr = 0;
    min = 1; sec = 30; ms = 0}.  The fields will always be positive. *)
 module Parts : sig
   type t = private {
@@ -41,25 +17,25 @@ module Parts : sig
     with sexp
 end
 
-include Binable with type binable = t
-include Comparable_binable with type comparable = t
-include Floatable with type floatable = t (* in units of seconds *)
-include Hashable_binable with type hashable = t
-include Robustly_comparable with type robustly_comparable = t
-include Sexpable with type sexpable = t
+include Comparable_binable   with type t := t
+include Comparable.With_zero with type t := t
+include Floatable            with type t := t
+include Hashable_binable     with type t := t
+include Pretty_printer.S     with type t := t
+include Robustly_comparable  with type t := t
 
 (* String converters and sexp converters allow for specifying of time spans in various
-    units.  An unadorned float is interpreted as being in seconds.  Other formats are
-    achieved by appending a string to the end indicating the unit, e.g. 12ms for 12
-    milliseconds 5.1h for 5.1 hours.  The endings are as follows:
+   units after a leading float (e.g. 45s, 3h, or 1d):
 
     ms - milliseconds
     s - seconds
     m - minutes
     h - hours
-    The outgoing conversion functions use these units as well, choosing the largest
-    available type.  I.e., if it's a bit greater than or equal to 1 day, the span will be
-    rendered in days, e.g., Time.to_string (Time.of_string "66m") = "1.1h".
+    d - days
+
+   The outgoing conversion functions use these units as well, choosing the largest
+   available type.  For instance, if it's a bit greater than or equal to 1 hour, the span
+   will be rendered in hours, (Time.to_string (Time.of_string "66m") = "1.1h").
 *)
 val to_string : t -> string
 val of_string : string -> t
@@ -77,9 +53,12 @@ val day : t
 val epsilon : t
 val zero : t
 
-
+(* [create ?sign ?day ?hr ?min ?sec ?ms ?us ()] Create a span from the given parts.  All
+   parts are assumed to be positive (no checking is done by the function) and the sign of
+   the final span is given by [sign] which is positive by default. *)
 val create :
-  ?day:int
+  ?sign:Float.Sign.t
+  -> ?day:int
   -> ?hr:int
   -> ?min:int
   -> ?sec:int
@@ -109,17 +88,34 @@ val to_hr  : t -> float
 val to_day : t -> float
 
 (** {6 Basic operations on spans} *)
-val add   : t -> t -> t 
-val sub   : t -> t -> t 
+val (+)   : t -> t -> t
+val (-)   : t -> t -> t
 val abs   : t -> t (** absolute value *)
+val neg   : t -> t (** negation *)
 val scale : t -> float -> t
 val (/)   : t -> float -> t
 val (//)  : t -> t -> float
 
+(** [to_short_string t] pretty-prints approximate time span using no more than
+    five characters if the span is positive, and six if the span is negative.
+    Examples
+    {ul
+       {li ["4h"] = 4 hours}
+       {li ["5m"] = 5 minutes}
+       {li ["4s"] = 4 seconds}
+       {li ["10ms"] = 10 milliseconds}
+    }
 
+    only the most significant denomination is shown.
+  *)
+val to_short_string : t -> string
 
-
-(** [randomize t ~percent] returns a random span between [t - percent * t]
-    and [t + percent * t] *)
+(** [randomize t ~percent] returns a span +/- percent * original span.  Percent must be
+    between 0 and 1, and must be positive. *)
 val randomize : t -> percent:float -> t
-val pp : Format.formatter -> t -> unit
+
+module Stable : sig
+  module V1 : sig
+    type t with sexp, bin_io, compare
+  end with type t = t
+end

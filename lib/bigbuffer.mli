@@ -1,52 +1,16 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This file is derived from source code of the Ocaml compiler.               *
- * which has additional copyrights:                                           *
- *                                                                            *
- *    Pierre Weis and Xavier Leroy, projet Cristal, INRIA Rocquencourt        *
- *                                                                            *
- *    Copyright 1999 Institut National de Recherche en Informatique et        *
- *    en Automatique.                                                         *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+(** Extensible string buffers based on Bigstrings.
 
-(* Bigbuffer
+   This module implements string buffers that automatically expand as necessary.  It
+   provides accumulative concatenation of strings in quasi-linear time (instead of
+   quadratic time when strings are concatenated pairwise).
 
-    NOTE: implementation uses Bigstrings instead of strings.
-    This removes the 16MB limit on buffer size, and improves
-    I/O-performance when reading/writing from/to channels.
-*)
-
-(** Extensible string buffers.
-
-   This module implements string buffers that automatically expand
-   as necessary.  It provides accumulative concatenation of strings
-   in quasi-linear time (instead of quadratic time when strings are
-   concatenated pairwise).
+   This implementation uses Bigstrings instead of strings.  This removes the 16MB limit on
+   buffer size, and improves I/O-performance when reading/writing from/to channels.
 *)
 
 type t
 (** The abstract type of buffers. *)
+
 val create : int -> t
 (** [create n] returns a fresh buffer, initially empty.
    The [n] parameter is the initial size of the internal string
@@ -67,12 +31,10 @@ val big_contents : t -> Bigstring.t
 (** Return a copy of the current contents of the buffer as a bigstring.
    The buffer itself is unchanged. *)
 
-
 val volatile_contents : t -> Bigstring.t
-(** Return the actual underlying bigstring used by this bigbuffer.  This
-    means that there is no copy, but it also means that the contents of
-    this Bigstring.t may/will be changed by further operations on the
-    Bigbuffer *)
+(** Return the actual underlying bigstring used by this bigbuffer.
+    No copying is involved.  To be safe, use and finish with the returned value
+    before calling any other function in this module on the same [Bigbuffer.t]. *)
 
 val sub : t -> int -> int -> string
 (** [Bigbuffer.sub b off len] returns (a copy of) the substring of the
@@ -80,8 +42,8 @@ current contents of the buffer [b] starting at offset [off] of length
 [len] bytes. May raise [Invalid_argument] if out of bounds request. The
 buffer itself is unaffected. *)
 
-val blit :
-  src : t -> src_pos : int -> dst : string -> dst_pos : int -> len : int -> unit
+val blit : (t, string) Bigstring.blit
+
 (** [blit ~src ~src_pos ~dst ~dst_pos ~len] copies [len] characters from
    the current contents of the buffer [src], starting at offset [src_pos]
    to string [dst], starting at character [dst_pos].
@@ -158,6 +120,5 @@ module Format : sig
 end
 
 module Printf : sig
-  open Printf
   val bprintf : t -> ('a, unit, string, unit) format4 -> 'a
 end

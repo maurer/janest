@@ -1,37 +1,19 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Sexplib
+open Sexplib.Conv
+open Core_hashtbl_intf
+open With_return
 
-include Core_hashtbl_intf
+module Binable = Binable0
 
-(* Copied from Inria hashtbl.ml *)
-external hash_param : int -> int -> 'a -> int = "caml_hash_univ_param" "noalloc"
-let hash x = hash_param 10 100 x
+let failwiths = Error.failwiths
 
-(* A few small things copied from other parts of core because
-   they depend on us, so we can't use them. *)
+module Hashable = Core_hashtbl_intf.Hashable
+
+let hash_param = Hashable.hash_param
+let hash       = Hashable.hash
+
+(* A few small things copied from other parts of core because they depend on us, so we
+   can't use them. *)
 module Int = struct
   type t = int
 
@@ -44,104 +26,184 @@ module Array = Core_array
 
 let phys_equal = (==)
 
-let poly = { hash = hash; compare = compare }
+(* IF THIS REPRESENTATION EVER CHANGES, ENSURE THAT EITHER
+    (1) all values serialize the same way in both representations, or
+    (2) you add a new Hashtbl version to stable.ml
+*)
+type ('k, 'v) t =
+  { mutable table : ('k, 'v) Avltree.t array;
+    mutable length : int;
+    growth_allowed: bool;
+    hashable: 'k Hashable.t;
+  }
 
-module T = struct
-  type ('k, 'v) t =
-    { mutable table : ('k, 'v) Avltree.t array;
-      mutable array_length: int;
-      mutable length : int;
-      growth_allowed: bool;
-      added_or_removed : bool ref;
-      hashable: 'k hashable;
-    }
-end
+type ('k, 'v) hashtbl = ('k, 'v) t
 
-include T
+type 'a key = 'a
 
-let create ?(growth_allowed=true) ?(hashable = poly) ?(size = 128) () =
-  let size = Int.min (Int.max 1 size) Sys.max_array_length in
-  { table = Array.create size Avltree.empty;
-    array_length = size;
+module type S         = S         with type ('a, 'b) hashtbl = ('a, 'b) t
+module type S_binable = S_binable with type ('a, 'b) hashtbl = ('a, 'b) t
+
+let sexp_of_key t = t.hashable.Hashable.sexp_of_t
+let compare_key t = t.hashable.Hashable.compare
+
+(** Internally use a maximum size that is a power of 2. Reverses the above to find the
+    floor power of 2 below the system max array length *)
+let max_table_length = Int_math.floor_pow2 Sys.max_array_length ;;
+
+let create ?(growth_allowed = true) ?(size = 128) ~hashable () =
+  let size = Int.min (Int.max 1 size) max_table_length in
+  let size = Int_math.ceil_pow2 size in
+  { table = Array.create ~len:size Avltree.empty;
     length = 0;
     growth_allowed = growth_allowed;
-    added_or_removed = ref false;
-    hashable = hashable };;
+    hashable;
+  }
+;;
 
+(** Supplemental hash. This may not be necessary, it is intended as a defense against poor
+    hash functions, for which the power of 2 sized table will be especially sensitive.
+    With some testing we may choose to add it, but this table is designed to be robust to
+    collisions, and in most of my testing this degrades performance. *)
+let _supplemental_hash h =
+  let h = h lxor ((h lsr 20) lxor (h lsr 12)) in
+  h lxor (h lsr 7) lxor (h lsr 4)
+;;
 
-let slot t key = t.hashable.hash key mod t.array_length
+exception Hash_value_must_be_non_negative with sexp
 
-let really_add t ~key ~data =
+let slot t key =
+  let hash = t.hashable.Hashable.hash key in
+  (* this is always non-negative because we do [land] with non-negative number *)
+  hash land ((Array.length t.table) - 1)
+;;
+
+let add_worker added replace t ~key ~data =
   let i = slot t key in
   let root = t.table.(i) in
-  let new_root =
-    (* The avl tree might replace the entry, in that case the table
-       did not get bigger, so we should not increment length, we
-       pass in the bool ref t.added so that it can tell us whether
-       it added or replaced. We do it this way to avoid extra
-       allocation. Since the bool is an immediate it does not go
-       through the write barrier. *)
-    Avltree.add root
-      ~compare:t.hashable.compare ~added:t.added_or_removed ~key ~data
-  in
-  if t.added_or_removed.contents then
+  (* These cases should be quite common, so we manually inline them. *)
+  match root with
+  | Avltree.Empty ->
+    t.table.(i) <- Avltree.Leaf (key, data);
     t.length <- t.length + 1;
-  (* This little optimization saves a caml_modify when the tree
-     hasn't been rebalanced. *)
-  if not (phys_equal new_root root) then
-    t.table.(i) <- new_root
+    added := true
+  | Avltree.Leaf (k, _) ->
+    let c = compare_key t k key in
+    if c = 0 then begin
+      if replace then t.table.(i) <- Avltree.Leaf (key, data);
+      added := false
+    end else begin
+      added := true;
+      t.length <- t.length + 1;
+      t.table.(i) <-
+        if c < 0 then Avltree.Node(root, key, data, 2, Avltree.Empty)
+        else Avltree.Node(Avltree.Empty, key, data, 2, root)
+    end
+  | root ->
+    let new_root =
+      (* The avl tree might replace the value [replace=true] or do nothing [replace=false]
+         to the entry, in that case the table did not get bigger, so we should not
+         increment length, we pass in the bool ref t.added so that it can tell us whether
+         it added or replaced. We do it this way to avoid extra allocation. Since the bool
+         is an immediate it does not go through the write barrier. *)
+      Avltree.add ~replace root ~compare:(compare_key t) ~added ~key ~data
+    in
+    if !added then
+      t.length <- t.length + 1;
+    (* This little optimization saves a caml_modify when the tree
+       hasn't been rebalanced. *)
+    if not (phys_equal new_root root) then
+      t.table.(i) <- new_root
 ;;
 
 let maybe_resize_table t =
-  let should_grow = t.length >= t.array_length * 2 in
+  let len = Array.length t.table in
+  let should_grow = t.length > len in
   if should_grow && t.growth_allowed then begin
-    let new_array_length =
-      Int.min (t.array_length * 2) Sys.max_array_length
-    in
-    if new_array_length > t.array_length then begin
+    let new_array_length = Int.min (len * 2) max_table_length in
+    if new_array_length > len then begin
       let new_table =
         Array.init new_array_length ~f:(fun _ -> Avltree.empty)
       in
       let old_table = t.table in
-      t.array_length <- new_array_length;
+      let added_or_removed = ref false in
       t.table <- new_table;
       t.length <- 0;
       for i = 0 to Array.length old_table - 1 do
         Avltree.iter old_table.(i) ~f:(fun ~key ~data ->
-          really_add t ~key ~data)
+          add_worker added_or_removed true t ~key ~data)
       done
     end
   end
 ;;
 
-let replace t ~key ~data =
-  really_add t ~key ~data;
+let set t ~key ~data =
+  add_worker (ref false) true t ~key ~data;
   maybe_resize_table t
 ;;
 
+let replace = set
+
+let add t ~key ~data =
+  let added_or_removed = ref false in
+  add_worker added_or_removed false t ~key ~data;
+  if !added_or_removed then begin
+    maybe_resize_table t;
+    `Ok
+  end else
+    `Duplicate
+;;
+
+let add_exn (type k) t ~key ~data =
+  match add t ~key ~data with
+  | `Ok -> ()
+  | `Duplicate ->
+    let module T = struct
+      type key = k
+      let sexp_of_key = sexp_of_key t
+      exception Add_key_already_present of key with sexp
+    end
+    in
+    raise (T.Add_key_already_present key)
+;;
+
 let clear t =
-  for i = 0 to t.array_length - 1 do
+  for i = 0 to Array.length t.table - 1 do
     t.table.(i) <- Avltree.empty;
   done;
   t.length <- 0
 ;;
 
 let find t key =
-  Avltree.find t.table.(slot t key) ~compare:t.hashable.compare key
+  (* with a good hash function these first two cases will be the overwhelming majority,
+     and Avltree.find is recursive, so it can't be inlined, so doing this avoids a
+     function call in most cases. *)
+  match t.table.(slot t key) with
+  | Avltree.Empty -> None
+  | Avltree.Leaf (k, v) ->
+    if compare_key t k key = 0 then Some v
+    else None
+  | tree -> Avltree.find tree ~compare:(compare_key t) key
+;;
 
 let mem t key =
-  Avltree.mem t.table.(slot t key) ~compare:t.hashable.compare key
+  match t.table.(slot t key) with
+  | Avltree.Empty -> false
+  | Avltree.Leaf (k, _) -> compare_key t k key = 0
+  | tree -> Avltree.mem tree ~compare:(compare_key t) key
+;;
 
 let remove t key =
   let i = slot t key in
   let root = t.table.(i) in
+  let added_or_removed = ref false in
   let new_root =
     Avltree.remove root
-      ~removed:t.added_or_removed ~compare:t.hashable.compare key
+      ~removed:added_or_removed ~compare:(compare_key t) key
   in
   if not (phys_equal root new_root) then
     t.table.(i) <- new_root;
-  if t.added_or_removed.contents then
+  if !added_or_removed then
     t.length <- t.length - 1
 ;;
 
@@ -150,40 +212,61 @@ let length t = t.length
 let is_empty t = length t = 0
 
 let fold t ~init ~f =
-  let n = t.array_length in
-  let acc = ref init in
-  for i = 0 to n - 1 do
-    let init = !acc in
-    acc := Avltree.fold t.table.(i) ~init ~f;
-  done;
-  !acc
+  if length t = 0 then init
+  else begin
+    let n = Array.length t.table in
+    let acc = ref init in
+    for i = 0 to n - 1 do
+      match Array.unsafe_get t.table i with
+      | Avltree.Empty -> ()
+      | Avltree.Leaf (key, data) -> acc := f ~key ~data !acc
+      | bucket -> acc := Avltree.fold bucket ~init:!acc ~f
+    done;
+    !acc
+  end
+;;
+
+let sexp_of_t sexp_of_k sexp_of_d t =
+  let coll ~key:k ~data:v acc = Sexp.List [sexp_of_k k; sexp_of_d v] :: acc in
+  Sexp.List (fold ~f:coll t ~init:[])
+;;
+
+let iter t ~f =
+  if t.length = 0 then ()
+  else begin
+    let n = Array.length t.table in
+    for i = 0 to n - 1 do
+      match Array.unsafe_get t.table i with
+      | Avltree.Empty -> ()
+      | Avltree.Leaf (key, data) -> f ~key ~data
+      | bucket -> Avltree.iter bucket ~f
+    done
+  end
 ;;
 
 let invariant t =
-  for i = 0 to t.array_length - 1 do
-    Avltree.invariant t.table.(i) ~compare:t.hashable.compare
+  for i = 0 to Array.length t.table - 1 do
+    Avltree.invariant t.table.(i) ~compare:(compare_key t)
   done;
-  assert (Array.length t.table = t.array_length);
   let real_len = fold t ~init:0 ~f:(fun ~key:_ ~data:_ i -> i + 1) in
   assert (real_len = t.length)
 ;;
 
 let find_exn t id =
   match find t id with
-  | None -> raise Not_found
   | Some x -> x
+  | None ->
+    raise Not_found
+;;
 
-let find_default t key ~default =
+(*let find_default t key ~default =
   match find t key with
   | None -> default ()
-  | Some a -> a
-
-let iter t ~f =
-  fold t ~init:() ~f:(fun ~key ~data () -> f ~key ~data)
+  | Some a -> a*)
 
 let existsi t ~f =
-  With_return.with_return (fun r ->
-    iter t ~f:(fun ~key ~data -> if f ~key ~data then r.With_return.return true);
+  with_return (fun r ->
+    iter t ~f:(fun ~key ~data -> if f ~key ~data then r.return true);
     false)
 ;;
 
@@ -247,7 +330,29 @@ let filteri t ~f =
 
 let filter t ~f = filteri t ~f:(fun ~key:_ ~data -> f data)
 
-let remove_all = remove
+let partition_mapi t ~f =
+  let t0 =
+    create ~growth_allowed:t.growth_allowed
+      ~hashable:t.hashable ~size:t.length ()
+  in
+  let t1 =
+    create ~growth_allowed:t.growth_allowed
+      ~hashable:t.hashable ~size:t.length ()
+  in
+  iter t ~f:(fun ~key ~data ->
+    match f ~key ~data with
+    | `Fst new_data -> replace t0 ~key ~data:new_data
+    | `Snd new_data -> replace t1 ~key ~data:new_data);
+  (t0, t1)
+;;
+
+let partition_map t ~f = partition_mapi t ~f:(fun ~key:_ ~data -> f data)
+
+let partitioni_tf t ~f =
+  partition_mapi t ~f:(fun ~key ~data -> if f ~key ~data then `Fst data else `Snd data)
+;;
+
+let partition_tf t ~f = partitioni_tf t ~f:(fun ~key:_ ~data -> f data)
 
 let remove_one t key =
   match find t key with
@@ -263,17 +368,22 @@ let find_or_add t id ~default =
     replace t ~key:id ~data:default;
     default
 
+(* Some hashtbl implementations may be able to perform this more efficiently than two
+   separate lookups *)
+let find_and_remove t id =
+  let result = find t id in
+  if Option.is_some result then remove t id;
+  result
 
 let change t id f =
   match f (find t id) with
   | None -> remove t id
   | Some data -> replace t ~key:id ~data
 
-
 let incr ?(by = 1) t key =
   change t key
     (function
-      | None -> Some 1
+      | None -> Some by
       | Some i -> Some (i + by))
 
 let add_multi t ~key ~data =
@@ -281,38 +391,79 @@ let add_multi t ~key ~data =
   | None -> replace t ~key ~data:[data]
   | Some l -> replace t ~key ~data:(data :: l)
 
+let remove_multi t key =
+  match find t key with
+  | None -> ()
+  | Some [] | Some [_] -> remove t key
+  | Some (_ :: tl) -> replace t ~key ~data:tl
+
 let iter_vals t ~f = iter t ~f:(fun ~key:_ ~data -> f data)
 
-let of_alist ?growth_allowed ?hashable ?size lst =
-  let size = match size with Some s -> s | None -> List.length lst in
-  let t = create ?growth_allowed ?hashable ~size () in
-  let res = ref (`Ok t) in
-  List.iter lst ~f:(fun (k, v) ->
-    match mem t k with
-    | true -> res := `Duplicate_key k
-    | false -> replace t ~key:k ~data:v);
-  !res
+let create_mapped ?growth_allowed ?size ~hashable ~get_key ~get_data rows =
+  let size = match size with Some s -> s | None -> List.length rows in
+  let res = create ?growth_allowed ~hashable ~size () in
+  let dupes = ref [] in
+  List.iter rows ~f:(fun r ->
+    let key = get_key r in
+    let data = get_data r in
+    if mem res key then
+      dupes := key :: !dupes
+    else
+      replace res ~key ~data);
+  match !dupes with
+  | [] -> `Ok res
+  | keys -> `Duplicate_keys (List.dedup ~compare:hashable.Hashable.compare keys)
 ;;
 
-let of_alist_exn ?growth_allowed ?hashable ?size lst =
-  let size = match size with Some s -> s | None -> List.length lst in
-  match of_alist ?growth_allowed ?hashable ~size lst with
+(*let create_mapped_exn ?growth_allowed ?size ~hashable ~get_key ~get_data rows =
+  let size = match size with Some s -> s | None -> List.length rows in
+  let res = create ?growth_allowed ~size ~hashable () in
+  List.iter rows ~f:(fun r ->
+    let key = get_key r in
+    let data = get_data r in
+    if mem res key then
+      let sexp_of_key = hashable.Hashable.sexp_of_t in
+      failwiths "Hashtbl.create_mapped_exn: duplicate key" key <:sexp_of< key >>
+    else
+      replace res ~key ~data);
+  res
+;;*)
+
+let create_mapped_multi ?growth_allowed ?size ~hashable ~get_key ~get_data rows =
+  let size = match size with Some s -> s | None -> List.length rows in
+  let res = create ?growth_allowed ~size ~hashable () in
+  List.iter rows ~f:(fun r ->
+    let key = get_key r in
+    let data = get_data r in
+    add_multi res ~key ~data);
+  res
+;;
+
+let of_alist ?growth_allowed ?size ~hashable lst =
+  match create_mapped ?growth_allowed ?size ~hashable ~get_key:fst ~get_data:snd lst with
+  | `Ok t -> `Ok t
+  | `Duplicate_keys k -> `Duplicate_key (List.hd_exn k)
+;;
+
+let of_alist_report_all_dups ?growth_allowed ?size ~hashable lst =
+  create_mapped ?growth_allowed ?size ~hashable ~get_key:fst ~get_data:snd lst
+;;
+
+let of_alist_exn ?growth_allowed ?size ~hashable lst =
+  match of_alist ?growth_allowed ?size ~hashable lst with
   | `Ok v -> v
-  | `Duplicate_key _k -> failwith "Hashtbl.of_alist_exn: duplicate key"
+  | `Duplicate_key key ->
+    let sexp_of_key = hashable.Hashable.sexp_of_t in
+    failwiths "Hashtbl.of_alist_exn: duplicate key" key <:sexp_of< key >>
 ;;
 
-let of_alist_multi ?growth_allowed ?hashable ?size lst =
-  let lst = List.rev lst in
-  let size = match size with Some s -> s | None -> List.length lst in
-  let t = create ?growth_allowed ?hashable ~size () in
-  List.iter lst ~f:(fun (key, data) ->
-    add_multi t ~key ~data);
-  t
+let of_alist_multi ?growth_allowed ?size ~hashable lst =
+  create_mapped_multi ?growth_allowed ?size ~hashable ~get_key:fst ~get_data:snd lst
 ;;
 
-let to_alist t =
-  fold ~f:(fun ~key ~data list -> (key, data)::list) ~init:[] t
-;;
+let to_alist t = fold ~f:(fun ~key ~data list -> (key, data)::list) ~init:[] t
+
+let validate ~name f t = Validate.alist ~name f (to_alist t)
 
 let keys t = fold t ~init:[] ~f:(fun ~key ~data:_ acc -> key :: acc)
 
@@ -330,26 +481,25 @@ let add_to_groups groups ~get_key ~get_data ~combine ~rows =
     replace groups ~key ~data)
 ;;
 
-let group ?growth_allowed ?hashable ?size ~get_key ~get_data ~combine rows =
-  let res = create ?growth_allowed ?hashable ?size () in
+let group ?growth_allowed ?size ~hashable ~get_key ~get_data ~combine rows =
+  let res = create ?growth_allowed ?size ~hashable () in
   add_to_groups res ~get_key ~get_data ~combine ~rows;
   res
 ;;
 
-let create_mapped ?growth_allowed ?hashable ?size ~get_key ~get_data rows =
-  let res = create ?growth_allowed ?hashable ?size () in
-  List.iter rows ~f:(fun r ->
-    let key = get_key r in
-    let data = get_data r in
-    replace res ~key ~data);
-  res
+let create_with_key ?growth_allowed ?size ~hashable ~get_key rows =
+  create_mapped ?growth_allowed ?size ~hashable ~get_key ~get_data:(fun x -> x) rows
 ;;
 
-let create_with_key ?growth_allowed ?hashable ?size ~get_key rows =
-  create_mapped ?growth_allowed ?hashable ?size ~get_key ~get_data:(fun x -> x) rows
+let create_with_key_exn ?growth_allowed ?size ~hashable ~get_key rows =
+  match create_with_key ?growth_allowed ?size ~hashable ~get_key rows with
+  | `Ok t -> t
+  | `Duplicate_keys keys ->
+    let sexp_of_key = hashable.Hashable.sexp_of_t in
+    failwiths "Hashtbl.create_with_key: duplicate keys" keys <:sexp_of< key list >>
 ;;
 
-let merge ~f t1 t2 =
+let merge t1 t2 ~f =
   if not (phys_equal t1.hashable t2.hashable)
   then invalid_arg "Hashtbl.merge: different 'hashable' values";
   let create () =
@@ -365,10 +515,18 @@ let merge ~f t1 t2 =
   iter t1 ~f:record_key;
   iter t2 ~f:record_key;
   iter unique_keys ~f:(fun ~key ~data:_ ->
-    match f ~key (find t1 key) (find t2 key) with
+    let arg =
+      match find t1 key, find t2 key with
+      | None, None -> assert false
+      | None, Some r -> `Right r
+      | Some l, None -> `Left l
+      | Some l, Some r -> `Both (l, r)
+    in
+    match f ~key arg with
     | Some data -> replace t ~key ~data
     | None -> ());
   t
+;;
 
 let merge_into ~f ~src ~dst =
   iter src ~f:(fun ~key ~data ->
@@ -388,44 +546,6 @@ let filter_inplace t ~f =
   filteri_inplace t ~f:(fun _ data -> f data)
 ;;
 
-module T_sexpable = struct
-  type ('a, 'b) sexpable = ('a, 'b) t
-
-  let sexp_of_t sexp_of_k sexp_of_d t =
-    let coll ~key:k ~data:v acc = Sexp.List [sexp_of_k k; sexp_of_d v] :: acc in
-    Sexp.List (fold ~f:coll t ~init:[])
-  ;;
-
-  let t_of_sexp_internal create k_of_sexp d_of_sexp sexp =
-    match sexp with
-    | Sexp.List sexps ->
-      let t = create () in
-      List.iter sexps ~f:(function
-        | Sexp.List [k_sexp; v_sexp] ->
-          let key = k_of_sexp k_sexp in
-          if mem t key then
-            failwith
-              (Printf.sprintf "Hashtbl.t_of_sexp: duplicate key %s"
-                 (Sexp.to_string k_sexp))
-          else
-            replace t ~key ~data:(d_of_sexp v_sexp)
-        | Sexp.List _ | Sexp.Atom _ ->
-          Sexplib.Conv.of_sexp_error "Hashtbl.t_of_sexp: tuple list needed" sexp);
-      t
-    | Sexp.Atom _ ->
-      Sexplib.Conv.of_sexp_error
-        "Hashtbl.t_of_sexp: found atom where list was expected" sexp
-  ;;
-
-  let t_of_sexp k_of_sexp d_of_sexp sexp =
-    t_of_sexp_internal create k_of_sexp d_of_sexp sexp
-  ;;
-end
-
-include T_sexpable
-
-open With_return
-
 let equal t t' equal =
   length t = length t' &&
   with_return (fun r ->
@@ -436,15 +556,19 @@ let equal t t' equal =
     true)
 ;;
 
-module Table_fns = struct
+module Accessors = struct
   let invariant       = invariant
   let clear           = clear
   let copy            = copy
   let remove          = remove
   let remove_one      = remove_one
   let replace         = replace
+  let set             = set
+  let add             = add
+  let add_exn         = add_exn
   let change          = change
   let add_multi       = add_multi
+  let remove_multi    = remove_multi
   let mem             = mem
   let iter            = iter
   let exists          = exists
@@ -458,11 +582,17 @@ module Table_fns = struct
   let filter_mapi     = filter_mapi
   let filter          = filter
   let filteri         = filteri
+  let partition_map   = partition_map
+  let partition_mapi  = partition_mapi
+  let partition_tf    = partition_tf
+  let partitioni_tf   = partitioni_tf
   let find_or_add     = find_or_add
   let find            = find
   let find_exn        = find_exn
+  let find_and_remove = find_and_remove
   let iter_vals       = iter_vals
   let to_alist        = to_alist
+  let validate        = validate
   let merge           = merge
   let merge_into      = merge_into
   let keys            = keys
@@ -470,18 +600,98 @@ module Table_fns = struct
   let filter_inplace  = filter_inplace
   let filteri_inplace = filteri_inplace
   let equal           = equal
-  let add_to_groups   = add_to_groups
   let incr            = incr
+  let sexp_of_key     = sexp_of_key
 end
 
-module T_binable =
-  Bin_prot.Utils.Make_iterable_binable2 (struct
+module type Key = Key
+module type Key_binable = Key_binable
+
+module Creators (Key : sig
+  type 'a t
+
+  val hashable : 'a t Hashable.t
+end) : sig
+
+  type ('a, 'b) t_ = ('a Key.t, 'b) t
+
+  val t_of_sexp : (Sexp.t -> 'a Key.t) -> (Sexp.t -> 'b) -> Sexp.t -> ('a, 'b) t_
+
+  include Creators
+    with type ('a, 'b) t := ('a, 'b) t_
+    with type 'a key := 'a Key.t
+    with type ('key, 'a) create_options := ('key, 'a) create_options_without_hashable
+
+end = struct
+
+  let hashable = Key.hashable
+
+  type ('a, 'b) t_ = ('a Key.t, 'b) t
+
+  let create ?growth_allowed ?size () = create ?growth_allowed ?size ~hashable ()
+
+  let of_alist ?growth_allowed ?size l =
+    of_alist ?growth_allowed ~hashable ?size l
+  ;;
+
+  let of_alist_report_all_dups ?growth_allowed ?size l =
+    of_alist_report_all_dups ?growth_allowed ~hashable ?size l
+  ;;
+
+  let of_alist_exn ?growth_allowed ?size l =
+    of_alist_exn ?growth_allowed ~hashable ?size l
+  ;;
+
+  let t_of_sexp k_of_sexp d_of_sexp sexp =
+    let alist = <:of_sexp< (k * d) list >> sexp in
+    of_alist_exn alist ~size:(List.length alist)
+  ;;
+
+  let of_alist_multi ?growth_allowed ?size l =
+    of_alist_multi ?growth_allowed ~hashable ?size l
+  ;;
+
+  let create_mapped ?growth_allowed ?size ~get_key ~get_data l =
+    create_mapped ?growth_allowed ~hashable ?size ~get_key ~get_data l
+  ;;
+
+  let create_with_key ?growth_allowed ?size ~get_key l =
+    create_with_key ?growth_allowed ~hashable ?size ~get_key l
+  ;;
+
+  let create_with_key_exn ?growth_allowed ?size ~get_key l =
+    create_with_key_exn ?growth_allowed ~hashable ?size ~get_key l
+  ;;
+
+  let group ?growth_allowed ?size ~get_key ~get_data ~combine l =
+    group ?growth_allowed ~hashable ?size ~get_key ~get_data ~combine l
+  ;;
+end
+
+module Poly = struct
+
+  type ('a, 'b) t = ('a, 'b) hashtbl
+
+  type 'a key = 'a
+
+  let hashable = Hashable.poly
+
+  include Creators (struct
+    type 'a t = 'a
+    let hashable = hashable
+  end)
+
+  include Accessors
+
+  let sexp_of_t = sexp_of_t
+
+  include Bin_prot.Utils.Make_iterable_binable2 (struct
     type ('a, 'b) z = ('a, 'b) t
     type ('a, 'b) t = ('a, 'b) z
     type ('a, 'b) el = 'a * 'b with bin_io
     type ('a, 'b) acc = ('a, 'b) t
 
-    let module_name = Some "Core_hashtbl"
+    let module_name = Some "Core.Std.Hashtbl"
     let length = length
     let iter t ~f = iter t ~f:(fun ~key ~data -> f (key, data))
     let init size = create ~size ()
@@ -495,57 +705,46 @@ module T_binable =
     let finish = Fn.id
   end)
 
-include T_binable
-
-module Create_fns (H : sig type 'a key val hashable : 'a key hashable end) = struct
-  let hashable = H.hashable
-  let create          = create          ~hashable
-  let of_alist        = of_alist        ~hashable
-  let of_alist_exn    = of_alist_exn    ~hashable
-  let of_alist_multi  = of_alist_multi  ~hashable
-  let group           = group           ~hashable
-  let create_mapped   = create_mapped   ~hashable
-  let create_with_key = create_with_key ~hashable
 end
 
-module Poly = struct
-  include T_binable
-  include T_sexpable
-  include Create_fns (struct type 'a key = 'a let hashable = poly end)
-end
+module Make (Key : Key) = struct
 
-module Make (Key: Key) = struct
-  let hashable = {
-    hash = Key.hash;
-    compare = Key.compare;
-  }
-  module Key = Key
+  let hashable =
+    { Hashable.
+      hash = Key.hash;
+      compare = Key.compare;
+      sexp_of_t = Key.sexp_of_t;
+    }
+  ;;
 
-  type 'a t = (Key.t, 'a) T.t
-  type 'a sexpable = 'a t
+  type key = Key.t
+  type ('a, 'b) hashtbl = ('a, 'b) t
+  type 'a t = (key, 'a) hashtbl
+  type 'a key_ = key
 
-  let sexp_of_t sexp_of_d t = sexp_of_t Key.sexp_of_t sexp_of_d t
+  include Creators (struct
+    type 'a t = Key.t
+    let hashable = hashable
+  end)
 
-  include Create_fns (struct type 'a key = Key.t let hashable = hashable end)
-  include Table_fns
+  include Accessors
 
-  let t_of_sexp d_of_sexp sexp =
-    t_of_sexp_internal create Key.t_of_sexp d_of_sexp sexp
+  let sexp_of_t sexp_of_v t = Poly.sexp_of_t Key.sexp_of_t sexp_of_v t
+
+  let t_of_sexp v_of_sexp sexp = t_of_sexp Key.t_of_sexp v_of_sexp sexp
 
 end
 
-module Make_binable (Key' : sig
-  include Key
-  include Binable.S with type binable = t
-end) = struct
-  include Make (Key')
+module Make_binable (Key : Key_binable) = struct
 
-  module Make_iterable_binable1_spec = struct
-    type 'a t = 'a sexpable
-    type 'a el = Key'.t * 'a with bin_io
+  include Make (Key)
+
+  include Bin_prot.Utils.Make_iterable_binable1 (struct
     type 'a acc = 'a t
+    type 'a t = 'a acc
+    type 'a el = Key.t * 'a with bin_io
 
-    let module_name = Some "Core_hashtbl"
+    let module_name = Some "Core.Std.Hashtbl"
     let length = length
     let iter t ~f = iter t ~f:(fun ~key ~data -> f (key, data))
     let init size = create ~size ()
@@ -553,14 +752,10 @@ end) = struct
     let insert t (key, data) _i =
       match find t key with
       | None -> replace t ~key ~data; t
-      | Some _ -> failwith "Core_hashtbl.bin_read_t_: duplicate key"
+      | Some _ -> failwiths "Hashtbl.bin_read_t: duplicate key" key <:sexp_of< Key.t >>
     ;;
 
     let finish = Fn.id
-  end
+  end)
 
-  include Create_fns (struct type 'a key = Key.t let hashable = hashable end)
-  include Table_fns
-
-  include Bin_prot.Utils.Make_iterable_binable1 (Make_iterable_binable1_spec)
 end

@@ -1,428 +1,498 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
-open Sexplib.Conv
-
-let phys_equal = Caml.(==)
-let failwithf = Core_printf.failwithf
-
 module List = Core_list
 
-module Elt = struct
-  module T = struct
-    type 'a t = {
-      value : 'a;
-      mutable next : 'a t;
-      mutable prev : 'a t;
-    }
-  end
-  include T
+exception Attempt_to_mutate_list_during_iteration
 
-  let equal (t : 'a t) t' = phys_equal t t'
+let phys_equal = (==)
 
-  let invariant t =
-    assert (equal t.prev.next t);
-    assert (equal t.next.prev t);
-  ;;
+module Header : sig
+  type t
+  val create : unit -> t
+  val length : t -> int
+  val equal : t -> t -> bool
+  val incr_length : by:int -> t -> unit
+  val with_iteration : t -> (unit -> 'a) -> 'a
+  val merge : t -> t -> [ `Same_already | `Merged ]
+end = struct
+
+  type s = {
+    mutable length : int;
+    mutable pending_iterations : int;
+  }
+
+  type t = s Union_find.t
+
+  let create () = Union_find.create { length = 1; pending_iterations = 0; }
+
+  let equal (t1 : t) t2 = Union_find.same_class t1 t2
+
+  let length t = (Union_find.get t).length
+
+  let incr_length ~by:n t =
+    let s = Union_find.get t in
+    if s.pending_iterations > 0 then raise Attempt_to_mutate_list_during_iteration;
+    s.length <- s.length + n
+
+  let with_iteration t f =
+    let s = Union_find.get t in
+    s.pending_iterations <- s.pending_iterations + 1;
+    let res = Result.try_with f in
+    s.pending_iterations <- s.pending_iterations - 1;
+    match res with
+    | Result.Ok v -> v
+    | Result.Error e -> raise e
+
+  let merge (t1 : t) t2 =
+    if Union_find.same_class t1 t2 then `Same_already else begin
+      let n1 = length t1 in
+      let n2 = length t2 in
+      with_iteration t1 (fun () ->
+        with_iteration t2 (fun () ->
+          Union_find.union t1 t2;
+          Union_find.set t1 {
+            length = n1 + n2;
+            pending_iterations = 0;
+          }));
+      `Merged
+    end
+
+end
+
+module Elt : sig
+  type 'a t with sexp_of
+  val header : 'a t -> Header.t
+  val equal : 'a t -> 'a t -> bool
+  val create : 'a -> 'a t
+  val value : 'a t -> 'a
+  val unlink : 'a t -> unit
+  val split_or_splice_before : 'a t -> 'a t -> unit
+  val insert_after : 'a t -> 'a -> 'a t
+  val insert_before : 'a t -> 'a -> 'a t
+  val unlink_before : 'a t -> 'a t
+  val next : 'a t -> 'a t
+  val prev : 'a t -> 'a t
+end = struct
+
+  type 'a t = {
+    value : 'a;
+    mutable prev : 'a t;
+    mutable next : 'a t;
+    mutable header : Header.t;
+  }
+
+  let equal = phys_equal
 
   let next t = t.next
   let prev t = t.prev
-  let value t = t.value
+  let header t = t.header
+
+  let create_aux v header =
+    let rec t = {
+      value = v;
+      prev = t;
+      next = t;
+      header = header;
+    } in
+    t
+
+  let is_singleton t = equal t t.prev
 
   let sexp_of_t sexp_of_a t = sexp_of_a t.value
 
-  let create_after t value =
-    let next = t.next in
-    let res = {
-      value = value;
-      next = next;
-      prev = t;
-    }
-    in
-    t.next <- res;
-    next.prev <- res;
-    res
-  ;;
+  let create v = create_aux v (Header.create ())
 
-  let create_before t value =
-    let prev = t.prev in
-    let res = {
-      value = value;
-      next = t;
-      prev = prev;
-    }
-    in
-    t.prev <- res;
-    prev.next <- res;
-    res
-  ;;
+  let value t = t.value
 
-  let create value =
-    let rec t = {
-      value = value;
-      next = t;
-      prev = t;
-    } in
-    t
-  ;;
+  (*
+    [split_or_splice] is sufficient as the lone primitive for
+    accomplishing all pointer updates on cyclic loops of list nodes.
+    It takes two "gaps" between adjacent linked list nodes.  If the gaps
+    point into the same list, the result is that it will be split into
+    two lists afterwards.  If the gaps point into different lists, the
+    result is that they will be spliced together into one list afterwards.
 
-  let link t1 t2 =
-    t1.next <- t2;
-    t2.prev <- t1;
-  ;;
+      Before                      After
+          -----+        +-----         -----+               +-----
+             A |  <-->  | B               A |  <---   --->  | B
+          -----+        +-----         -----+      \ /      +-----
+                                                    X
+          -----+        +-----         -----+      / \      +-----
+             C |  <-->  | D               C |  <---   --->  | D
+          -----+        +-----         -----+               +-----
+  *)
 
-  let unlink t =
-    t.prev.next <- t.next;
-    t.next.prev <- t.prev;
-    t.next <- t;
-    t.prev <- t;
-  ;;
+  let split_or_splice ~prev1:a ~next1:b ~prev2:c ~next2:d =
+    a.next <- d; d.prev <- a;
+    c.next <- b; b.prev <- c
+
+  let split_or_splice_after t1 t2 =
+    split_or_splice
+     ~next1:t1.next
+     ~prev1:t1.next.prev
+     ~next2:t2.next
+     ~prev2:t2.next.prev
+
+  let split_or_splice_before t1 t2 =
+    split_or_splice
+     ~prev1:t1.prev
+     ~next1:t1.prev.next
+     ~prev2:t2.prev
+     ~next2:t2.prev.next
+
+  let insert_before t v =
+    Header.incr_length t.header ~by:1;
+    let node = create_aux v t.header in
+    split_or_splice_before t node;
+    node
+
+  let insert_after t v =
+    Header.incr_length t.header ~by:1;
+    let node = create_aux v t.header in
+    split_or_splice_after t node;
+    node
+
+  let unlink_before t =
+    let node = t.prev in
+    if is_singleton node then node else begin
+      Header.incr_length t.header ~by:(-1);
+      split_or_splice_before t node;
+      node.header <- Header.create ();
+      node
+    end
+
+  let unlink_after t =
+    let node = t.next in
+    if is_singleton node then node else begin
+      Header.incr_length t.header ~by:(-1);
+      split_or_splice_after t node;
+      node.header <- Header.create ();
+      node
+    end
+
+  let unlink t = ignore (unlink_after t.prev)
+
 end
 
-open Elt.T
+type 'a t = 'a Elt.t option ref
 
-type 'a t = {
-  (* [first] is a pointer to the first element in the list.  It is an option
-   * because it is [None] if the list is empty.  When the list is nonempty,
-   * [first] is [Some r], where [!r] is the first element.  We use a reference
-   * so that we can change the pointer without having to allocate a new
-   * [Some] option.
-   *)
-  mutable first : 'a Elt.t ref option;
-  mutable length : int;
-  mutable num_readers : int;
-}
+let create (type a) () : a t = ref None
 
-type 'a container = 'a t
+let equal (t : _ t) t' = phys_equal t t'
 
-(* Compare lists using phys_equal, which makes sense because there is a mutable
- * field in the record.
- *)
-let equal (t : 'a t) t' = phys_equal t t'
+let of_list = function
+  | [] -> create ()
+  | x :: xs ->
+    let first = Elt.create x in
+    let _last = List.fold xs ~init:first ~f:Elt.insert_after in
+    ref (Some first)
 
-let invariant t =
-  if t.length = 0 then
-    assert (Option.is_none t.first)
-  else begin
-    match t.first with
-    | None -> assert false
-    | Some r ->
-        let first_elt = !r in
-        let rec loop i elt =
-          if i = 0 then
-            assert (Elt.equal elt first_elt)
-          else begin
-            assert (Elt.equal elt elt.next.prev);
-            assert (Elt.equal elt elt.prev.next);
-            assert (Elt.equal elt first_elt = (i = t.length));
-            loop (i - 1) elt.next
-          end
-        in
-        loop t.length first_elt
-  end
-;;
-
-let maybe_check t =
-  let check_invariant = false in        (* for debugging *)
-  if check_invariant then invariant t
-
-let create () =
-  let t = {
-    first = None;
-    length = 0;
-    num_readers = 0;
-  }
-  in
-  maybe_check t;
-  t
-;;
-
-let length t = t.length
-
-let is_empty t = t.length = 0
-
-let is_first t elt =
-  match t.first with
-  | None -> false
-  | Some r -> Elt.equal elt !r
-;;
-
-let is_last t elt = is_first t elt.next
-
-let first_elt t = Option.map t.first ~f:(fun r -> !r)
-
-let first t = Option.map (first_elt t) ~f:Elt.value
-
-let last_elt t = Option.map t.first ~f:(fun r -> !r.prev)
-
-let last t = Option.map (last_elt t) ~f:Elt.value
-
-let next t elt = if is_last t elt then None else Some elt.next
-
-let prev t elt = if is_first t elt then None else Some elt.prev
-
-let read t f =
-  t.num_readers <- t.num_readers + 1;
-  Exn.protect ~f ~finally:(fun () -> t.num_readers <- t.num_readers - 1);
-;;
-
-let ensure_can_modify t =
-  if t.num_readers > 0 then
-    failwith "It is an error to modify a Doubly_linked.t while iterating over it.";
-;;
-
-let fold_left_elts t ~init ~f =
-  match t.first with
+let fold_elt t ~init ~f =
+  match !t with
   | None -> init
-  | Some r ->
-      read t (fun () ->
-        let rec loop i elt ac =
-          if i = 0 then ac else loop (i - 1) elt.next (f ac elt)
-        in
-        loop t.length !r init)
+  | Some first ->
+    Header.with_iteration (Elt.header first) (fun () ->
+      let rec loop acc elt =
+        let acc = f acc elt in
+        let next = Elt.next elt in
+        if phys_equal next first then acc else loop acc next
+      in
+      loop init first)
 ;;
 
-let fold_left t ~init ~f =
-  fold_left_elts t ~init ~f:(fun ac elt -> f ac elt.value)
+let iter_elt t ~f = fold_elt t ~init:() ~f:(fun () elt -> f elt)
+
+TEST_UNIT =
+  List.iter
+    [ [];
+      [ 1 ];
+      [ 2; 3 ];
+    ]
+    ~f:(fun l ->
+      let sum = ref 0 in
+      iter_elt (of_list l) ~f:(fun elt -> sum := !sum + Elt.value elt);
+      assert (!sum = List.fold l ~init:0 ~f:(+)))
 ;;
 
-let fold_right t ~init ~f =
-  match t.first with
-  | None -> init
-  | Some r ->
-      read t (fun () ->
-        let rec loop i elt ac =
-          if i = 0 then ac
-          else
-            let elt = elt.prev in
-            loop (i - 1) elt (f ac elt.value)
-        in
-        loop t.length !r init)
-;;
-
-let fold = fold_left
-
-let iteri t ~f =
-  match t.first with
-  | None -> ()
-  | Some r ->
-      read t (fun () ->
-        let length = t.length in
-        let rec loop i elt =
-          if i < length then (f i elt.value; loop (i + 1) elt.next)
-        in
-        loop 0 !r)
-;;
-
-let iter t ~f = iteri t ~f:(fun _ x -> f x)
-
-let for_all t ~f =
-  match t.first with
-  | None -> true
-  | Some r ->
-      read t (fun () ->
-        let rec loop i elt = i = 0 || (f elt.value && loop (i - 1) elt.next) in
-        loop t.length !r)
-;;
-
-(* sweeks: I put in the specialized implementations for [for_all], [exists],
- * etc. after performance problems with incremental, which uses doubly-linked
- * lists via bag.  I think it would be a very bad idea (purely for performance
- * reasons) to go back to the simple implementations.
- *)
-let exists t ~f =
-  match t.first with
-  | None -> false
-  | Some r ->
-      read t (fun () ->
-        let rec loop i elt = i > 0 && (f elt.value || loop (i - 1) elt.next) in
-        loop t.length !r)
-;;
+open With_return
 
 let find_elt t ~f =
-  match t.first with
-  | None -> None
-  | Some r ->
-      read t (fun () ->
-        let rec loop i elt =
-          if i = 0 then None
-          else if f elt.value then Some elt
-          else loop (i - 1) elt.next
-        in
-        loop t.length !r)
-;;
+  with_return (fun r ->
+    fold_elt t ~init:() ~f:(fun () elt ->
+      if f (Elt.value elt) then r.return (Some elt));
+    None)
 
-let find t ~f = Option.map ~f:Elt.value (find_elt t ~f)
+include Container.Make (struct
+  type 'a t_ = 'a t
+  type 'a t = 'a t_
+  let fold t ~init ~f = fold_elt t ~init ~f:(fun acc elt -> f acc (Elt.value elt))
+end)
 
-let to_list t = fold_right t ~init:[] ~f:(fun ac x -> x :: ac)
+(* this function is lambda lifted for performance, to make direct recursive calls instead
+   of calls through its closure. It also avoids the initial closure allocation. *)
+let rec iter_loop first f elt =
+  f (Elt.value elt);
+  let next = Elt.next elt in
+  if not (phys_equal next first) then iter_loop first f next
 
-let to_array t =
-  match t.first with
-  | None -> [||]
-  | Some r ->
-      let length = t.length in
-      let first_elt = !r in
-      let a = Array.create length (Elt.value first_elt) in
-      let rec loop i elt =
-        if i < length then (a.(i) <- elt.value ; loop (i + 1) elt.next)
-      in
-      loop 0 first_elt;
-      a
-;;
-
-
-let insert_before t elt x =
-  ensure_can_modify t;
-  let elt' = Elt.create_before elt x in
-  begin match t.first with
+(* more efficient than the one from container *)
+let iter t ~f =
+  match !t with
   | None -> ()
-  | Some r -> if Elt.equal elt !r then r := elt'
-  end;
-  t.length <- t.length + 1;
-  maybe_check t;
-  elt'
-;;
+  | Some first ->
+    Header.with_iteration (Elt.header first) (fun () ->
+      iter_loop first f first
+    )
 
-let insert_after t elt x =
-  ensure_can_modify t;
-  let elt' = Elt.create_after elt x in
-  t.length <- t.length + 1;
-  maybe_check t;
-  elt'
-;;
+let unchecked_iter t ~f =
+  match !t with
+  | None -> ()
+  | Some first ->
+    let rec loop t f elt =
+      f (Elt.value elt);
+      let next = Elt.next elt in
+      match !t with (* the first element of the bag may have been changed by [f] *)
+      | None -> ()
+      | Some first -> if not (phys_equal first next) then loop t f next
+    in
+    loop t f first
 
-let insert_into_empty t x =
-  assert (t.length = 0);
-  ensure_can_modify t;
-  let elt = Elt.create x in
-  t.first <- Some (ref elt);
-  t.length <- 1;
-  elt
-;;
+let is_empty t = Option.is_none !t (* more efficient than what Container.Make returns *)
 
-let insert_first t x =
-  match first_elt t with
-  | None -> insert_into_empty t x
-  | Some elt -> insert_before t elt x
-;;
+let fold_right t ~init ~f =
+  match !t with
+  | None -> init
+  | Some first ->
+    Header.with_iteration (Elt.header first) (fun () ->
+      let rec loop acc elt =
+        let prev = Elt.prev elt in
+        let acc = f (Elt.value prev) acc in
+        if phys_equal prev first
+        then acc
+        else loop acc prev
+      in
+      loop init first
+    )
 
-let insert_last t x =
-  match last_elt t with
-  | None -> insert_into_empty t x
-  | Some elt -> insert_after t elt x
-;;
+let to_list t = fold_right t ~init:[] ~f:(fun x tl -> x :: tl)
 
-let of_list l =
-  let t = create () in
-  List.iter l ~f:(fun x -> ignore (insert_last t x));
-  maybe_check t;
-  t
-;;
+let length t =
+  match !t with
+  | None -> 0
+  | Some first -> Header.length (Elt.header first)
 
-type 'a sexpable = 'a t
+let sexp_of_t sexp_of_a t = List.sexp_of_t sexp_of_a (to_list t)
+let t_of_sexp a_of_sexp s = of_list (List.t_of_sexp a_of_sexp s)
 
-let t_of_sexp a_of_sexp sexp = of_list (list_of_sexp a_of_sexp sexp)
+let copy t = of_list (to_list t)
 
-let sexp_of_t sexp_of_a t = sexp_of_list sexp_of_a (to_list t)
+let clear t = (t := None)
 
-
-let remove t elt =
-  ensure_can_modify t;
-  begin match t.first with
-  | None -> failwith "Doubly_linked.remove from empty list"
-  | Some r ->
-      if t.length = 1 then t.first <- None
-      else if Elt.equal elt !r then r := elt.next;
-  end;
-  Elt.unlink elt;
-  t.length <- t.length - 1;
-  maybe_check t;
-;;
-
-let remove_first t =
-  match first_elt t with
-  | None -> None
-  | Some elt -> remove t elt; Some elt.value
-;;
-
-let remove_last t =
-  match last_elt t with
-  | None -> None
-  | Some elt -> remove t elt; Some elt.value
-;;
-
-let clear t =
-  t.length <- 0;
-  t.first <- None;
-;;
-
-let copy t =
-  let t' = create () in
-  iter t ~f:(fun x -> ignore (insert_last t' x));
-  t'
-;;
+exception Transfer_src_and_dst_are_same_list
 
 let transfer ~src ~dst =
-  ensure_can_modify dst;
-  match src.first with
+  if phys_equal src dst then raise Transfer_src_and_dst_are_same_list;
+  match !src with
   | None -> ()
-  | Some src_first ->
-      begin match dst.first with
-      | None ->
-          dst.length <- src.length;
-          dst.first <- src.first;
-      | Some dst_first ->
-          let src_first = !src_first in
-          let src_last = src_first.prev in
-          let dst_first = !dst_first in
-          let dst_last = dst_first.prev in
-          Elt.link src_last dst_first;
-          Elt.link dst_last src_first;
-          dst.length <- dst.length + src.length;
-      end;
-      clear src;
-      maybe_check src;
-      maybe_check dst;
-;;
+  | Some src_head ->
+    match !dst with
+    | None -> dst := Some src_head; clear src
+    | Some dst_head ->
+      match Header.merge (Elt.header src_head) (Elt.header dst_head) with
+      | `Same_already -> raise Transfer_src_and_dst_are_same_list
+      | `Merged -> Elt.split_or_splice_before dst_head src_head; clear src
 
 let filter_inplace t ~f =
-  let elts_to_remove =
-    fold_left_elts t ~init:[] ~f:(fun ac elt ->
-      if not (f elt.value) then elt :: ac else ac)
+  let to_remove =
+    List.rev
+      (fold_elt t ~init:[] ~f:(fun elts elt ->
+        if f (Elt.value elt) then elts else elt :: elts))
   in
-  List.iter elts_to_remove ~f:(fun elt -> remove t elt)
-;;
+  List.iter to_remove ~f:(fun elt ->
+    begin
+      match !t with
+      | None -> ()
+      | Some head ->
+        if Elt.equal head elt then begin
+          let next_elt = Elt.next elt in
+          t := if Elt.equal head next_elt then None else Some next_elt
+        end
+    end;
+    Elt.unlink elt)
 
-let container = {
-  Container.
-    length = length;
-  is_empty = is_empty;
-  iter = iter;
-  fold = fold;
-  exists = exists;
-  for_all = for_all;
-  find = find;
-  to_list = to_list;
-  to_array = to_array;
-}
+exception Elt_does_not_belong_to_list
+
+let first_elt t = !t
+let last_elt t = Option.map ~f:Elt.prev !t
+
+let first t = Option.map ~f:Elt.value (first_elt t)
+let last  t = Option.map ~f:Elt.value (last_elt  t)
+
+let is_first t elt =
+  match !t with
+  | None -> raise Elt_does_not_belong_to_list
+  | Some first ->
+    if Header.equal (Elt.header first) (Elt.header elt) then
+      Elt.equal elt first
+    else
+      raise Elt_does_not_belong_to_list
+
+let is_last t elt =
+  match !t with
+  | None -> raise Elt_does_not_belong_to_list
+  | Some first ->
+    if Header.equal (Elt.header first) (Elt.header elt) then begin
+      let last = Elt.prev first in
+      Elt.equal elt last
+    end else
+      raise Elt_does_not_belong_to_list
+
+let prev t elt =
+  match !t with
+  | None -> raise Elt_does_not_belong_to_list
+  | Some first ->
+    if Elt.equal elt first then
+      None
+    else if Header.equal (Elt.header first) (Elt.header elt) then
+      Some (Elt.prev elt)
+    else
+      raise Elt_does_not_belong_to_list
+
+let next t elt =
+  match !t with
+  | None -> raise Elt_does_not_belong_to_list
+  | Some first ->
+    let last = Elt.prev first in
+    if Elt.equal elt last then
+      None
+    else if Header.equal (Elt.header first) (Elt.header elt) then
+      Some (Elt.next elt)
+    else
+      raise Elt_does_not_belong_to_list
+
+let insert_after t elt v =
+  match !t with
+  | None -> raise Elt_does_not_belong_to_list
+  | Some first ->
+    if Header.equal (Elt.header first) (Elt.header elt) then
+      Elt.insert_after elt v
+    else
+      raise Elt_does_not_belong_to_list
+
+let insert_before t elt v =
+  match !t with
+  | None -> raise Elt_does_not_belong_to_list
+  | Some first ->
+    if Elt.equal elt first then begin
+      let new_elt = Elt.insert_before first v in
+      t := Some new_elt;
+      new_elt
+    end else if Header.equal (Elt.header first) (Elt.header elt) then
+        Elt.insert_before elt v
+      else
+        raise Elt_does_not_belong_to_list
+
+let insert_empty t v =
+  let new_elt = Elt.create v in
+  t := Some new_elt;
+  new_elt
+
+let insert_last t v =
+  match !t with
+  | None -> insert_empty t v
+  | Some first -> Elt.insert_before first v
+
+let insert_first t v =
+  match !t with
+  | None -> insert_empty t v
+  | Some first ->
+    let new_elt = Elt.insert_before first v in
+    t := Some new_elt;
+    new_elt
+
+let remove_last t =
+  match !t with
+  | None -> None
+  | Some first ->
+    let last = Elt.unlink_before first in
+    if Elt.equal first last then t := None;
+    Some (Elt.value last)
+
+let remove_first t =
+  match !t with
+  | None -> None
+  | Some first ->
+    let second = Elt.next first in
+    ignore (Elt.unlink first);
+    t := if Elt.equal first second then None else Some second;
+    Some (Elt.value first)
+
+let remove t elt =
+  match !t with
+  | None -> raise Elt_does_not_belong_to_list
+  | Some first ->
+    if Elt.equal elt first then
+      ignore (remove_first t)
+    else if Header.equal (Elt.header first) (Elt.header elt) then
+      Elt.unlink elt
+    else
+      raise Elt_does_not_belong_to_list
+
+TEST =
+  let t1 = create () in
+  let t2 = create () in
+  let elt = insert_first t1 15 in
+  try
+    remove t2 elt; false
+  with
+    Elt_does_not_belong_to_list -> true
+
+TEST =
+      let t1 = create () in
+      let t2 = create () in
+      let elt = insert_first t1 14 in
+      let _   = insert_first t2 13 in
+      try
+        remove t2 elt; false
+      with
+        Elt_does_not_belong_to_list -> true
+
+TEST_MODULE "unchecked_iter" = struct
+  let b = of_list [0; 1; 2; 3; 4]
+  let element b n =
+    Option.value_exn (find_elt b ~f:(fun value -> value = n))
+  let remove b n =
+    remove b (element b n)
+  let insert_after b n_find n_add =
+    ignore (insert_after b (element b n_find) n_add)
+  let to_list f =
+    let r = ref [] in
+    let b = copy b in
+    unchecked_iter b ~f:(fun n ->
+      r := n :: !r;
+      f b n;
+    );
+    List.rev !r
+  TEST = to_list (fun _ _ -> ()) = [0; 1; 2; 3; 4]
+  TEST = to_list (fun b x -> if x = 0 then remove b 1) = [0; 2; 3; 4]
+  TEST = to_list (fun b x -> if x = 1 then remove b 0) = [0; 1; 2; 3; 4]
+  TEST = to_list (fun b x -> if x = 2 then remove b 1) = [0; 1; 2; 3; 4]
+  TEST = to_list (fun b x -> if x = 2 then begin remove b 4; remove b 3; end) = [0; 1; 2]
+  TEST = to_list (fun b x -> if x = 2 then insert_after b 1 5) = [0; 1; 2; 3; 4]
+  TEST = to_list (fun b x -> if x = 2 then insert_after b 2 5) = [0; 1; 2; 5; 3; 4]
+  TEST = to_list (fun b x -> if x = 2 then insert_after b 3 5) = [0; 1; 2; 3; 5; 4]
+end
+
+let invariant t =
+  match !t with
+  | None -> ()
+  | Some head ->
+    let header = Elt.header head in
+    let rec loop n elt =
+      let next_elt = Elt.next elt in
+      let prev_elt = Elt.prev elt in
+      assert (Elt.equal elt (Elt.prev next_elt));
+      assert (Elt.equal elt (Elt.next prev_elt));
+      assert (Header.equal (Elt.header elt) header);
+      if Elt.equal next_elt head then n else loop (n + 1) next_elt
+    in
+    let len = loop 1 head in
+    assert (len = Header.length header)

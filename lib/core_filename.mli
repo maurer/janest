@@ -1,34 +1,6 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
-(**
-   Warning! this library assumes we are in a POSIX compliant OS. It will not work properly under
-   windows.
-
+(** Warning! this library assumes we are in a POSIX compliant OS. It will not work
+    properly under windows.
 *)
-
-
 
 (**  The path of the root.*)
 val root : string
@@ -49,32 +21,39 @@ val is_posix_pathname_component : string -> bool
 
 (** [temp_file ?perm ?in_dir_name prefix suffix]
 
-   Returns the name of a fresh temporary file in the temporary directory. The
-   base name of the temporary file is formed by concatenating prefix, then, if
-   needed, a 6-digit hex number, then suffix. The temporary file is created
-   empty. The file is guaranteed to be fresh, i.e. not already existing in the
-   directory.
+    Returns the name of a fresh temporary file in the temporary directory. The base name
+    of the temporary file is formed by concatenating prefix, then a 6-digit hex number,
+    then suffix. The temporary file is created empty. The file is guaranteed to be fresh,
+    i.e. not already existing in the directory.
 
-   @param in_dir the directory in which to create the temporary file
-   @param perm the permission of the temporary file. The default value is
-   [0o600] (readable and writable only by the file owner)
+    @param in_dir the directory in which to create the temporary file.  The default is
+    [temp_dir_name]
 
-   Note that prefix and suffix will be changed when necessary to make the final filename
-   valid POSIX.
-*)
+    @param perm the permission of the temporary file. The default value is [0o600]
+    (readable and writable only by the file owner)
 
+    Note that prefix and suffix will be changed when necessary to make the final filename
+    valid POSIX.
 
+    [temp_dir] is the same as [temp_file] but creates a temporary directory. *)
 
 val temp_file: ?perm:int -> ?in_dir: string -> string -> string -> string
+val temp_dir : ?perm:int -> ?in_dir: string -> string -> string -> string
 
-(** Same as temp_file but creates a temporary directory. *)
-val temp_dir: ?perm:int -> ?in_dir:string -> string -> string -> string
+(** The name of the temporary directory:
+
+    Under Unix, the value of the [TMPDIR] environment variable, or "/tmp" if the variable
+    is not set.
+
+    Under Windows, the value of the [TEMP] environment variable, or "."  if the variable
+    is not set. *)
+val temp_dir_name : string
 
 (** Same as {!Core_filename.temp_file}, but returns both the name of a fresh
-   temporary file, and an output channel opened (atomically) on
-   this file.  This function is more secure than [temp_file]: there
-   is no risk that the temporary file will be modified (e.g. replaced
-   by a symbolic link) before the program opens it. *)
+    temporary file, and an output channel opened (atomically) on
+    this file.  This function is more secure than [temp_file]: there
+    is no risk that the temporary file will be modified (e.g. replaced
+    by a symbolic link) before the program opens it. *)
 val open_temp_file :
   ?perm: int -> ?in_dir: string -> string -> string -> string * out_channel
 
@@ -130,9 +109,13 @@ val chop_suffix : string -> string -> string
    an extension. *)
 val chop_extension : string -> string
 
-
 (** [split_extension fn] return the portion of the filename before the
-    extension and the (optional) extension *)
+    extension and the (optional) extension.
+    Example:
+    split_extension "/foo/my_file" = ("/foo/my_file", None)
+    split_extension "/foo/my_file.txt" = ("/foo/my_file", Some "txt")
+    split_extension "/home/c.falls/my_file" = ("/home/c.falls/my_file", None)
+    *)
 val split_extension : string -> (string * string option)
 
 (** Respects the posix semantic.
@@ -154,13 +137,9 @@ val dirname : string -> string
 (** [split filename] returns (dirname filename, basename filename) *)
 val split : string -> string * string
 
-(** The name of the temporary directory:
-    Under Unix, the value of the [TMPDIR] environment variable, or "/tmp"
-    if the variable is not set.
-    Under Windows, the value of the [TEMP] environment variable, or "."
-    if the variable is not set.
-*)
-val temp_dir_name : string
+(** [parts filename] returns a list of path components in order.  For instance:
+  /tmp/foo/bar/baz -> ["/"; "tmp"; "foo"; "bar"; "baz" ] *)
+val parts : string -> string list
 
 (** Return a quoted version of a file name, suitable for use as
     one argument in a command line, escaping all meta-characters.

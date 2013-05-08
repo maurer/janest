@@ -1,32 +1,10 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+type 'a t = 'a array with bin_io, sexp
 
-type 'a t = 'a array
+include Container.S1 with type 'a t := 'a t
 
-include Binable.S1 with type 'a binable = 'a t
-include Container.S1 with type 'a container = 'a t
-include Sexpable.S1 with type 'a sexpable = 'a t
+(** Maximum length of a normal array.  The maximum length of a float array is
+    [max_length/2] on 32-bit machines and [max_length] on 64-bit machines. *)
+val max_length : int
 
 (** [Array.get a n] returns the element number [n] of array [a].
    The first element has number 0.
@@ -37,8 +15,6 @@ include Sexpable.S1 with type 'a sexpable = 'a t
    if [n] is outside the range 0 to [(Array.length a - 1)]. *)
 external get : 'a t -> int -> 'a = "%array_safe_get"
 
-
-
 (** [Array.set a n x] modifies array [a] in place, replacing
    element number [n] with [x].
    You can also write [a.(n) <- x] instead of [Array.set a n x].
@@ -46,7 +22,6 @@ external get : 'a t -> int -> 'a = "%array_safe_get"
    Raise [Invalid_argument "index out of bounds"]
    if [n] is outside the range 0 to [Array.length a - 1]. *)
 external set : 'a t -> int -> 'a -> unit = "%array_safe_set"
-
 
 (** Unsafe version of [get].  Can cause arbitrary behavior when used to for an
     out-of-bounds array access *)
@@ -56,11 +31,9 @@ external unsafe_get : 'a t -> int -> 'a = "%array_unsafe_get"
     out-of-bounds array access *)
 external unsafe_set : 'a t -> int -> 'a -> unit = "%array_unsafe_set"
 
-
-
-(** [create n x] creates an array of length [n] with the value [x] populated in each
+(** [create ~len x] creates an array of length [len] with the value [x] populated in each
     element *)
-val create : int -> 'a -> 'a t
+val create : len:int -> 'a -> 'a t
 
 (** [init n ~f] creates an array of length [n] where the [i]th element is initialized with
     [f i] (starting at zero) *)
@@ -86,17 +59,22 @@ val append : 'a t -> 'a t -> 'a t
 (** Same as [Array.append], but concatenates a list of arrays. *)
 val concat : 'a t list -> 'a t
 
-(** [Array.sub a start len] returns a fresh array of length [len],
-   containing the elements number [start] to [start + len - 1]
-   of array [a].
+(** [Array.sub a start len] returns a fresh array of length [len], containing the elements
+    number [start] to [start + len - 1] of array [a].
 
-   Raise [Invalid_argument "Array.sub"] if [start] and [len] do not
-   designate a valid subarray of [a]; that is, if
-   [start < 0], or [len < 0], or [start + len > Array.length a]. *)
-val sub : 'a t -> pos:int -> len:int -> 'a t
+    Raise [Invalid_argument "Array.sub"] if [start] and [len] do not designate a valid
+    subarray of [a]; that is, if [start < 0], or [len < 0], or [start + len > Array.length
+    a].
+
+    [int_sub] and [float_sub] provide fast bound-checked blit copying for immediate data
+    types. *)
+type 'a sub = 'a t -> pos:int -> len:int -> 'a t
+val sub       : 'a    sub
+val int_sub   : int   sub
+val float_sub : float sub
 
 (** [Array.copy a] returns a copy of [a], that is, a fresh array
-   containing the same elements as [a]. *)
+    containing the same elements as [a]. *)
 val copy : 'a t -> 'a t
 
 (** [Array.fill a ofs len x] modifies the array [a] in place,
@@ -106,19 +84,33 @@ val copy : 'a t -> 'a t
    designate a valid subarray of [a]. *)
 val fill : 'a t -> pos:int -> len:int -> 'a -> unit
 
-(** [Array.blit v1 o1 v2 o2 len] copies [len] elements
-   from array [v1], starting at element number [o1], to array [v2],
-   starting at element number [o2]. It works correctly even if
-   [v1] and [v2] are the same array, and the source and
-   destination chunks overlap.
+(** [Array.blit v1 o1 v2 o2 len] copies [len] elements from array [v1], starting at
+    element number [o1], to array [v2], starting at element number [o2].  It works
+    correctly even if [v1] and [v2] are the same array, and the source and destination
+    chunks overlap.
 
-   Raise [Invalid_argument "Array.blit"] if [o1] and [len] do not
-   designate a valid subarray of [v1], or if [o2] and [len] do not
-   designate a valid subarray of [v2]. *)
-val blit : src:'a t -> src_pos:int -> dst:'a t -> dst_pos:int -> len:int -> unit
+    Raise [Invalid_argument "Array.blit"] if [o1] and [len] do not designate a valid
+    subarray of [v1], or if [o2] and [len] do not designate a valid subarray of [v2].
 
-(** [Array.of_list l] returns a fresh array containing the elements
-   of [l]. *)
+    [int_blit] and [float_blit] provide fast bound-checked blits for immediate
+    data types.  The unsafe versions do not bound-check the arguments. *)
+val blit       : src:'a    t -> src_pos:int -> dst:'a    t -> dst_pos:int ->len:int ->unit
+val int_blit   : src:int   t -> src_pos:int -> dst:int   t -> dst_pos:int ->len:int ->unit
+val float_blit : src:float t -> src_pos:int -> dst:float t -> dst_pos:int ->len:int ->unit
+
+external unsafe_int_blit
+  :  src:int   t -> src_pos:int
+  -> dst:int   t -> dst_pos:int
+  -> len:int     -> unit
+  = "core_array_unsafe_int_blit" "noalloc"
+
+external unsafe_float_blit
+  :  src:float t -> src_pos:int
+  -> dst:float t -> dst_pos:int
+  -> len:int -> unit
+  = "core_array_unsafe_float_blit" "noalloc"
+
+(** [Array.of_list l] returns a fresh array containing the elements of [l]. *)
 val of_list : 'a list -> 'a t
 
 (** [Array.map ~f a] applies function [f] to all the elements of [a],
@@ -129,7 +121,6 @@ val map : f:('a -> 'b) -> 'a t -> 'b t
 (** Same as {!Array.iter}, but the
    function is applied to the index of the element as first argument,
    and the element itself as second argument. *)
-
 val iteri : f:(int -> 'a -> unit) -> 'a t -> unit
 
 (** Same as {!Array.map}, but the
@@ -137,30 +128,27 @@ val iteri : f:(int -> 'a -> unit) -> 'a t -> unit
    and the element itself as second argument. *)
 val mapi : f:(int -> 'a -> 'b) -> 'a t -> 'b t
 
+val foldi : 'a t -> init:'b -> f:(int -> 'b -> 'a -> 'b) -> 'b
+
 (** [Array.fold_right f a ~init] computes
    [f a.(0) (f a.(1) ( ... (f a.(n-1) init) ...))],
    where [n] is the length of the array [a]. *)
-val fold_right : f:('b -> 'a -> 'a) -> 'b t -> init:'a -> 'a
+val fold_right : 'a t -> f:('a -> 'b -> 'b) -> init:'b -> 'b
 
-(* constant heap space, slow *)
-val sort : cmp:('a -> 'a -> int) -> 'a t -> unit
+(* All sorting is in increasing order by default. *)
 
-(* linear heap space, stable, fast *)
-val stable_sort : cmp:('a -> 'a -> int) -> 'a t -> unit
+(* [sort] uses constant heap space. [stable_sort] uses linear heap space. *)
+val sort        : 'a t -> cmp:('a -> 'a -> int) -> unit
+val stable_sort : 'a t -> cmp:('a -> 'a -> int) -> unit
 
-(**
-   ----------------------------------------------------------------------
-   Extensions
-   ----------------------------------------------------------------------
-*)
+val is_sorted : 'a t -> cmp:('a -> 'a -> int) -> bool
 
 (* same as [List.concat_map] *)
 val concat_map : 'a t -> f:('a -> 'b array) -> 'b array
 
+val partition_tf : 'a t -> f:('a -> bool) -> 'a t * 'a t
 
-
-(** Array lengths [l] satisfy [0 <= l < max_length]. *)
-val max_length : int
+val partitioni_tf : 'a t -> f:(int -> 'a -> bool) -> 'a t * 'a t
 
 val cartesian_product : 'a t -> 'b t -> ('a * 'b) t
 
@@ -169,10 +157,11 @@ val cartesian_product : 'a t -> 'b t -> ('a * 'b) t
     returns the last element of the array. *)
 val normalize : 'a t -> int -> int
 
-(** [slice array start stop] returns a fresh array including elements [array.(start)] through
-    [array.(stop-1)] with the small tweak that the start and stop positions are normalized
-    and a stop index of 0 means the same thing a stop index of [Array.length array].  In
-    summary, it's like the slicing in Python or Matlab. *)
+(** [slice array start stop] returns a fresh array including elements [array.(start)]
+    through [array.(stop-1)] with the small tweak that the start and stop positions are
+    normalized and a stop index of 0 means the same thing a stop index of [Array.length
+    array].  In summary, it's mostly like the slicing in Python or Matlab.  One difference
+    is that a stop value of 0 here is like not specifying a stop value in Python. *)
 val slice : 'a t -> int -> int -> 'a t
 
 (** Array access with [normalize]d index. *)
@@ -193,12 +182,19 @@ val filter_map : 'a t -> f:('a -> 'b option) -> 'b t
 val filter_mapi : 'a t -> f:(int -> 'a -> 'b option) -> 'b t
 
 (* Functions with 2 suffix raise an exception if the lengths aren't the same. *)
-val iter2 : 'a t -> 'b t -> f:('a -> 'b -> unit) -> unit
+val iter2_exn : 'a t -> 'b t -> f:('a -> 'b -> unit) -> unit
 
-val map2 : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
+val map2_exn : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
+
+val fold2_exn :
+ 'a t
+  -> 'b t
+  -> init:'c
+  -> f:('c -> 'a -> 'b -> 'c)
+  -> 'c
 
 (** [for_all2 t1 t2 ~f] fails if [length t1 <> length t2]. *)
-val for_all2 : 'a t -> 'b t -> f:('a -> 'b -> bool) -> bool
+val for_all2_exn : 'a t -> 'b t -> f:('a -> 'b -> bool) -> bool
 
 (** [filter ~f array] removes the elements for which [f] returns false.  *)
 val filter : f:('a -> bool) -> 'a t -> 'a t
@@ -209,16 +205,17 @@ val filteri : f:(int -> 'a -> bool) -> 'a t -> 'a t
 (** [swap arr i j] swaps the value at index [i] with that at index [j]. *)
 val swap : 'a t -> int -> int -> unit
 
-
-
-(** [mem el arr] returns true iff [arr.(i) = el] for some i *)
-val mem : 'a -> 'a t -> bool
-
 (** [rev_inplace t] reverses [t] in place *)
 val rev_inplace : 'a t -> unit
 
 (** [of_list_rev l] converts from list then reverses in place *)
 val of_list_rev : 'a list -> 'a t
+
+(** [of_list_map l ~f] is the same as [of_list (List.map l ~f)] *)
+val of_list_map : 'a list -> f:('a -> 'b) -> 'b t
+
+(** [of_list_rev_map l ~f] is the same as [rev_inplace (of_list_map l ~f)] *)
+val of_list_rev_map : 'a list -> f:('a -> 'b) -> 'b t
 
 (** [replace t i ~f] = [t.(i) <- f (t.(i))]. *)
 val replace : 'a t -> int -> f:('a -> 'a) -> unit
@@ -231,27 +228,29 @@ val replace_all : 'a t -> f:('a -> 'a) -> unit
 *)
 val find_exn : 'a t -> f:('a -> bool) -> 'a
 
-(** [findi f ar] returns the first index [i] of [ar] for which [f ar.(i)] is true *)
+(** [findi t f] returns the first index [i] of [t] for which [f i t.(i)] is true *)
+val findi : 'a t -> f:(int -> 'a -> bool) -> (int * 'a) option
 
-val findi : 'a t -> f:('a -> bool) -> int option
-
-(** [findi_exn f ar] returns the first index [i] of [ar] for which [f ar.(i)] is
+(** [findi_exn t f] returns the first index [i] of [t] for which [f i t.(i)] is
     true.  It raises [Not_found] if there is no such element. *)
-val findi_exn : 'a t -> f:('a -> bool) -> int
+val findi_exn : 'a t -> f:(int -> 'a -> bool) -> int * 'a
 
-(** [reduce f [a1; ...; an]] is [f (... (f (f a1 a2) a3) ...) an]. *)
-val reduce : 'a t -> f:('a -> 'a -> 'a) -> 'a option
+(** [reduce f [a1; ...; an]] is [Some (f (... (f (f a1 a2) a3) ...) an)].
+    Returns [None] on the empty array. *)
+val reduce     : 'a t -> f:('a -> 'a -> 'a) -> 'a option
 val reduce_exn : 'a t -> f:('a -> 'a -> 'a) -> 'a
 
-(** [permute ar] randomly permutes [ar] in place *)
-val permute : ?random_state:Random.State.t -> 'a t -> unit
+(** [permute ?random_state t] randomly permutes [t] in place.
+
+    [permute] side affects [random_state] by repeated calls to [Random.State.int].
+    If [random_state] is not supplied, [permute] uses [Random.State.default]. *)
+val permute : ?random_state:Core_random.State.t -> 'a t -> unit
 
 (** [combine ar] combines two arrays to an array of pairs. *)
 val combine : 'a t -> 'b t -> ('a * 'b) t
 
 (** [split ar] splits an array of pairs into two arrays of single elements. *)
 val split : ('a * 'b) t -> 'a t * 'b t
-
 
 (** [sorted_copy ar cmp] returns a shallow copy of [ar] that is sorted. Similar to
     List.sort *)
@@ -261,6 +260,8 @@ val last : 'a t -> 'a
 
 (** [empty ()] creates an empty array *)
 val empty : unit -> 'a t
+
+val equal : 'a t -> 'a t -> equal:('a -> 'a -> bool) -> bool
 
 module Infix : sig
   val ( <|> ) : 'a t -> int * int -> 'a t

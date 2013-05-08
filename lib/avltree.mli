@@ -1,30 +1,4 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
-(** estokes:
-
-    This module implements a very low level interface to a mutable AVL tree. It is not
+(** This module implements a very low level interface to a mutable AVL tree. It is not
     intended to be used directly by casual users. It is used for implementing other data
     structures. The interface is somewhat ugly, and it's that way for a reason. The goal
     of this module is minimum memory overhead, and maximum performance.
@@ -61,27 +35,38 @@
     better interface, implement a hash table with it, and show that your table has better
     performance than Core_hashtbl.
 *)
-
-type ('k, 'v) t
+(* estokes: We expose [t] to allow an optimization in Hashtbl that makes iter and fold
+   more than twice as fast. *)
+type ('k, 'v) t =
+| Empty
+| Node of ('k, 'v) t * 'k * 'v * int * ('k, 'v) t
+| Leaf of 'k * 'v
 
 val empty : ('k, 'v) t
 
 (** check invariants, raise an exception if any invariants fail *)
 val invariant : ('k, 'v) t -> compare:('k -> 'k -> int) -> unit
 
-(** adds the specified key and data to the tree destructivly (previous t's are no longer
+(** adds the specified key and data to the tree destructively (previous t's are no longer
     valid) using the specified comparison function. O(log(N)) time, O(1) space. The
     returned t is the new root node of the tree, and should be used on all further calls
     to any other function in this module. The bool ref, added, will be set to true if a
     new node is added to the tree, or false if an existing node is replaced (in the case
-    that the key already exists). *)
-
-val add : ('k, 'v) t
+    that the key already exists). If [replace] (default true) is true then add will
+    overwrite any existing mapping for [key]. If [replace] is false, and there is an
+    existing mapping for key then add has no effect. *)
+val add
+  :  ?replace:bool (* defaults to true *)
+  -> ('k, 'v) t
   -> compare:('k -> 'k -> int)
   -> added:bool ref
   -> key:'k
   -> data:'v
   -> ('k, 'v) t
+
+(* Returns the first (leftmost) or last (rightmost) element in the tree *)
+val first : ('k, 'v) t -> ('k * 'v) option
+val last  : ('k, 'v) t -> ('k * 'v) option
 
 (** if the specified key exists in the tree, return the corresponding value.
     O(log(N)) time and O(1) space. *)
@@ -93,8 +78,8 @@ val mem : ('k, 'v) t -> compare:('k -> 'k -> int) -> 'k -> bool
 (** remove key destructively from the tree if it exists, return the new root node.
     Previous root nodes are not usable anymore, do so at your peril. the removed ref will
     be set to true if a node was actually removed, or false otherwise. *)
-
-val remove : ('k, 'v) t
+val remove
+  :  ('k, 'v) t
   -> removed:bool ref
   -> compare:('k -> 'k -> int)
   -> 'k

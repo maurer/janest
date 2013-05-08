@@ -1,28 +1,8 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+open Never_returns
 
 type t = exn with sexp_of
+
+include Pretty_printer.S with type t := t
 
 (** Raised when finalization after an exception failed, too.
     The first exception argument is the one raised by the initial
@@ -43,7 +23,8 @@ val reraise : t -> string -> _
 *)
 val reraisef : t -> ('a, unit, string, unit -> _) format4 -> 'a
 
-val to_string : t -> string
+val to_string      : t -> string (* human-readable, multi-lines *)
+val to_string_mach : t -> string (* machine format, single-line *)
 
 (* Uses a global table of sexp converters.  To register a converter for a new exception,
    add "with sexp" to its definition. If no suitable converter is found, the standard
@@ -57,23 +38,15 @@ val protectx : f:('a -> 'b) -> 'a -> finally:('a -> unit) -> 'b
 
 val protect : f:(unit -> 'a) -> finally:(unit -> unit) -> 'a
 
-val pp : Format.formatter -> t -> unit
-
-(*
- * CRv201108 dpowers: Would it be better to take (unit -> never_returns) and return Exn.t 
- * to force the writer to make a choice about what happens when this bombs and exit is not
- * true?
- *)
-
-
-(** [handle_uncaught ~exit f] catches an exception escaping [f] and
-    prints an error message to stderr.  Exits with return code 1 if
-    [exit] is [true].  Otherwise returns unit.
+(** [handle_uncaught ~exit f] catches an exception escaping [f] and prints an error
+    message to stderr.  Exits with return code 1 if [exit] is [true].  Otherwise returns
+    unit.
 *)
-val handle_uncaught : exit : bool -> (unit -> unit) -> unit
+val handle_uncaught : exit:bool -> (unit -> unit) -> unit
 
-(* The same as [handle_uncaught], but an exit function is specified.  *)
-val catch_and_print_backtrace : exit:(int -> unit) -> (unit -> unit) -> unit
+(** behaves as [handle_uncaught ~exit:true] and also has a more precise
+    type in this case *)
+val handle_uncaught_and_exit : (unit -> never_returns) -> never_returns
 
 (* Traces exceptions passing through.  Useful because in practice backtraces still don't
    seem to work.

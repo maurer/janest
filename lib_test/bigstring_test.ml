@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Core.Std;;
 open OUnit;;
 open Quickcheck;;
@@ -47,8 +23,7 @@ let bs_of_s = Bigstring.of_string
 let repr bs =
   if Bigstring.length bs > 30 then
     let s = String.create 30 in
-    Bigstring.blit_bigstring_string
-      ~src:bs ~src_pos:0 ~dst:s ~dst_pos:0 ~len:30;
+    Bigstring.blit_bigstring_string ~src:bs ~src_len:30 ~dst:s ();
     sprintf "<bs:%d:%s>" (Bigstring.length bs) s
   else
     sprintf "<bs:%s>" (Bigstring.to_string bs)
@@ -72,7 +47,7 @@ let blit_test ~n ~src_pos ~dst_pos ~len (s1,s2) =
     try
     let bs1 = Bigstring.of_string s1 in
     let bs2 = Bigstring.of_string s2 in
-      Bigstring.blit ~src:bs1 ~src_pos ~dst:bs2 ~dst_pos ~len;
+      Bigstring.blit ~src:bs1 ~src_pos ~src_len:len ~dst:bs2 ~dst_pos ();
     `Success (Bigstring.to_string bs2)
     with
       e -> `Failure (Exn.to_string e)
@@ -94,9 +69,9 @@ let blit_test ~n ~src_pos ~dst_pos ~len (s1,s2) =
 let simple_conversion_test ~n s =
   let len = String.length s in
   let bs = Bigstring.create len in
-  Bigstring.blit_string_bigstring ~src:s ~src_pos:0 ~dst:bs ~dst_pos:0 ~len;
+  Bigstring.blit_string_bigstring ~src:s ~dst:bs ();
   let s' = String.create len in
-  Bigstring.blit_bigstring_string ~src:bs ~src_pos:0 ~dst:s' ~dst_pos:0 ~len;
+  Bigstring.blit_bigstring_string ~src:bs ~dst:s' ();
   (sprintf "%s: %s" n s) @? (s' = s)
 ;;
 
@@ -114,7 +89,7 @@ let inchan_test ~n test orig =
   let (fname,outc) = Filename.open_temp_file "bigstring_test" ".txt" in
   protect ~f:(fun () ->
     really_output outc orig;
-    close_out outc;
+    Out_channel.close outc;
     let inc = open_in fname in
     test ~n orig inc)
     ~finally:(fun () -> Unix.unlink fname)
@@ -154,7 +129,6 @@ let fdpair_test ~n fdpair sender receiver bs =
     e -> assert_failure (sprintf "%s: receive exception: %s" n (Exn.to_string e))
 
 
-
 let write_read_test ~n fdpair bs =
   fdpair_test ~n fdpair
     (fun bs fd ->
@@ -172,7 +146,7 @@ let output_input_test ?(runs = 2) ~n fdpair bs =
   fdpair_test ~n fdpair
     (fun bs fd ->
       if !oc = stdout then oc := Unix.out_channel_of_descr fd;
-      for i = 1 to runs do
+      for _i = 1 to runs do
         Bigstring.really_output !oc bs
       done;
       flush !oc
@@ -180,7 +154,7 @@ let output_input_test ?(runs = 2) ~n fdpair bs =
     (fun ~n bs fd ->
       if !ic = stdin then ic := Unix.in_channel_of_descr fd;
       let bs' = Bigstring.create (Bigstring.length bs) in
-      for i = 1 to runs do
+      for _i = 1 to runs do
         Bigstring.really_input !ic bs'
       done;
       (sprintf "output/input %s: %s,%s" n (repr bs) (repr bs')) @? (bs = bs'))
@@ -235,7 +209,6 @@ let test =
            blit_test ~n:"random" ~src_pos ~dst_pos ~len (s1,s2))
            (fun () -> (sg (), sg(),nng (), nng (), nng ()))
        );
-     
       "really write/read pipe" >::
          (fun () ->
            let write_read_test = write_read_test Unix.pipe in

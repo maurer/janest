@@ -1,45 +1,16 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+(** Tail recursive version of standard List functions, plus additional operations. *)
 
-(** Tail recursive version of standard List functions, plus
-    additional operations.
- *)
+type 'a t = 'a list with bin_io, sexp
 
-type 'a t = 'a list
-
-include Binable.S1 with type 'a binable = 'a t
-include Container.S1 with type 'a container = 'a t
-include Sexpable.S1 with type 'a sexpable = 'a t
-
-include Monad.S with type 'a monad = 'a t
+include Container.S1 with type 'a t := 'a t
+include Monad.S with type 'a t := 'a t
 
 val nth : 'a t -> int -> 'a option
 
 (** Return the [n]-th element of the given list.
-   The first element (head of the list) is at position 0.
-   Raise [Failure "nth"] if the list is too short.
-   Raise [Invalid_argument "List.nth"] if [n] is negative. *)
+    The first element (head of the list) is at position 0.
+    Raise [Failure "nth"] if the list is too short.
+    Raise [Invalid_argument "List.nth"] if [n] is negative. *)
 val nth_exn : 'a t -> int -> 'a
 
 (** List reversal. *)
@@ -53,10 +24,9 @@ val rev_append : 'a t -> 'a t -> 'a t
    to length of first list, but is O(1) if either list is empty. *)
 val unordered_append : 'a t -> 'a t -> 'a t
 
-
 (** [List.rev_map f l] gives the same result as
    {!List.rev}[ (]{!ListLabels.map}[ f l)], but is more efficient. *)
-val rev_map : f:('a -> 'b) -> 'a t -> 'b t
+val rev_map : 'a t -> f:('a -> 'b) -> 'b t
 
 (* [fold_left] is the same as [fold], and one should always use [fold] rather
    than [fold_left], except in functors that are parameterized over a more
@@ -95,37 +65,29 @@ val for_all2_exn : 'a t -> 'b t -> f:('a -> 'b -> bool) -> bool
     other. *)
 val exists2_exn : 'a t -> 'b t -> f:('a -> 'b -> bool) -> bool
 
-
-
-(** [mem a l] is true if and only if [a] is equal
-   to an element of [l]. *)
-val mem : 'a -> set:'a t -> bool
-
-(** Same as {!List.mem}, but uses physical equality instead of structural
-   equality to compare list elements. *)
-val memq : 'a -> set:'a t -> bool
-
-
 (** [filter p l] returns all the elements of the list [l] that satisfy the predicate [p].
     The order of the elements in the input list is preserved. *)
-val filter : f:('a -> bool) -> 'a t -> 'a t
+val filter : 'a t -> f:('a -> bool) -> 'a t
 
 (** Like [filter], but reverses the order of the input list *)
-val rev_filter : f:('a -> bool) -> 'a t -> 'a t
+val rev_filter : 'a t -> f:('a -> bool) -> 'a t
 
 val filteri : 'a t -> f: (int -> 'a -> bool) -> 'a t
 
-(** [find_all] is another name for {!List.filter}. *)
-val find_all : f:('a -> bool) -> 'a t -> 'a t
+(** [partition_map t ~f] partitions [t] according to [f]. *)
+val partition_map : 'a t -> f:('a -> [ `Fst of 'b | `Snd of 'c ]) -> 'b t * 'c t
 
+(** [partition_tf p l] returns a pair of lists [(l1, l2)], where [l1] is the list of all the
+    elements of [l] that satisfy the predicate [p], and [l2] is the list of all the
+    elements of [l] that do not satisfy [p].  The order of the elements in the input list
+    is preserved.  The "tf" suffix is mnemonic to remind readers at a call that the result
+    is (trues, falses). *)
+val partition_tf : 'a t -> f:('a -> bool) -> 'a t * 'a t
 
-(** [partition p l] returns a pair of lists [(l1, l2)], where
-    [l1] is the list of all the elements of [l] that
-    satisfy the predicate [p], and [l2] is the list of all the
-    elements of [l] that do not satisfy [p].
-    The order of the elements in the input list is preserved. *)
-val partition : 'a t -> f:('a -> bool) -> 'a t * 'a t
-
+(** [split_n n \[e1; ...; em\]] is [(\[e1; ...; en\], \[en+1; ...; em\])].  If [n > m],
+    [(\[e1; ...; em\], \[\])] is returned.  If [n < 0], [(\[\], \[e1; ...; em\])] is
+    returned. *)
+val split_n : 'a t -> int -> 'a t * 'a t
 
 (** Sort a list in increasing order according to a comparison function.  The comparison
     function must return 0 if its arguments compare as equal, a positive integer if the
@@ -137,20 +99,16 @@ val partition : 'a t -> f:('a -> bool) -> 'a t * 'a t
     logarithmic stack space.
 
     Presently, the sort is stable, meaning that two equal elements in the input will be in
-    the same order in the output.
-*)
+    the same order in the output. *)
 val sort : cmp:('a -> 'a -> int) -> 'a t -> 'a t
 
 (** Same as sort, but guaranteed to be stable *)
 val stable_sort : cmp:('a -> 'a -> int) -> 'a t -> 'a t
 
-(** Merge two lists:
-    Assuming that [l1] and [l2] are sorted according to the
-    comparison function [cmp], [merge cmp l1 l2] will return a
-    sorted list containting all the elements of [l1] and [l2].
-    If several elements compare equal, the elements of [l1] will be
-    before the elements of [l2].
-*)
+(** Merge two lists: assuming that [l1] and [l2] are sorted according to the comparison
+    function [cmp], [merge cmp l1 l2] will return a sorted list containting all the
+    elements of [l1] and [l2].  If several elements compare equal, the elements of [l1]
+    will be before the elements of [l2]. *)
 val merge : 'a t -> 'a t -> cmp:('a -> 'a -> int) -> 'a t
 
 val hd : 'a t -> 'a option
@@ -161,22 +119,14 @@ val tl : 'a t -> 'a t option
     [Failure "hd"] if the list is empty. *)
 val hd_exn : 'a t -> 'a
 
-(** Return the given list without its first element. Raise
-   [Failure "tl"] if the list is empty. *)
+(** Return the given list without its first element. Raise [Failure "tl"] if the list is
+    empty. *)
 val tl_exn : 'a t -> 'a t
 
 val findi : 'a t -> f:(int -> 'a -> bool) -> (int * 'a) option
 
-(** [find_map t f] applies [f] to each element of [t] until it finds
- * [f a = Some b], at which point it returns [Some b].  If there is no such
- * element, [find_map] returns [None].
- *)
-
-val find_map : 'a t -> f:('a -> 'b option) -> 'b option
-
-(** [find_exn t ~f] returns the first element of [t] that satisfies [f].  It
-    raises [Not_found] if there is no such element.
-*)
+(** [find_exn t ~f] returns the first element of [t] that satisfies [f].  It raises
+    [Not_found] if there is no such element. *)
 val find_exn : 'a t -> f:('a -> bool) -> 'a
 
 (** {6 Tail-recursive implementations of standard List operations} *)
@@ -184,21 +134,20 @@ val find_exn : 'a t -> f:('a -> bool) -> 'a
 (** E.g. [append [1; 2] [3; 4; 5]] is [[1; 2; 3; 4; 5]] *)
 val append : 'a t -> 'a t -> 'a t
 
-(** [List.map f [a1; ...; an]] applies function [f] to [a1, ..., an],
-   and builds the list [[f a1; ...; f an]]
-   with the results returned by [f]. *)
+(** [List.map f [a1; ...; an]] applies function [f] to [a1, ..., an], and builds the list
+    [[f a1; ...; f an]] with the results returned by [f]. *)
 val map : 'a t -> f:('a -> 'b) -> 'b t
 
-(** [concat_map t ~f] is [concat (map t ~f)], except that there
- * is no guarantee about the order in which [f] is applied to the elements of
- * [t].
- *)
+(** [concat_map t ~f] is [concat (map t ~f)], except that there is no guarantee about the
+    order in which [f] is applied to the elements of [t]. *)
 val concat_map : 'a t -> f:('a -> 'b t) -> 'b t
 
-(** [List.map2_exn f [a1; ...; an] [b1; ...; bn]] is
-   [[f a1 b1; ...; f an bn]].
-   Raise [Invalid_argument] if the two lists have
-   different lengths. *)
+(** [concat_mapi t ~f] is like concat_map, but passes the index as an argument
+*)
+val concat_mapi : 'a t -> f:(int -> 'a -> 'b t) -> 'b t
+
+(** [List.map2_exn f [a1; ...; an] [b1; ...; bn]] is [[f a1 b1; ...; f an bn]].  Raise
+    [Invalid_argument] if the two lists have different lengths. *)
 val map2_exn :'a t -> 'b t ->  f:('a -> 'b -> 'c) -> 'c t
 
 val rev_map3_exn : 'a t -> 'b t -> 'c t -> f:('a -> 'b -> 'c -> 'd) -> 'd t
@@ -212,19 +161,15 @@ val rev_map_append : 'a t -> 'b t -> f:('a -> 'b) -> 'b t
     [f a1 (f a2 (... (f an b) ...))]. *)
 val fold_right : 'a t -> f:('a -> 'b -> 'b) -> init:'b -> 'b
 
-
-
 (** Transform a list of pairs into a pair of lists:
-   [split [(a1,b1); ...; (an,bn)]] is [([a1; ...; an], [b1; ...; bn])].
-*)
-val split : ('a * 'b) t -> 'a t * 'b t
+    [unzip [(a1,b1); ...; (an,bn)]] is [([a1; ...; an], [b1; ...; bn])]. *)
+val unzip : ('a * 'b) t -> 'a t * 'b t
 
-(** Transform a pair of lists into a list of pairs:
-   [combine [a1; ...; an] [b1; ...; bn]] is
-   [[(a1,b1); ...; (an,bn)]].
-   Raise [Invalid_argument] if the two lists
-   have different lengths. *)
-val combine_exn : 'a t -> 'b t -> ('a * 'b) t
+(** Transform a pair of lists into an (optional) list of pairs:
+    [zip [a1; ...; an] [b1; ...; bn]] is [[(a1,b1); ...; (an,bn)]].
+    Returns None if the two lists have different lengths. *)
+val zip     : 'a t -> 'b t -> ('a * 'b) t option
+val zip_exn : 'a t -> 'b t -> ('a * 'b) t
 
 (** mapi is just like map, but it also passes in the index of each
     element as the first argument to the mapped function. Tail-recursive. *)
@@ -240,7 +185,7 @@ val iteri : 'a t ->  f:(int -> 'a -> unit) -> unit
     element as the first argument to the folded function.  Tail-recursive. *)
 val foldi : 'a t -> f:(int -> 'b -> 'a -> 'b) -> init:'b -> 'b
 
-(** [reduce f [a1; ...; an]] is [f (... (f (f a1 a2) a3) ...) an].
+(** [reduce_exn f [a1; ...; an]] is [f (... (f (f a1 a2) a3) ...) an].
     It fails on the empty list.  Tail recursive. *)
 val reduce_exn : 'a t -> f:('a -> 'a -> 'a) -> 'a
 val reduce : 'a t -> f:('a -> 'a -> 'a) -> 'a option
@@ -274,15 +219,13 @@ val groupi : 'a t -> break:(int -> 'a -> 'a -> bool) -> 'a t t
 val last : 'a t -> 'a option
 val last_exn : 'a t -> 'a
 
+(** [remove_consecutive_duplicates]. The same list with consecutive duplicates removed.
+    The relative order of the other elements is unaffected. *)
+val remove_consecutive_duplicates : 'a t -> equal:('a -> 'a -> bool) -> 'a t
 
 (** [dedup] (de-duplicate).  The same list with duplicates removed, but the
     order is not guaranteed. *)
 val dedup : ?compare:('a -> 'a -> int) -> 'a t -> 'a t
-
-
-(** [stable_dedup] Same as [dedup] but maintains the order of the list and doesn't allow
-    compare function to be specified (uses set membership). *)
-val stable_dedup : 'a t -> 'a t
 
 (** [contains_dup] True if there are any two elements in the list which are the same. *)
 val contains_dup : ?compare:('a -> 'a -> int) -> 'a t -> bool
@@ -308,17 +251,19 @@ val exn_if_dup :
     predicate [f].  *)
 val count : 'a t -> f:('a -> bool) -> int
 
-(** [range stride low high] is the list of integers from [low](inclusive)
-    to [high](exclusive), stepping by [stride].  If unspecified, [stride]
-    defaults to 1. *)
-val range : ?stride:int -> int -> int -> int t
+(** [range ?stride ?start ?stop start_i stop_i] is the list of integers from [start_i] to
+    [stop_i], stepping by [stride].  If [stride] < 0 then we need [start_i] > [stop_i] for
+    the result to be nonempty (or [start_i] = [stop_i] in the case where both bounds are
+    inclusive). *)
+val range
+  :  ?stride:int                            (* default = 1 *)
+  -> ?start:[`inclusive|`exclusive]         (* default = `inclusive *)
+  -> ?stop:[`inclusive|`exclusive]          (* default = `exclusive *)
+  -> int
+  -> int
+  -> int t
 
-(** [frange] is similar to [range], but for floats. *)
-val frange : ?stride:float -> float -> float -> float t
-
-(** [init f n] is [[(f 0); (f 1); ...; (f (n-1))]].
-    It is an error if [n < 0].
-*)
+(** [init f n] is [[(f 0); (f 1); ...; (f (n-1))]]. It is an error if [n < 0]. *)
 val init : int -> f:(int -> 'a) -> 'a t
 
 (** [rev_filter_map f l] is the reversed sublist of [l] containing
@@ -340,10 +285,6 @@ val filter_mapi : 'a t -> f:(int -> 'a -> 'b option) -> 'b t
 (** [filter_opt l] is the sublist of [l] containing only elements
     which are [Some e].  In other words, [filter_opt l] = [filter_map ~f:ident l]. *)
 val filter_opt : 'a option t -> 'a t
-
-(** [partition_map t ~f] partitions [t] according to [f]. *)
-val partition_map :
-  'a t -> f:('a -> [ `Fst of 'b | `Snd of 'c ]) -> 'b t * 'c t
 
 (* Interpret a list of (key, value) pairs as a map in which only the first
    occurrence of a key affects the semantics, i.e.:
@@ -368,21 +309,13 @@ module Assoc : sig
   val inverse  : ('a, 'b) t -> ('b, 'a) t
 end
 
-(** [split_n n \[e1; ...; em\]] is [(\[e1; ...; en\], \[en+1; ...; em\])].
-    If [n > m], [(\[e1; ...; em\], \[\])] is returned.  If [n < 0],
-    [(\[\], \[e1; ...; em\])] is returned. *)
-val split_n : 'a t -> int -> ('a t * 'a t)
-
-(** Note that [sub] and [slice] are inconsistent in the sense that only the former uses
-    python-style indices! *)
+(** Note that [sub], unlike [slice], doesn't use python-style indices! *)
 (** [sub pos len l] is the [len]-element sublist of [l], starting at [pos]. *)
 val sub : 'a t -> pos:int -> len:int -> 'a t
-
 
 (** [slice l start stop] returns a new list including elements [l.(start)] through
     [l.(stop-1)], normalized python-style. *)
 val slice : 'a t -> int -> int -> 'a t
-
 
 (** [take l n] is [fst (split_n n l)].
     [drop l n] is [snd (split_n n l)]. *)
@@ -395,18 +328,17 @@ val take_while : 'a t -> f : ('a -> bool) -> 'a t
 (** [drop_while l ~f] drops the longest prefix of [l] for which [f] is [true]. *)
 val drop_while : 'a t -> f : ('a -> bool) -> 'a t
 
-(** Concatenate a list of lists.  The elements of the argument are all
-    concatenated together (in the same order) to give the result.
-    Tail recursive over outer and inner lists. *)
+(** [split_while xs ~f = (take_while xs ~f, drop_while xs ~f)] *)
+val split_while : 'a t -> f : ('a -> bool) -> 'a t * 'a t
+
+(** Concatenate a list of lists.  The elements of the argument are all concatenated
+    together (in the same order) to give the result.  Tail recursive over outer and inner
+    lists. *)
 val concat : 'a t t -> 'a t
 
-
-(** Same as [concat]. *)
-val flatten : 'a t t -> 'a t
-
-(** Same as [flatten] but faster and without preserving any ordering (ie
-    for lists that are essentially viewed as multi-sets. *)
-val flatten_no_order : 'a t t -> 'a t
+(** Same as [concat] but faster and without preserving any ordering (ie for lists that are
+    essentially viewed as multi-sets. *)
+val concat_no_order : 'a t t -> 'a t
 
 val cons : 'a -> 'a t -> 'a t
 
@@ -414,19 +346,43 @@ val cons : 'a -> 'a t -> 'a t
    resulting list will have length len1*len2. *)
 val cartesian_product : 'a t -> 'b t -> ('a * 'b) t
 
+val to_string : f:('a -> string) -> 'a t -> string
 
-val to_string : ('a -> string) -> 'a t -> string
+(** [permute ?random_state t] returns a permutation of [t].
 
-(** [permute l] shuffles [l], using Random.int *)
-val permute : ?random_state:Random.State.t -> 'a t -> 'a t
+    [permute] side affects [random_state] by repeated calls to [Random.State.int].
+    If [random_state] is not supplied, [permute] uses [Random.State.default]. *)
+val permute : ?random_state:Core_random.State.t -> 'a t -> 'a t
 
 val is_sorted : 'a t -> compare:('a -> 'a -> int) -> bool
 
 (** lexicographic *)
 val compare : 'a t -> 'a t -> cmp:('a -> 'a -> int) -> int
 
-val equal : 'a t -> 'a t -> ('a -> 'a -> bool) -> bool
+val equal : 'a t -> 'a t -> equal:('a -> 'a -> bool) -> bool
 
 module Infix : sig
   val ( @ ) : 'a t -> 'a t -> 'a t
 end
+
+(** [transpose m] transposes the rows and columns of the matrix [m],
+    considered as either a row of column lists or (dually) a column of row lists.
+
+    Example,
+
+    transpose [[1;2;3];[4;5;6]] = [[1;4];[2;5];[3;6]]
+
+    On non-empty rectangular matrices, [transpose] is an involution
+    (i.e., [transpose (transpose m) = m]).  Transpose returns None when called
+    on lists of lists with non-uniform lengths.
+**)
+val transpose : 'a t t -> 'a t t option
+
+(** [transpose_exn] transposes the rows and columns of its argument, throwing exception if
+    the list is not rectangular.
+**)
+val transpose_exn : 'a t t -> 'a t t
+
+(** [intersperse xs ~sep] places [sep] between adjacent elements of [xs].
+    e.g. [intersperse [1;2;3] ~sep:0 = [1;0;2;0;3]] *)
+val intersperse : 'a list -> sep:'a -> 'a list

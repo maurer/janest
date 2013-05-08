@@ -1,34 +1,10 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open OUnit;;
 open Core.Std
 
-let test = 
+let test =
   "interval" >:::
-    [ "is_empty_or_singleton" >:: 
-        (fun () -> 
+    [ "is_empty_or_singleton" >::
+        (fun () ->
           let t x = Interval.is_empty_or_singleton x in
           let i = Interval.create in
           "singleton1" @? t (i 0 0);
@@ -38,8 +14,8 @@ let test =
           "nonempty" @? not (t (i 0 1));
         );
 
-      "are_disjoint_as_open_intervals" >:: 
-        (fun () -> 
+      "are_disjoint_as_open_intervals" >::
+        (fun () ->
           let t x = Interval.are_disjoint_as_open_intervals x in
           let i = Interval.create in
           "touching" @? t [i 3 4; i 4 5];
@@ -63,5 +39,18 @@ let test =
           "contains_set 4" @? (S.contains_set ~container:s2 ~contained:s3);
         );
 
+      "half_open_intervals_are_a_partition" >::
+        (fun () ->
+          "are_a_partition" @? Interval.half_open_intervals_are_a_partition [
+            Interval.create 0 2;
+            Interval.create 2 4;
+            Interval.create 4 8;
+          ];
+          "not_a_partition" @? not (Interval.half_open_intervals_are_a_partition [
+            Interval.create 0 2;
+            Interval.create 2 4;
+            Interval.create 5 8;
+          ]);
+        );
     ]
 

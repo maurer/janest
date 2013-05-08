@@ -1,32 +1,9 @@
-/******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************/
-
 #include "config.h"
 #ifdef JSC_LINUX_EXT
 #define _FILE_OFFSET_BITS 64
 #define _GNU_SOURCE
 
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/prctl.h>
@@ -36,20 +13,22 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <net/if.h>
 #include <time.h>
 #include <sched.h>
 #include <termios.h>
 #include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <sys/sendfile.h>
+#include <sys/epoll.h>
+#include <sys/resource.h>
+#include <arpa/inet.h>
+#include <assert.h>
 
 #include <sys/sysinfo.h>
 
 #include "ocaml_utils.h"
 #include "unix_utils.h"
-
-#define DIR_Val(v) *((DIR **) &Field(v, 0))
-#define UNIX_BUFFER_SIZE 16384
-
-#include <sys/sendfile.h>
 
 CAMLprim value
 linux_sendfile_stub(value v_sock, value v_fd, value v_pos, value v_len)
@@ -94,7 +73,6 @@ CAMLprim value linux_sysinfo(value __unused v_unit)
 /**/
 
 static int linux_tcpopt_bool[] = { TCP_CORK };
-
 enum option_type {
   TYPE_BOOL = 0,
   TYPE_INT = 1,
@@ -229,4 +207,391 @@ CAMLprim value linux_pr_get_name(value __unused v_unit)
     uerror("pr_get_name", Nothing);
   return caml_copy_string(buf);
 }
+
+/* copy of the ocaml's stdlib wrapper for getpid */
+CAMLprim value linux_ext_gettid(value v_unit __unused)
+{
+  return Val_int(syscall(SYS_gettid));
+}
+
+CAMLprim value linux_setpriority(value v_priority)
+{
+  int tid;
+
+  assert(!Is_block(v_priority));
+
+  tid = syscall(SYS_gettid);
+  if (setpriority(PRIO_PROCESS, tid, Long_val(v_priority)) == -1)
+    uerror("setpriority", Nothing);
+
+  return Val_unit;
+}
+
+CAMLprim value linux_getpriority(value v_unit)
+{
+  int tid;
+  int old_errno;
+  int priority;
+
+  assert(v_unit == Val_unit);
+
+  tid = syscall(SYS_gettid);
+
+  old_errno = errno;
+  errno = 0;
+  priority = getpriority(PRIO_PROCESS, tid);
+  if (errno != 0) {
+    errno = old_errno;
+    uerror("getpriority", Nothing);
+  }
+  errno = old_errno;
+
+  return Val_long(priority);
+}
+
+static int close_durably(int fd)
+{
+  int ret;
+  do ret = close(fd);
+  while (ret == -1 && errno == EINTR);
+  return ret;
+}
+
+CAMLprim value linux_get_terminal_size(value __unused v_unit)
+{
+  int fd;
+  struct winsize ws;
+  int ret;
+  value v_res;
+
+  caml_enter_blocking_section();
+
+  fd = open("/dev/tty", O_RDWR);
+  if (fd == -1) {
+    caml_leave_blocking_section();
+    uerror("get_terminal_size__open", Nothing);
+  }
+  ret = ioctl(fd, TIOCGWINSZ, &ws);
+  if (ret == -1) {
+    int old_errno = errno;
+    (void)close_durably(fd);
+    caml_leave_blocking_section();
+    if (ret == -1) {
+      errno = old_errno;
+      uerror("get_terminal_size__ioctl_close", Nothing);
+    } else {
+      errno = old_errno;
+      uerror("get_terminal_size__ioctl", Nothing);
+    }
+  }
+  ret = close_durably(fd);
+  caml_leave_blocking_section();
+  if (ret == -1) uerror("get_terminal_size__close", Nothing);
+
+  v_res = caml_alloc_small(2, 0);
+  Field(v_res, 0) = Val_int(ws.ws_row);
+  Field(v_res, 1) = Val_int(ws.ws_col);
+
+  return v_res;
+}
+
+CAMLprim value linux_get_ipv4_address_for_interface(value v_interface)
+{
+  CAMLparam1(v_interface);
+  struct ifreq ifr;
+  int fd = -1;
+  value res;
+  char* error = NULL;
+
+  memset(&ifr, 0, sizeof(ifr));
+  ifr.ifr_addr.sa_family = AF_INET;
+  /* [ifr] is already initialized to zero, so it doesn't matter if the
+     incoming string is too long, and [strncpy] fails to add a \0. */
+  strncpy(ifr.ifr_name, String_val(v_interface), IFNAMSIZ - 1);
+
+  caml_enter_blocking_section();
+  fd = socket(AF_INET, SOCK_DGRAM, 0);
+
+  if (fd == -1)
+    error = "linux_get_ipv4_address_for_interface: couldn't allocate socket";
+  else {
+    if (ioctl(fd, SIOCGIFADDR, &ifr) < 0)
+      error = "linux_get_ipv4_address_for_interface: ioctl(fd, SIOCGIFADDR, ...) failed";
+
+    (void) close_durably(fd);
+  }
+
+  caml_leave_blocking_section();
+
+  if (error == NULL) {
+    /* This is weird but doing the usual casting causes errors when using
+     * the new gcc on CentOS 6.  This solution was picked up on Red Hat's
+     * bugzilla or something.  It also works to memcpy a sockaddr into
+     * a sockaddr_in.  This is faster hopefully.
+     */
+    union {
+      struct sockaddr sa;
+      struct sockaddr_in sain;
+    } u;
+    u.sa = ifr.ifr_addr;
+    res = caml_copy_string(inet_ntoa(u.sain.sin_addr));
+    CAMLreturn(res);
+  }
+
+  uerror(error, Nothing);
+  assert(0);  /* [uerror] should never return. */
+}
+
+/*
+ * This linux specific socket option is in use for applications that require it
+ * for security reasons. Taking a string argument, it does not fit the sockopt stubs used
+ * for other socket options.
+ */
+CAMLprim value linux_bind_to_interface(value v_fd, value v_ifname)
+{
+  int ret, fd, ifname_len;
+  char *ifname;
+
+  assert(!Is_block(v_fd));
+  assert(Is_block(v_ifname) && Tag_val(v_ifname) == String_tag);
+
+  fd = Int_val(v_fd);
+  ifname = String_val(v_ifname);
+
+  ifname_len = caml_string_length(v_ifname) + 1;
+  if (ifname_len > IFNAMSIZ) {
+    caml_failwith("linux_bind_to_interface: ifname string too long");
+  }
+
+  ret = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, (void*)ifname, ifname_len);
+  if (ret < 0) {
+    uerror("bind_to_interface", Nothing);
+  }
+
+  return Val_unit;
+}
+
+/** Core epoll methods **/
+
+#define EPOLL_FLAG(FLAG) DEFINE_INT63_CONSTANT (linux_epoll_##FLAG##_flag, FLAG)
+
+EPOLL_FLAG(EPOLLIN)
+EPOLL_FLAG(EPOLLOUT)
+/* 2012-05-22 sweeks: EPOLLRDHUP was unavailable on some of our machines, so I
+   commented it out until we need it. */
+/* EPOLL_FLAG(EPOLLRDHUP) */
+EPOLL_FLAG(EPOLLPRI)
+EPOLL_FLAG(EPOLLERR)
+EPOLL_FLAG(EPOLLHUP)
+EPOLL_FLAG(EPOLLET)
+EPOLL_FLAG(EPOLLONESHOT)
+
+CAMLprim value linux_sizeof_epoll_event(value __unused v_unit)
+{
+  return Val_long(sizeof(struct epoll_event));
+}
+
+/*
+ * Don't think too hard about the parameter here, the man pages for epoll indicate
+ * that the size parameter is ignored for current implementations of epoll.
+ */
+CAMLprim value linux_epoll_create(value v_size)
+{
+  int retcode;
+
+  retcode = epoll_create(Long_val(v_size));
+  if (retcode == -1) uerror("epoll_create", Nothing);
+
+  return Val_long(retcode);
+}
+
+static value linux_epoll_ctl(value v_epfd, value v_fd, value v_flags, int operation)
+{
+  struct epoll_event evt;
+
+  evt.events = Int63_val(v_flags);
+  evt.data.fd = Long_val(v_fd);
+
+  if (epoll_ctl(Long_val(v_epfd), operation, Long_val(v_fd), &evt) == -1)
+    uerror("epoll_ctl", Nothing);
+
+  return Val_unit;
+}
+
+/*
+ * Add and modify seem somewhat duplicative, I'm unsure the result of
+ * adding an fd to a set a second time to change the event flags. Use
+ * mod()...
+ */
+CAMLprim value linux_epoll_ctl_add(value v_epfd, value v_fd, value v_flags)
+{
+  return linux_epoll_ctl(v_epfd, v_fd, v_flags, EPOLL_CTL_ADD);
+}
+
+CAMLprim value linux_epoll_ctl_mod(value v_epfd, value v_fd, value v_flags)
+{
+  return linux_epoll_ctl(v_epfd, v_fd, v_flags, EPOLL_CTL_MOD);
+}
+
+/*
+ * Some implementations ignore errors in delete, as they occur commonly when
+ * an fd is closed prior to the del() call. close() removes an fd from an
+ * epoll set automatically, so the del() call will fail.
+ */
+CAMLprim value linux_epoll_ctl_del(value v_epfd, value v_fd)
+{
+  if (epoll_ctl(Long_val(v_epfd), EPOLL_CTL_DEL, Long_val(v_fd), NULL) == -1)
+    uerror("epoll_ctl", Nothing);
+
+  return Val_unit;
+}
+
+CAMLprim value linux_epoll_wait(value v_epfd, value v_array, value v_timeout)
+{
+  struct epoll_event * evt;
+  int retcode, maxevents;
+  int timeout = Long_val(v_timeout);
+
+  /* [CAMLparam1] is needed here to ensure that the bigstring does not get finalized
+     during the period when we release the Caml lock, below.
+  */
+  CAMLparam1(v_array);
+
+  evt = (struct epoll_event *) Caml_ba_data_val(v_array);
+  maxevents = Caml_ba_array_val(v_array)->dim[0] / sizeof(struct epoll_event);
+
+  /*
+   * timeout, in milliseconds returns immediately if 0 is given, waits
+   * forever with -1.
+   */
+  if (timeout == 0)
+  {
+    /* returns immediately, skip enter()/leave() pair */
+    retcode = epoll_wait(Long_val(v_epfd), evt, maxevents, timeout);
+  }
+  else
+  {
+    caml_enter_blocking_section();
+    retcode = epoll_wait(Long_val(v_epfd), evt, maxevents, timeout);
+    caml_leave_blocking_section();
+  }
+
+  if (retcode == -1) uerror("epoll_wait", Nothing);
+
+  CAMLreturn(Val_long(retcode));
+}
+
+/* 2012-05-22 sweeks: epoll_pwait was unavailable on some of our machines, so I
+   commented it out until we need it.
+
+   mshinwell has not fully read this yet.
+
+   bnigito: epoll_pwait, and associated signal masks is a possible routine we may expose
+   in the future. Since it's not available on some centos versions (and we do not currently
+   utilize the pselect analog) I've removed the premature references to it.
+*/
+
+/** Accessors for the resulting ready events array. Might want to do this as a pair. */
+
+static inline struct epoll_event * get_epoll_event(value v_array, value v_index)
+{
+  int i = Long_val(v_index);
+  struct epoll_event * events = (struct epoll_event *) Caml_ba_data_val(v_array);
+  return &events[i];
+}
+
+CAMLprim value linux_epoll_readyfd(value v_array, value v_index)
+{
+  struct epoll_event * event = get_epoll_event(v_array, v_index);
+  return Val_long( event->data.fd );
+}
+
+CAMLprim value linux_epoll_readyflags(value v_array, value v_index)
+{
+  struct epoll_event * event = get_epoll_event(v_array, v_index);
+  return caml_alloc_int63( event->events );
+}
+
+#ifdef JSC_TIMERFD
+
+/** timerfd bindings **/
+
+#include <sys/timerfd.h>
+
+/* These values are from timerfd.h. They are not defined in Linux
+   2.6.26 or earlier. */
+#if !defined(TFD_NONBLOCK)
+#  define TFD_NONBLOCK 04000
+#endif
+#if !defined(TFD_CLOEXEC)
+#  define TFD_CLOEXEC 02000000
+#endif
+
+#define TIMERFD_INT63(X)                                  \
+  CAMLprim value linux_timerfd_##X(value __unused v_unit) \
+  { return caml_alloc_int63(X); }
+
+TIMERFD_INT63(TFD_NONBLOCK)
+TIMERFD_INT63(TFD_CLOEXEC)
+TIMERFD_INT63(CLOCK_REALTIME)
+TIMERFD_INT63(CLOCK_MONOTONIC)
+
+CAMLprim value linux_timerfd_create(value v_clock_id, value v_flags)
+{
+  int retcode;
+
+  retcode = timerfd_create(Int63_val(v_clock_id), Int63_val(v_flags));
+
+  if (retcode == -1) uerror("timerfd_create", Nothing);
+
+  return Val_int(retcode);
+}
+
+static inline void set_timespec(struct timespec *ts, value v)
+{
+  double d = Double_val(v);
+  ts->tv_sec = (time_t) d;
+  ts->tv_nsec = (long) ((d - ts->tv_sec) * 1e9);
+}
+
+CAMLprim value linux_timerfd_settime(value v_fd, value v_absolute,
+                                     value v_initial, value v_interval)
+{
+  int retcode;
+  struct itimerspec old, new;
+
+  set_timespec(&new.it_value, v_initial);
+  set_timespec(&new.it_interval, v_interval);
+
+  retcode = timerfd_settime(Int_val(v_fd),
+                            Bool_val(v_absolute) ? TFD_TIMER_ABSTIME : 0,
+                            &new, &old);
+
+  if (retcode == -1) uerror("timerfd_settime", Nothing);
+
+  return Val_unit;
+}
+
+static value alloc_spec(struct itimerspec *spec)
+{
+  value v_spec = caml_alloc_small(2 * Double_wosize, Double_array_tag);
+  Double_field(v_spec, 0) = spec->it_value.tv_sec + spec->it_value.tv_nsec / 1e9;
+  Double_field(v_spec, 1) = spec->it_interval.tv_sec + spec->it_interval.tv_nsec / 1e9;
+  return v_spec;
+}
+
+CAMLprim value linux_timerfd_gettime(value v_fd)
+{
+  int retcode;
+  struct itimerspec cur;
+
+  retcode = timerfd_gettime(Int_val(v_fd), &cur);
+
+  if (retcode == -1) uerror("timerfd_gettime", Nothing);
+
+  return alloc_spec(&cur);
+}
+
+#endif /* JSC_TIMERFD */
+
 #endif /* JSC_LINUX_EXT */

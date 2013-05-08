@@ -1,75 +1,87 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 module Sexp = Sexplib.Sexp
 open Sexplib.Std
 open Bin_prot.Std
 
 include Sexp
 
-type sexpable = t
-type stringable = t
+exception Of_sexp_error = Sexplib.Conv.Of_sexp_error
 
-include (struct
-  type t = Sexp.t = Atom of string | List of t list with bin_io
-  type binable = t
-  type sexpable = t
-end : Interfaces.Binable with type binable = t)
+module O = struct
+  type sexp = Sexp.t = Atom of string | List of t list
+end
+
+module T : sig
+  include Interfaces.Sexpable with type t := Sexp.t
+  include Interfaces.Binable  with type t := Sexp.t
+  val compare : t -> t -> int
+end = struct
+  type t = Sexp.t = Atom of string | List of t list with bin_io, compare
+
+  let sexp_of_t t = t
+  let t_of_sexp t = t
+end
+
+include T
 
 module Sexp_option = struct
-  type 'a sexp_option = 'a option with bin_io
+  type 'a t = 'a option with bin_io, compare
 end
 
 module Sexp_list = struct
-  type 'a sexp_list = 'a list with bin_io
+  type 'a t = 'a list with bin_io, compare
 end
 
 module Sexp_array = struct
-  type 'a sexp_array = 'a array with bin_io
+  type 'a t = 'a array with bin_io, compare
 end
 
 module Sexp_opaque = struct
-  type 'a sexp_opaque = 'a with bin_io
+  type 'a t = 'a with bin_io, compare
 end
 
 module Sexp_maybe = struct
 
-  type sexp = t with bin_io             (* avoid recursive type *)
-  type 'a t = ('a, sexp) Result.t with bin_io
+  type sexp = t with bin_io, compare             (* avoid recursive type *)
 
-  type 'a binable  = 'a t
-  type 'a sexpable = 'a t
+  (* to satisfy pa_compare *)
+  module Error = struct
+    include Error
+    include Comparable.Poly (Error)
+  end
+
+  type 'a t = ('a, sexp * Error.t) Result.t with bin_io, compare
 
   let sexp_of_t sexp_of_a t =
     match t with
     | Result.Ok a -> sexp_of_a a
-    | Result.Error sexp -> sexp
+    | Result.Error (sexp, err) ->
+      Sexp.List [
+        Sexp.Atom "sexp_parse_error";
+        sexp;
+        Error.sexp_of_t err;
+      ]
 
   let t_of_sexp a_of_sexp sexp =
-    try Result.Ok (a_of_sexp sexp)
-    with exn -> Result.Error (Exn.sexp_of_t exn)
+    match sexp with
+    | Sexp.List [ Sexp.Atom "sexp_parse_error"; sexp; _ ]
+    | sexp ->
+      try Result.Ok (a_of_sexp sexp)
+      with exn -> Result.Error (sexp, Error.of_exn exn)
 
 end
 
 let of_int_style = Int_conversions.sexp_of_int_style
+
+type 'a no_raise = 'a with bin_io, sexp
+
+let sexp_of_no_raise sexp_of_a a =
+  try sexp_of_a a
+  with exn ->
+    try List [ Atom "failure building sexp"; sexp_of_exn exn ]
+    with _ -> Atom "could not build sexp for exn raised when building sexp for value"
+;;
+
+include Comparable.Make (struct
+  type t = Sexp.t
+  include T
+end)

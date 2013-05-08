@@ -1,30 +1,5 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open OUnit;;
 open Core.Std
-open Array
 
 let rec forever f =
   f ();
@@ -39,28 +14,28 @@ let random_heap_and_list gen =
   List.iter ~f:(fun i -> ignore(Heap.push h i)) random_list;
   (h,random_list)
 
-let test = 
+let test =
   "heap" >:::
     begin
       let float_heap = Heap.of_array ~min_size:1 compare [| 0.; 1.; 2.; 3.; |] in
       let int_heap = Heap.of_array ~min_size:1 compare [| 0; 1; 2; 3; |] in
       let empty_heap = Heap.create compare in
-      let random_heap = 
-        Heap.of_array compare (Array.init 100 ~f:(fun _ -> Random.int 100)) 
+      let random_heap =
+        Heap.of_array compare (Array.init 100 ~f:(fun _ -> Random.int 100))
       in
-      [ "of_array" >:: 
+      [ "of_array" >::
           (fun () ->
              "floats" @? Heap.check_heap_property float_heap;
              "ints" @? Heap.check_heap_property int_heap;
           );
         "length" >::
-          (fun () -> 
+          (fun () ->
              "length=4" @? (Heap.length int_heap = 4);
           );
         "is_empty" >::
-          (fun () -> 
+          (fun () ->
              "yup" @? Heap.is_empty empty_heap;
-             "nope" @? not (Heap.is_empty float_heap) 
+             "nope" @? not (Heap.is_empty float_heap)
           );
         "copy" >::
           (fun () ->
@@ -112,7 +87,7 @@ let test =
              "nope" @? not (Heap.mem float_heap 0.5);
              "find" @?
                begin
-                 let heap_el = Heap.find_heap_el int_heap 2 in
+                 let heap_el = Heap.find_heap_el_exn int_heap 2 in
                  let el = Heap.heap_el_get_el heap_el in
                  2 = el
                end
@@ -145,7 +120,7 @@ let test =
           (fun () ->
              "all" @? (
                let int_heap = Heap.of_array ~min_size:1 compare [| 0; 1; 2; 3; 4; 5; 6 |] in
-               let heap_el = Heap.find_heap_el int_heap 1 in
+               let heap_el = Heap.find_heap_el_exn int_heap 1 in
                Heap.update heap_el 5;
                let _ = Heap.pop_exn int_heap in
                let x = Heap.pop_exn int_heap in

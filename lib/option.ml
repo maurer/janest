@@ -1,34 +1,7 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Sexplib.Std
 open Bin_prot.Std
 
-type 'a t = 'a option with sexp
-
-type 'a container = 'a t
-type 'a sexpable = 'a t
+type 'a t = 'a option with bin_io, sexp
 
 let is_none = function None -> true | _ -> false
 
@@ -65,16 +38,24 @@ let value t ~default =
   | Some x -> x
 ;;
 
-let value_exn t =
+let value_exn ?here ?error ?message t =
   match t with
   | Some x -> x
-  | None -> failwith "Option.value_exn None"
-;;
-
-let value_exn_message message t =
-  match t with
-  | Some x -> x
-  | None -> failwith message
+  | None ->
+    let error =
+      match here, error, message with
+      | None  , None  , None   -> Error.of_string "Option.value_exn None"
+      | None  , None  , Some m -> Error.of_string m
+      | None  , Some e, None   -> e
+      | None  , Some e, Some m -> Error.tag e m
+      | Some p, None  , None   ->
+        Error.create "Option.value_exn" p <:sexp_of< Source_code_position0.t >>
+      | Some p, None  , Some m -> Error.create m p <:sexp_of< Source_code_position0.t >>
+      | Some p, Some e, _      ->
+        Error.create (value message ~default:"") (e, p)
+          (<:sexp_of< Error.t * Source_code_position0.t >>)
+    in
+    Error.raise error
 ;;
 
 let to_array t =
@@ -101,6 +82,12 @@ let exists t ~f =
   | Some x -> f x
 ;;
 
+let mem ?(equal = (=)) t a =
+  match t with
+  | None -> false
+  | Some a' -> equal a a'
+;;
+
 let length t =
   match t with
   | None -> 0
@@ -115,10 +102,22 @@ let fold t ~init ~f =
   | Some x -> f init x
 ;;
 
+let count t ~f =
+  match t with
+  | None -> 0
+  | Some a -> if f a then 1 else 0
+;;
+
 let find t ~f =
   match t with
   | None -> None
   | Some x -> if f x then Some x else None
+;;
+
+let find_map t ~f =
+  match t with
+  | None -> None
+  | Some a -> f a
 ;;
 
 let equal f t t' =
@@ -133,6 +132,13 @@ let both x y =
   match x,y with
   | Some a, Some b -> Some (a,b)
   | _ -> None
+
+let first_some x y =
+  match x with
+  | Some _ -> x
+  | None -> y
+
+let some_if cond x = if cond then Some x else None
 
 let filter ~f = function
   | Some v as o when f v -> o
@@ -149,25 +155,18 @@ let try_with f =
   try Some (f ())
   with _ -> None
 
-include Monad.Make (struct
+include (Monad.Make (struct
   type 'a t = 'a option
   let return x = Some x
   let bind o f =
     match o with
     | None -> None
     | Some x -> f x
-  let failwith e = failwith e
-end)
+end) : Monad.S with type 'a t := 'a option)
 
-let container = {
-  Container.
-  length = length;
-  is_empty = is_empty;
-  iter = iter;
-  fold = fold;
-  exists = exists;
-  for_all = for_all;
-  find = find;
-  to_list = to_list;
-  to_array = to_array;
-}
+let validate ~none ~some t =
+  let module V = Validate in
+  match t with
+  | None   -> V.name "none" (V.protect none ())
+  | Some x -> V.name "some" (V.protect some x )
+;;

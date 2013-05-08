@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (* This module exploits the fact that OCaml does not perform context-switches
    under certain conditions.  It can therefore avoid using mutexes.
 
@@ -37,27 +13,45 @@
    disassemble the .o file (using objdump -dr) and examine it.
 *)
 
+module List = Core_list
+
 type 'a queue_end = 'a z option ref
-and 'a z = {
-  value : 'a;
-  next : 'a queue_end;
-}
+and 'a z =
+  { value : 'a;
+    next : 'a queue_end;
+  }
+
+let queue_end_to_list queue_end =
+  let rec loop queue_end ac =
+    match !queue_end with
+    | None -> List.rev ac
+    | Some z -> loop z.next (z.value :: ac)
+  in
+  loop queue_end []
+;;
 
 
+type 'a t =
+  { mutable front : 'a queue_end;
+    mutable back : 'a queue_end;
+    mutable length : int;
+  }
 
-type 'a t = {
-  mutable front : 'a queue_end;
-  mutable back : 'a queue_end;
-}
+let length t = t.length
+
+let to_list t = queue_end_to_list t.front
+
+let sexp_of_t sexp_of_a t = List.sexp_of_t sexp_of_a (to_list t)
 
 let create () =
   let queue_end = ref None in
-  { front = queue_end; back = queue_end }
+  { front = queue_end; back = queue_end; length = 0 }
 
 let enqueue t a =
   let next = ref None in
   let el = Some { value = a; next = next } in
   (* BEGIN ATOMIC SECTION *)
+  t.length <- t.length + 1;
   t.back := el;
   t.back <- next;
   (* END ATOMIC SECTION *)
@@ -69,8 +63,18 @@ let dequeue t =
   | None -> None
   | Some el ->
     t.front <- el.next;
+    t.length <- t.length - 1;
     (* END ATOMIC SECTION *)
     Some el.value
+;;
+
+let rec dequeue_until_empty t f =
+  match dequeue t with
+  | None -> ()
+  | Some x -> (
+    f x;
+    dequeue_until_empty t f
+  )
 ;;
 
 let create' () =

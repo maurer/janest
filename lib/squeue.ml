@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Std_internal
 
 module Mutex = Core_mutex
@@ -54,9 +30,6 @@ let create maxsize =
       Mutex.unlock mutex);
   }
 ;;
-
-let id () = Thread.id (Thread.self ())
-
 
 let wrap q run =
   Mutex.lock q.mutex;
@@ -149,9 +122,7 @@ let transfer_queue_in q in_q =
     wrap q run
   end
 
-
 let transfer_queue_nowait_nolock sq q = Queue.transfer ~src:sq.ev_q ~dst:q
-
 
 let transfer_queue_nowait sq q =
   if not (Queue.is_empty sq.ev_q) then begin

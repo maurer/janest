@@ -1,40 +1,12 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (* A few small things copied from other parts of core because
    they depend on us, so we can't use them. *)
 module Int = struct
   type t = int
 
   let max (x : t) y = if x > y then x else y
-  let min (x : t) y = if x < y then x else y
 end
 
-open Sexplib.Std
-
 let phys_equal = (==)
-
 
 (* Its important that Empty have no args. It's tempting to make this type
    a record (e.g. to hold the compare function), but a lot of memory is saved
@@ -45,7 +17,6 @@ type ('k, 'v) t =
 | Node of ('k, 'v) t * 'k * 'v * int * ('k, 'v) t
 | Leaf of 'k * 'v
 
-
 (* We do this 'crazy' magic because we want to remove a level of
    indirection in the tree. If we didn't do this, we'd need to use a
    record, and then the variant would be a block with a pointer to
@@ -55,35 +26,43 @@ type ('k, 'v) t =
    The extra checking is probably free, since the block will already
    be in L1 cache, and the branch predictor is very likely to
    predict correctly. *)
+module Update : sig
+  val leaf_val    : ('k, 'v) t -> 'v -> unit
+  val node_val    : ('k, 'v) t -> 'v -> unit
+  val node_left   : ('k, 'v) t -> ('k, 'v) t -> unit
+  val node_height : ('k, 'v) t -> int -> unit
+  val node_right  : ('k, 'v) t -> ('k, 'v) t -> unit
+end = struct
 
-let set_field (to_set: ('k, 'v) t) (n: int) v =
-  Obj.set_field (Obj.repr to_set) n (Obj.repr v)
+  let set_field (to_update: ('k, 'v) t) (n: int) v =
+    Obj.set_field (Obj.repr to_update) n (Obj.repr v)
 
-let update_left (to_update: ('k, 'v) t) v : unit =
-  match to_update with
-  | Node _ -> set_field to_update 0 v
-  | _ -> assert false
+  let node_left to_update v =
+    match to_update with
+    | Node _ -> set_field to_update 0 v
+    | _ -> assert false
 
-let update_leaf_val (to_update: ('k, 'v) t) v : unit =
-  match to_update with
-  | Leaf _ -> set_field to_update 1 v
-  | _ -> assert false
+  let leaf_val to_update v =
+    match to_update with
+    | Leaf _ -> set_field to_update 1 v
+    | _ -> assert false
 
-let update_val (to_update: ('k, 'v) t) v : unit =
-  match to_update with
-  | Node _ -> set_field to_update 2 v
-  | _ -> assert false
+  let node_val to_update v =
+    match to_update with
+    | Node _ -> set_field to_update 2 v
+    | _ -> assert false
 
+  let node_height to_update v =
+    match to_update with
+    | Node _ -> set_field to_update 3 v
+    | _ -> assert false
 
-let update_height (to_update: ('k, 'v) t) v : unit =
-  match to_update with
-  | Node _ -> set_field to_update 3 v
-  | _ -> assert false
+  let node_right to_update v =
+    match to_update with
+    | Node _ -> set_field to_update 4 v
+    | _ -> assert false
 
-let update_right (to_update: ('k, 'v) t) v : unit =
-  match to_update with
-  | Node _ -> set_field to_update 4 v
-  | _ -> assert false
+end
 
 let empty = Empty
 
@@ -141,12 +120,12 @@ let update_height n =
   match n with
   | Node (left, _, _, old_height, right) ->
     let new_height = (Int.max (height left) (height right)) + 1 in
-    if new_height <> old_height then update_height n new_height
+    if new_height <> old_height then Update.node_height n new_height
   | _ -> assert false
 
-let balanceable = function
+(*let balanceable = function
   | Empty | Leaf _ -> true
-  | Node(l, _, _, _, r) -> abs (height l - height r) <= 3
+  | Node(l, _, _, _, r) -> abs (height l - height r) <= 3*)
 
 (* @pre: left and right subtrees are balanced
    @pre: tree is balanceable
@@ -171,8 +150,8 @@ let balance tree =
       | Empty | Leaf _ -> assert false
       | Node (left_node_left, _, _, _, left_node_right) as left_node ->
         if height left_node_left >= height left_node_right then begin
-          update_left root_node left_node_right;
-          update_right left_node root_node;
+          Update.node_left root_node left_node_right;
+          Update.node_right left_node root_node;
           update_height root_node;
           update_height left_node;
           left_node
@@ -182,10 +161,10 @@ let balance tree =
           match left_node_right with
           | Empty | Leaf _ -> assert false
           | Node (lr_left, _, _, _, lr_right) as lr_node ->
-            update_right left_node lr_left;
-            update_left root_node lr_right;
-            update_right lr_node root_node;
-            update_left lr_node left_node;
+            Update.node_right left_node lr_left;
+            Update.node_left root_node lr_right;
+            Update.node_right lr_node root_node;
+            Update.node_left lr_node left_node;
             update_height left_node;
             update_height root_node;
             update_height lr_node;
@@ -197,8 +176,8 @@ let balance tree =
       | Empty | Leaf _ -> assert false
       | Node (right_node_left, _, _, _, right_node_right) as right_node ->
         if height right_node_right >= height right_node_left then begin
-          update_right root_node right_node_left;
-          update_left right_node root_node;
+          Update.node_right root_node right_node_left;
+          Update.node_left right_node root_node;
           update_height root_node;
           update_height right_node;
           right_node
@@ -207,10 +186,10 @@ let balance tree =
           match right_node_left with
           | Empty | Leaf _ -> assert false
           | Node (rl_left, _, _, _, rl_right) as rl_node ->
-            update_left right_node rl_right;
-            update_right root_node rl_left;
-            update_left rl_node root_node;
-            update_right rl_node right_node;
+            Update.node_left right_node rl_right;
+            Update.node_right root_node rl_left;
+            Update.node_left rl_node root_node;
+            Update.node_right rl_node right_node;
             update_height right_node;
             update_height root_node;
             update_height rl_node;
@@ -237,7 +216,7 @@ let set_left node tree =
   | Node (left, _, _, _, _) ->
     if phys_equal left tree then ()
     else
-      update_left node tree;
+      Update.node_left node tree;
     update_height node
   | _ -> assert false
 
@@ -251,7 +230,7 @@ let set_right node tree =
   | Node (_, _, _, _, right) ->
     if phys_equal right tree then ()
     else
-      update_right node tree;
+      Update.node_right node tree;
     update_height node
   | _ -> assert false
 
@@ -259,7 +238,7 @@ let set_right node tree =
    @post: result is balanced, with new node inserted
    @post: !added = true iff the shape of the input tree changed.  *)
 let add =
-  let rec add t added compare k v =
+  let rec add t replace added compare k v =
     match t with
     | Empty ->
       added := true;
@@ -271,7 +250,7 @@ let add =
          round, that way we only allocate one node. *)
       if c = 0 then begin
         added := false;
-        update_leaf_val t v;
+        if replace then Update.leaf_val t v;
         t
       end else begin
         added := true;
@@ -284,15 +263,35 @@ let add =
       let c = compare k k' in
       if c = 0 then begin
         added := false;
-        update_val t v;
+        if replace then Update.node_val t v;
       end else if c < 0 then
-          set_left t (add left added compare k v)
+          set_left t (add left replace added compare k v)
         else
-          set_right t (add right added compare k v);
+          set_right t (add right replace added compare k v);
       t
   in
-  fun t ~compare ~added ~key ~data -> balance (add t added compare key data)
+  fun ?(replace = true) t ~compare ~added ~key ~data ->
+    let replace = (replace :> bool) in
+    let t = add t replace added compare key data in
+    if !added then balance t else t
 ;;
+
+let rec first t =
+  match t with
+  | Empty -> None
+  | Leaf (k, v)
+  | Node (Empty, k, v, _, _) -> Some (k, v)
+  | Node (l, _, _, _, _) -> first l
+;;
+
+let rec last t =
+  match t with
+  | Empty -> None
+  | Leaf (k, v)
+  | Node (_, k, v, _, Empty) -> Some (k, v)
+  | Node (_, _, _, _, r) -> last r
+;;
+
 
 let rec find t ~compare k =
   (* A little manual unrolling of the recursion.
@@ -397,6 +396,16 @@ let rec fold t ~init ~f =
   match t with
   | Empty -> init
   | Leaf (key, data) -> f ~key ~data init
+  | Node (Leaf (lkey, ldata), key, data, _, Leaf (rkey, rdata)) ->
+    f ~key:rkey ~data:rdata (f ~key ~data (f ~key:lkey ~data:ldata init))
+  | Node (Leaf (lkey, ldata), key, data, _, Empty) ->
+    f ~key ~data (f ~key:lkey ~data:ldata init)
+  | Node (Empty, key, data, _, Leaf (rkey, rdata)) ->
+    f ~key:rkey ~data:rdata (f ~key ~data init)
+  | Node (left, key, data, _, Leaf (rkey, rdata)) ->
+    f ~key:rkey ~data:rdata (f ~key ~data (fold left ~init ~f))
+  | Node (Leaf (lkey, ldata), key, data, _, right) ->
+    fold right ~init:(f ~key ~data (f ~key:lkey ~data:ldata init)) ~f
   | Node (left, key, data, _, right) ->
     fold right ~init:(f ~key ~data (fold left ~init ~f)) ~f
 

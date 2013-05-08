@@ -1,34 +1,10 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open OUnit;;
 open Core.Std
 
 module F
   (M : sig
     type t
-    include Comparable.S with type comparable = t
+    include Comparable.S with type t := t
     val one : t
     val two : t
     val three : t
@@ -110,17 +86,17 @@ module String =
 module Span =
   F (struct
     include Time.Span
-    let one = Span.of_sec (-1.0)
+    let one = of_sec (-1.0)
     let two = zero
-    let three = Span.of_sec 1.0
+    let three = of_sec 1.0
   end)
 
 module Ofday =
   F (struct
     include Time.Ofday
-    let one = of_sec 1.
-    let two = of_sec 2.
-    let three = of_sec 3.
+    let one   = of_span_since_start_of_day (Time.Span.of_sec 1.)
+    let two   = of_span_since_start_of_day (Time.Span.of_sec 2.)
+    let three = of_span_since_start_of_day (Time.Span.of_sec 3.)
   end)
 
 module Date =
@@ -138,8 +114,8 @@ module Time =
   F (struct
     include Time
     let one = Time.now ()
-    let two = Time.add one (Time.Span.of_sec 1.)
-    let three = Time.add two (Time.Span.of_sec 1.)
+    let two = Time.add one (sec 1.)
+    let three = Time.add two (sec 1.)
   end)
 
 module Int32 =
@@ -168,7 +144,7 @@ module Nativeint =
 
 module Int' =
   F (struct
-    type t = int
+    type t = Int.t
     include Comparable.Make (Int)
     let one = 1
     let two = 2
@@ -177,9 +153,7 @@ module Int' =
 
 module Int'' =
   F (struct
-    type t = int
-    include
-      Comparable.Inherit (Int) (struct
+    include Comparable.Inherit (Int) (struct
         include Int
         let component x = x
       end)

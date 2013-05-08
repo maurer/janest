@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Jane.Std
 open Core_extended.Std
 open Core_experimental.Std
@@ -87,7 +63,7 @@ module Strings = struct
   }
 
   let create () =
-    let t = Array.create 1_000_000 "" in
+    let t = Array.create ~len:1_000_000 "" in
     (* This will always generate the same sequence of strings. This
        is important because we want test results to be reproducable *)
     let s = Random.make [|5|] in
@@ -289,7 +265,7 @@ module Make (Tbl : Test_intf) = struct
       { (Gc.get ()) with Gc.Control.
         max_overhead = 1_000_000; };
     let samples = Strings.create () in
-    if List.mem ~set:tests `insert_and_lookup then begin
+    if List.mem tests `insert_and_lookup then begin
       let (rs, tbl) = insert samples 1 1_000_000 in
       Printf.printf "insert,";
       Stats.print rs;
@@ -297,7 +273,7 @@ module Make (Tbl : Test_intf) = struct
       Printf.printf "lookup,";
       Stats.print rs;
     end;
-    if List.mem ~set:tests `insert_and_lookup_no_growth then begin
+    if List.mem tests `insert_and_lookup_no_growth then begin
       Printf.printf "insert no growth,";
       let (rs, tbl) = insert samples 1_000_000 1_000_000 in
       Stats.print rs;
@@ -305,15 +281,15 @@ module Make (Tbl : Test_intf) = struct
       let rs = lookup samples tbl in
       Stats.print rs
     end;
-    if List.mem ~set:tests `memory_overhead then begin
+    if List.mem tests `memory_overhead then begin
       Printf.printf "memory overhead,";
       Printf.printf "%f\n%!" (memory_overhead samples 1 10_000);
     end;
-    if List.mem ~set:tests `memory_overhead_no_growth then begin
+    if List.mem tests `memory_overhead_no_growth then begin
       Printf.printf "memory overhead,";
       Printf.printf "%f\n%!" (memory_overhead samples 10_000 10_000);
     end;
-    if List.mem ~set:tests `worst_case then begin
+    if List.mem tests `worst_case then begin
       Printf.printf "worst case insert,";
       let (rs, tbl) = worst_case_insert samples in
       Stats.print rs;

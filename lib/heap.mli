@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (** Min-heap implementation, adapted from CLR.  *)
 
 (** {6 Exceptions} *)
@@ -32,12 +8,11 @@ exception Empty
 (** {6 Types} *)
 
 
-
 (** Type of heaps *)
-type 'el t
+type 'el t with sexp_of
 
 (** Type of heap elements (they can be efficiently removed) *)
-type 'el heap_el
+type 'el heap_el with sexp_of
 
 (** {6 Functions on heap elements} *)
 
@@ -48,6 +23,10 @@ val heap_el_is_valid : 'el heap_el -> bool
 (** [heap_el_get_el heap_el] @return the element associated with the heap
     element. *)
 val heap_el_get_el : 'el heap_el -> 'el
+
+(** [heap_el_get_heap_exn heap_el] @return the heap that contains the element
+    @raise Failure if the element is not contained by some heap *)
+val heap_el_get_heap_exn : 'el heap_el -> 'el t
 
 (** {6 Information on heap values} *)
 
@@ -89,11 +68,11 @@ val mem : 'el t -> 'el -> bool
     [heap].  Requires constant time only. *)
 val heap_el_mem : 'el t -> 'el heap_el -> bool
 
-(** [find_heap_el heap el] @return the heap element associated with
+(** [find_heap_el_exn heap el] @return the heap element associated with
     element [el] in [heap].
 
     @raise Not_found if [el] could not be found. *)
-val find_heap_el : 'el t -> 'el -> 'el heap_el
+val find_heap_el_exn : 'el t -> 'el -> 'el heap_el
 
 (** {6 Non-destructive heap accessors} *)
 
@@ -115,7 +94,8 @@ val top_heap_el_exn : 'el t -> 'el heap_el
 
 (** [iter heap ~f] iterate over [heap] with function [f].  The elements
     are passed in an unspecified order. *)
-val iter : 'a t -> f:('a -> unit) -> unit
+val iter_el : 'a t -> f:('a heap_el -> unit) -> unit
+val iter    : 'a t -> f:('a         -> unit) -> unit
 
 (** {6 Destructive heap accessors} *)
 
@@ -166,3 +146,4 @@ val update : 'el heap_el -> 'el -> unit
 (** [check_heap_property h] asserts that [h] has the heap property: that all
     nodes are less than their children by [h]'s comparison function. *)
 val check_heap_property : 'el t -> bool
+

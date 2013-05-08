@@ -1,56 +1,61 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+(* This module provides support for daemonizing a process.  It provides flexibility
+   as to where the standard file descriptors (stdin, stdout and stderr) are connected
+   after daemonization has occurred.
+*)
 
-(** [daemonize ?(close_stdio = true) ?(cd = "/") ?umask=[0] ()] makes the current
-    executing process a daemon, and dups /dev/null to stdin/stdout/stderr if
-    close_stdio=true. See Chapter 13 of Advanced Programming in the UNIX Environment
-    Second Edition by Stephens and Rago for more details.
+module Fd_redirection : sig
+  type t = [
+  | `Dev_null
+  | `Do_not_redirect
+  | `File_append of string
+  | `File_truncate of string
+  ]
+end
+
+(** [daemonize] makes the executing process a daemon.
+
+    See Chapter 13 of Advanced Programming in the UNIX Environment Second Edition by
+    Stephens and Rago for more details.
+
+    The optional arguments have defaults as per [daemonize_wait], below.
+
+    By default, output sent to stdout and stderr after daemonization will be silently
+    eaten.  This behaviour may be adjusted by using [redirect_stdout] and
+    [redirect_stderr].  See the documentation for [daemonize_wait] below.
 
     @raise Failure if fork was unsuccessful.
 *)
-val daemonize :
-  ?close_stdio : bool
+val daemonize
+  :  ?redirect_stdout : Fd_redirection.t
+  -> ?redirect_stderr : Fd_redirection.t
   -> ?cd : string
   -> ?umask : int
   -> unit
   -> unit
 
-(** [daemonize_wait ?(cd = "/") ?(umask=0) ()] makes the executing process a
-    daemon, but delays full detachment from the calling shell/process until
-    the returned "release" closure is called.
+(** [daemonize_wait] makes the executing process a daemon, but delays full detachment
+    from the calling shell/process until the returned "release" closure is called.
 
     Any output to stdout/stderr before the "release" closure is called will get
-    sent out normally.  After "release" is called, /dev/null gets dup'd to
-    stdin/stdout/stderr.
+    sent out normally.  After "release" is called, stdin is connected to /dev/null,
+    and stdout and stderr are connected as specified by [redirect_stdout] and
+    [redirect_stderr].  The default is the usual behaviour whereby both of these
+    descriptors are connected to /dev/null.
 
-    If the process exits before the "release" closure is called, the exit code
-    will bubble up to the calling shell/process.
+    Note that calling [release] will adjust SIGPIPE handling, so you should not rely on
+    the delivery of this signal during this time.
 
-    Note that calling the release closure will adjust SIGPIPE
-    handling, so you should not rely on the delivery of this signal
-    during this time.
+    [daemonize_wait] allows you to daemonize and then start async, but still have
+    stdout/stderr go to the controlling terminal during startup.  By default, when you
+    [daemonize], toplevel exceptions during startup would get sent to /dev/null.  With
+    [daemonize_wait], toplevel exceptions can go to the terminal until you call [release].
 
     @raise Failure if fork was unsuccessful.
 *)
-val daemonize_wait : ?cd : string -> ?umask : int -> unit -> (unit -> unit)
+val daemonize_wait
+  :  ?redirect_stdout : Fd_redirection.t  (* default redirect to /dev/null *)
+  -> ?redirect_stderr : Fd_redirection.t  (* default redirect to /dev/null *)
+  -> ?cd : string  (* default / *)
+  -> ?umask : int  (* default zero *)
+  -> unit
+  -> (unit -> unit) Staged.t

@@ -1,37 +1,32 @@
-/******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************/
-
 #define _FILE_OFFSET_BITS 64
+
+/* For pread/pwrite */
+#define _XOPEN_SOURCE 500
 
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <netinet/in.h>
 #include <assert.h>
+#include <stdint.h>
 
-#ifdef __GLIBC__
+#ifdef __APPLE__
+#include <libkern/OSByteOrder.h>
+#define bswap_16 OSSwapInt16
+#define bswap_32 OSSwapInt32
+#define bswap_64 OSSwapInt64
+#elif __GLIBC__
+#include <byteswap.h>
 #include <malloc.h>
+#else
+#include <sys/types.h>
+#include <sys/endian.h>
+#define __BYTE_ORDER    _BYTE_ORDER
+#define __LITTLE_ENDIAN _LITTLE_ENDIAN
+#define __BIG_ENDIAN    _BIG_ENDIAN
+#define bswap_16 bswap16
+#define bswap_32 bswap32
+#define bswap_64 bswap64
 #endif
 
 #include "ocaml_utils.h"
@@ -63,6 +58,34 @@ CAMLprim value bigstring_init_stub(value __unused v_unit)
   return Val_unit;
 }
 
+CAMLexport value
+bigstring_alloc (value v_gc_max_unused, value v_size)
+{
+  intnat size = Long_val (v_size);
+  void * data = NULL;
+  int flags = CAML_BA_UINT8 | CAML_BA_C_LAYOUT | CAML_BA_MANAGED;
+  intnat gc_max_unused = Long_val(v_gc_max_unused);
+  intnat dims[1];
+  dims[0] = size;
+
+  if (gc_max_unused >= 0) {
+    data = (void *) malloc(sizeof(char) * size);
+    if (NULL == data) caml_raise_out_of_memory ();
+    /* caml_adjust_gc_speed is also called by caml_ba_alloc below, but it will have
+    * numerator 0 when data != NULL. Effectively, that call will have no effect if this
+    * call is made. */
+    caml_adjust_gc_speed(size, gc_max_unused);
+  }
+
+  return caml_ba_alloc (flags, 1, data, dims);
+}
+
+/* Bigstring.length */
+CAMLprim value bigstring_length (value vb)
+{
+  struct caml_ba_array * b = Caml_ba_array_val(vb);
+  return Val_long(b->dim[0]);
+}
 
 /* Blitting */
 
@@ -212,6 +235,17 @@ CAMLprim value bigstring_read_assume_fd_is_nonblocking_stub(
   return Val_long(n_read);
 }
 
+CAMLprim value bigstring_pread_assume_fd_is_nonblocking_stub(
+    value v_fd, value v_offset, value v_pos, value v_len, value v_bstr)
+{
+  char *bstr = get_bstr(v_bstr, v_pos);
+  size_t len = Long_val(v_len);
+  ssize_t n_read;
+
+  n_read = pread(Int_val(v_fd), bstr, len, Long_val(v_offset));
+  if (n_read == -1) uerror("bigstring_pread_assume_fd_is_nonblocking_stub", Nothing);
+  return Val_long(n_read);
+}
 
 /* Input of bigstrings from sockets */
 
@@ -277,8 +311,7 @@ CAMLprim value bigstring_recvfrom_assume_fd_is_nonblocking_stub(
 
 typedef off_t file_offset;
 
-#define IO_BUFFER_SIZE 4096
-
+#define IO_BUFFER_SIZE 65536
 
 struct channel {
   int fd;                       /* Unix file descriptor */
@@ -537,6 +570,18 @@ CAMLprim value bigstring_write_stub(
   CAMLreturn(Val_long(written));
 }
 
+CAMLprim value bigstring_pwrite_assume_fd_is_nonblocking_stub(
+  value v_fd, value v_offset, value v_pos, value v_len, value v_bstr)
+{
+  char *bstr = get_bstr(v_bstr, v_pos);
+  size_t len = Long_val(v_len);
+  ssize_t written;
+
+  written = pwrite(Int_val(v_fd), bstr, len, Long_val(v_offset));
+  if (written == -1) uerror("bigstring_pwrite_assume_fd_is_nonblocking_stub", Nothing);
+  return Val_long(written);
+}
+
 CAMLprim value bigstring_write_assume_fd_is_nonblocking_stub(
   value v_fd, value v_pos, value v_len, value v_bstr)
 {
@@ -720,4 +765,101 @@ CAMLprim value bigstring_destroy_stub(value v_bstr)
   b->flags = CAML_BA_EXTERNAL;
   for (i = 0; i < b->num_dims; ++i) b->dim[i] = 0;
   return Val_unit;
+}
+
+/* Accessors for int{16|32|64} types */
+
+#define unsafe_stdint_get(TYPE,SWAP,TOVAL) \
+  CAMLprim value unsafe_read_##TYPE(value v_a, value v_i) {                 \
+    TYPE n;                                                                 \
+    char *bstr = get_bstr(v_a, v_i);                                        \
+    memcpy( &n, bstr, sizeof(TYPE) );                                       \
+    return TOVAL( n );                                                      \
+  }                                                                         \
+                                                                            \
+  CAMLprim value unsafe_read_##TYPE##_swap(value v_a, value v_i) {          \
+    TYPE n;                                                                 \
+    char *bstr = get_bstr(v_a, v_i);                                        \
+    memcpy( &n, bstr, sizeof(TYPE) );                                       \
+    return TOVAL( (TYPE) SWAP( n ) );                                       \
+  }                                                                         \
+
+#define unsafe_stdint_set(TYPE,SWAP,FROMVAL) \
+  CAMLprim value unsafe_write_##TYPE(value v_a, value v_i, value v_x) {     \
+    char *bstr = get_bstr(v_a, v_i);                                        \
+    TYPE n = (TYPE) FROMVAL(v_x);                                           \
+    memcpy( bstr, &n, sizeof(TYPE) );                                       \
+    return Val_unit;                                                        \
+  }                                                                         \
+                                                                            \
+  CAMLprim value unsafe_write_##TYPE##_swap(value v_a, value v_i, value v_x) {\
+    char *bstr = get_bstr(v_a, v_i);                                        \
+    TYPE n = (TYPE) SWAP(FROMVAL(v_x));                                     \
+    memcpy( bstr, &n, sizeof(TYPE) );                                       \
+    return Val_unit;                                                        \
+  }                                                                         \
+
+unsafe_stdint_get(int16_t,  bswap_16, Val_int)
+unsafe_stdint_set(int16_t,  bswap_16, Int_val)
+unsafe_stdint_get(uint16_t, bswap_16, Val_int)
+unsafe_stdint_set(uint16_t, bswap_16, Int_val)
+
+/* Methods for full precision 32 and 64 bit types */
+/* These may involve ocaml allocation/blocks      */
+unsafe_stdint_set(int32,  bswap_32, Int32_val)
+unsafe_stdint_get(int32,  bswap_32, caml_copy_int32)
+unsafe_stdint_set(int64,  bswap_64, Int64_val)
+unsafe_stdint_get(int64,  bswap_64, caml_copy_int64)
+
+/* No concerns over precision with set methods coming from ocaml */
+unsafe_stdint_set(int32_t,  bswap_32, Long_val)
+unsafe_stdint_set(int64_t,  bswap_64, Long_val)
+
+#ifdef ARCH_SIXTYFOUR
+/* No potential for precision problems with 63-bit ints */
+unsafe_stdint_get(int32_t,  bswap_32, Val_long)
+
+#else
+CAMLprim value unsafe_read_int32_t(value v_a, value v_i) {
+  int32_t result;
+  char *bstr = get_bstr(v_a, v_i);
+  memcpy( &result, bstr, sizeof(int32_t) );
+  if ( result > Max_long || result < Min_long )
+      caml_failwith("unsafe_read_int32_t: value cannot be represented unboxed!");
+
+  return Val_int( result );
+}
+
+CAMLprim value unsafe_read_int32_t_swap(value v_a, value v_i) {
+  int32_t result;
+  char *bstr = get_bstr(v_a, v_i);
+  memcpy( &result, bstr, sizeof(int32_t) );
+  result = bswap_32( result );
+  if ( result > Max_long || result < Min_long )
+      caml_failwith("unsafe_read_int32_t: value cannot be represented unboxed!");
+
+  return Val_int( result );
+}
+#endif
+
+CAMLprim value unsafe_read_int64_t(value v_a, value v_i) {
+  int64_t result;
+  char *bstr = get_bstr(v_a, v_i);
+  memcpy( &result, bstr, sizeof(int64_t) );
+  if ( result > Max_long || result < Min_long )
+      caml_failwith("unsafe_read_int64_t: value cannot be represented unboxed!");
+
+  return Val_long( result );
+}
+
+
+CAMLprim value unsafe_read_int64_t_swap(value v_a, value v_i) {
+  int64_t result;
+  char *bstr = get_bstr(v_a, v_i);
+  memcpy( &result, bstr, sizeof(int64_t) );
+  result = bswap_64( result );
+  if ( result > Max_long || result < Min_long )
+      caml_failwith("unsafe_read_int64_t: value cannot be represented unboxed!");
+
+  return Val_long( result );
 }

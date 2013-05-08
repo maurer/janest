@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open OUnit;;
 open Core.Std
 open Array
@@ -85,10 +61,10 @@ let test =
         (fun () ->
            let list = Quickcheck.lg (fun () -> Random.int 1000) ~size_gen:(fun _ -> 1000) () in
            let array = Array.of_list list in
-           "list1" @? (List.mem 1 ~set:list = Array.mem 1 array);
-           "list2" @? (List.mem 2 ~set:list = Array.mem 2 array);
-           "list3" @? (List.mem 3 ~set:list = Array.mem 3 array);
-           "list4" @? (List.mem 4 ~set:list = Array.mem 4 array);
+           "list1" @? (List.mem list 1 = Array.mem array 1);
+           "list2" @? (List.mem list 2 = Array.mem array 2);
+           "list3" @? (List.mem list 3 = Array.mem array 3);
+           "list4" @? (List.mem list 4 = Array.mem array 4);
         );
       "rev" >::
         (fun () ->

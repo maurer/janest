@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 let const c = (); fun _ -> c
 
 external ignore : _ -> unit = "%ignore" (* this has the same behavior as [Pervasives.ignore] *)
@@ -38,10 +14,24 @@ let forever f =
 
 external id : 'a -> 'a = "%identity"
 
-let ( |! ) x y = y x
+external ( |! ) : 'a -> ( 'a -> 'b) -> 'b = "%revapply"
+external ( |> ) : 'a -> ( 'a -> 'b) -> 'b = "%revapply"
+
+TEST = 1 |> fun x -> x = 1
+TEST = 1 |> fun x -> x + 1 |> fun y -> y = 2
 
 (* The typical use case for these functions is to pass in functional arguments and get
    functions as a result. For this reason, we tell the compiler where to insert
    breakpoints in the argument-passing scheme. *)
 let compose f g = (); fun x -> f (g x)
+
 let flip f = (); fun x y -> f y x
+
+let rec apply_n_times ~n f x =
+  if n <= 0
+  then x
+  else apply_n_times ~n:(n - 1) f (f x)
+
+TEST = 0  = apply_n_times ~n:0 (fun _ -> assert false) 0
+TEST = 0  = apply_n_times ~n:(-3) (fun _ -> assert false) 0
+TEST = 10 = apply_n_times ~n:10 ((+) 1) 0

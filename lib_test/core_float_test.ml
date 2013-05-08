@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Core.Std
 open OUnit
 
@@ -37,56 +13,56 @@ let round_test x =
   let y = Float.round x in
   -0.5 < y -. x && y -. x <= 0.5
 
-(* Float.iround built so this should always be true *)
-let iround_test x =
-  let y = Float.iround x in
+(* Float.iround ~dir:`Nearest built so this should always be true *)
+let iround_nearest_test x =
+  let y = Float.iround ~dir:`Nearest x in
   match y with
   | None -> true
   | Some y ->
-    let y = float_of_int y in
+    let y = Float.of_int y in
     -0.5 < y -. x && y -. x <= 0.5
 
-(* round_down:
+(* iround_down:
    ... )[<---)[<---)[<---)[<---)[<---)[<---)[  ...
    ... -+-----+-----+-----+-----+-----+-----+- ...
    ... -3    -2    -1     0     1     2     3  ...
-   so x -. round_down x should be in [0,1)
+   so x -. iround_down x should be in [0,1)
 *)
-let round_down_test x =
-  let y = Float.round_down x in
+let iround_down_test x =
+  let y = Float.iround ~dir:`Down x in
   match y with
   | None -> true
   | Some y ->
-    let y = float_of_int y in
+    let y = Float.of_int y in
     0. <= x -. y && x -. y < 1.
 
-(* round_up:
+(* iround_up:
    ...  ](--->](--->](--->](--->](--->](--->]( ...
    ... -+-----+-----+-----+-----+-----+-----+- ...
    ... -3    -2    -1     0     1     2     3  ...
-   so round_up x -. x should be in [0,1)
+   so iround_up x -. x should be in [0,1)
 *)
-let round_up_test x =
-  let y = Float.round_up x in
+let iround_up_test x =
+  let y = Float.iround ~dir:`Up x in
   match y with
   | None -> true
   | Some y ->
-    let y = float_of_int y in
+    let y = Float.of_int y in
     0. <= y -. x && y -. x < 1.
 
-(* round_towards_zero:
+(* iround_towards_zero:
    ...  ](--->](--->](---><--->)[<---)[<---)[  ...
    ... -+-----+-----+-----+-----+-----+-----+- ...
    ... -3    -2    -1     0     1     2     3  ...
-   so abs x -. abs (round_towards_zero x) should be in [0,1)
+   so abs x -. abs (iround_towards_zero x) should be in [0,1)
 *)
-let round_towards_zero_test x =
-  let y = Float.round_towards_zero x in
+let iround_towards_zero_test x =
+  let y = Float.iround ~dir:`Zero x in
   match y with
   | None -> true
   | Some y ->
     let x = Float.abs x in
-    let y = Float.abs (float_of_int y) in
+    let y = Float.abs (Float.of_int y) in
     0. <= x -. y && x -. y < 1.
 
 let special_values_test () =
@@ -98,30 +74,30 @@ let special_values_test () =
   Float.round 0.5 = 1. &&
   Float.round 1.49999 = 1. &&
   Float.round 1.5 = 2. &&
-  Float.round_up_exn (-.2.) = -2 &&
-  Float.round_up_exn (-.1.9999) = -1 &&
-  Float.round_up_exn (-.1.) = -1 &&
-  Float.round_up_exn (-.0.9999) = 0 &&
-  Float.round_up_exn 0. = 0 &&
-  Float.round_up_exn 0.00001 = 1 &&
-  Float.round_up_exn 1. = 1 &&
-  Float.round_up_exn 1.00001 = 2 &&
-  Float.round_down_exn (-.1.00001) = -2 &&
-  Float.round_down_exn (-.1.) = -1 &&
-  Float.round_down_exn (-.0.00001) = -1 &&
-  Float.round_down_exn 0. = 0 &&
-  Float.round_down_exn 0.99999 = 0 &&
-  Float.round_down_exn 1. = 1 &&
-  Float.round_down_exn 1.99999 = 1 &&
-  Float.round_down_exn 2. = 2 &&
-  Float.round_towards_zero_exn (-.2.) = -2 &&
-  Float.round_towards_zero_exn (-.1.99999) = -1 &&
-  Float.round_towards_zero_exn (-.1.) = -1 &&
-  Float.round_towards_zero_exn (-.0.99999) = 0 &&
-  Float.round_towards_zero_exn 0.99999 = 0 &&
-  Float.round_towards_zero_exn 1. = 1 &&
-  Float.round_towards_zero_exn 1.99999 = 1 &&
-  Float.round_towards_zero_exn 2. = 2
+  Float.iround_exn ~dir:`Up (-.2.) = -2 &&
+  Float.iround_exn ~dir:`Up (-.1.9999) = -1 &&
+  Float.iround_exn ~dir:`Up (-.1.) = -1 &&
+  Float.iround_exn ~dir:`Up (-.0.9999) = 0 &&
+  Float.iround_exn ~dir:`Up 0. = 0 &&
+  Float.iround_exn ~dir:`Up 0.00001 = 1 &&
+  Float.iround_exn ~dir:`Up 1. = 1 &&
+  Float.iround_exn ~dir:`Up 1.00001 = 2 &&
+  Float.iround_exn ~dir:`Down (-.1.00001) = -2 &&
+  Float.iround_exn ~dir:`Down (-.1.) = -1 &&
+  Float.iround_exn ~dir:`Down (-.0.00001) = -1 &&
+  Float.iround_exn ~dir:`Down 0. = 0 &&
+  Float.iround_exn ~dir:`Down 0.99999 = 0 &&
+  Float.iround_exn ~dir:`Down 1. = 1 &&
+  Float.iround_exn ~dir:`Down 1.99999 = 1 &&
+  Float.iround_exn ~dir:`Down 2. = 2 &&
+  Float.iround_exn ~dir:`Zero (-.2.) = -2 &&
+  Float.iround_exn ~dir:`Zero (-.1.99999) = -1 &&
+  Float.iround_exn ~dir:`Zero (-.1.) = -1 &&
+  Float.iround_exn ~dir:`Zero (-.0.99999) = 0 &&
+  Float.iround_exn ~dir:`Zero 0.99999 = 0 &&
+  Float.iround_exn ~dir:`Zero 1. = 1 &&
+  Float.iround_exn ~dir:`Zero 1.99999 = 1 &&
+  Float.iround_exn ~dir:`Zero 2. = 2
 
 (* code for generating random floats on which to test functions *)
 let absirand () =
@@ -134,7 +110,7 @@ let absirand () =
   in
   (* we only go to 2. ** 52. -. 1. since our various round functions lose precision after
      this and our tests may (and do) fail when precision is lost *)
-  aux 0 (int_of_float (2. ** 52. -. 1.))
+  aux 0 (Float.to_int (2. ** 52. -. 1.))
 
 let frand () =
   let x = (float (absirand ())) +. Random.float 1.0 in
@@ -148,14 +124,14 @@ let test =
   "core_float" >:::
     [ "to_string_hum" >::
         (fun () ->
-          "random iround" @? (randoms |! List.for_all ~f:iround_test);
-          "max_int iround" @? iround_test (float_of_int max_int);
-          "min_int iround" @? iround_test (float_of_int min_int);
+          "random iround_nearest" @? (randoms |! List.for_all ~f:iround_nearest_test);
+          "max_int iround_nearest" @? iround_nearest_test (Float.of_int Int.max_value);
+          "min_int iround_nearest" @? iround_nearest_test (Float.of_int Int.min_value);
           "random round" @? (randoms |! List.for_all ~f:round_test);
-          "random round_towards_zero_exn" @?
-            (randoms |! List.for_all ~f:round_towards_zero_test);
-          "random round_down_exn" @? (randoms |! List.for_all ~f:round_down_test);
-          "random round_up_exn" @? (randoms |! List.for_all ~f:round_up_test);
+          "random iround_towards_zero_exn" @?
+            (randoms |! List.for_all ~f:iround_towards_zero_test);
+          "random iround_down_exn" @? (randoms |! List.for_all ~f:iround_down_test);
+          "random iround_up_exn" @? (randoms |! List.for_all ~f:iround_up_test);
           "special values" @? special_values_test ();
         )
     ]

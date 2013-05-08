@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 module String = Core_string
 module List = Core_list
 open Core_printf
@@ -80,7 +56,7 @@ let string_rexists s ~f ~from:n =
   in
   loop n
 
-let rec skip_end_slashes s ~from =
+let skip_end_slashes s ~from =
   match string_rexists s ~from ~f:(fun c -> c <> '/') with
   | Some v -> `Ends_at v
   | None   -> `All_slashes
@@ -141,11 +117,8 @@ let retry ?(in_dir=temp_dir_name) ~f prefix suffix =
   let suffix = escape suffix in
   let rec try_name counter =
     let name =
-      if counter = 0 then
-        prefix ^ suffix
-      else
-        let rnd = Random.State.bits prng land 0xFF_FFFF in
-        (Printf.sprintf "%s%06x%s" prefix rnd suffix)
+      let rnd = Random.State.bits prng land 0xFF_FFFF in
+      (Printf.sprintf "%s%06x%s" prefix rnd suffix)
     in
     let name = concat in_dir name in
     try
@@ -179,7 +152,53 @@ let temp_file ?perm ?in_dir prefix suffix =
 let root = "/"
 
 let split_extension fn =
-  match String.rsplit2 ~on:'.' fn with
-  | None -> (fn, None)
-  | Some (base_fn, ext) -> (base_fn, Some ext)
+  let dir, fn =
+    match String.rsplit2 ~on:'/' fn with
+    | None -> (None, fn)
+    | Some (path, fn) -> (Some path, fn)
+  in
+  let fn, ext =
+    match String.rsplit2 ~on:'.' fn with
+    | None -> (fn, None)
+    | Some (base_fn, ext) -> (base_fn, Some ext)
+  in
+  let fn =
+    match dir with
+    | None -> fn
+    | Some dir -> dir ^ "/" ^ fn
+  in
+  (fn, ext)
 
+TEST = split_extension "/foo/my_file"       = ("/foo/my_file", None)
+TEST = split_extension "/foo/my_file.txt"   = ("/foo/my_file", Some "txt")
+TEST = split_extension "/foo/my_file.1.txt" = ("/foo/my_file.1", Some "txt")
+TEST = split_extension "/home/c.falls/my_file"       = ("/home/c.falls/my_file", None)
+TEST = split_extension "/home/c.falls/my_file.txt"   = ("/home/c.falls/my_file", Some "txt")
+TEST = split_extension "/home/c.falls/my_file.1.txt" = ("/home/c.falls/my_file.1", Some "txt")
+TEST = split_extension "my_file"       = ("my_file", None)
+TEST = split_extension "my_file.txt"   = ("my_file", Some "txt")
+TEST = split_extension "my_file.1.txt" = ("my_file.1", Some "txt")
+TEST = split_extension "/my_file"       = ("/my_file", None)
+TEST = split_extension "/my_file.txt"   = ("/my_file", Some "txt")
+TEST = split_extension "/my_file.1.txt" = ("/my_file.1", Some "txt")
+
+let parts filename =
+  let rec loop acc filename =
+    match split filename with
+    | "." as base, "." -> base :: acc
+    | "/" as base, "/" -> base :: acc
+    | rest, dir ->
+      loop (dir :: acc) rest
+  in
+  loop [] filename
+
+TEST = parts "/tmp/foo/bar/baz" = ["/"; "tmp"; "foo"; "bar"; "baz" ]
+TEST = parts "/tmp/foo/bar/baz/" = ["/"; "tmp"; "foo"; "bar"; "baz" ]
+TEST = parts "" = ["."]
+TEST = parts "." = ["."]
+TEST = parts "./" = ["."]
+TEST = parts "/" = ["/"]
+TEST = parts "foo" = ["."; "foo"]
+TEST = parts "./foo" = ["."; "foo"]
+TEST = parts "./foo/" = ["."; "foo"]
+TEST = parts "./foo/." = ["."; "foo"; "."]

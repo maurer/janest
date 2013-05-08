@@ -1,62 +1,24 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
-(** Our time module.  This module wraps up unix times, including various
-    convenience functions for accessing them.
-*)
-open Common
+(** A module for representing absolute points in time, independent of time zone. *)
 open Std_internal
 
-(** A discrete point in time in the universe; not a time in some timezone. *)
-type t = Time_internal.T.t
+(** A fully qualified point in time, independent of timezone. *)
+type t = Time_internal.T.t with bin_io, sexp
 
-(** If this is ever called then all future calls to to_string and sexp_of_t will produce a
-    new format sexp/string that includes enough offset information to reproduce the
-    correct Time.t when of_string/t_of_sexp is called, even if they are called on a
-    machine with a different timezone than the writing machine.  This should never be
-    called in a library, and should only be called in application code. *)
-val use_new_string_and_sexp_formats : unit -> unit
+include Hashable_binable    with type t := t
+include Comparable_binable  with type t := t
+include Robustly_comparable with type t := t
+include Floatable           with type t := t
+include Pretty_printer.S    with type t := t
 
-(** If this is called it asserts that use_new_string_and_sexp_formats has not been called,
-    and will cause use_new_string_and_sexp_formats to throw an exception if it is called
-    later *)
-val forbid_new_string_and_sexp_formats : unit -> unit
-
-val current_string_and_sexp_format : unit -> [ `Old | `Force_old | `New ]
-
-include Hashable_binable with type hashable = t
-include Comparable_binable with type comparable = t
-include Robustly_comparable with type robustly_comparable = t
-include Sexpable with type sexpable = t
-include Binable with type binable = t
-include Stringable with type stringable = t
-include Floatable with type floatable = t (* seconds since the epoch *)
+(** The [{to,of}_string] functions in [Time] will produce times with time zone
+    indications, but are generous in what they will read in.  String/Sexp.t
+    representations without time zone indications are assumed to be in the machine's local
+    zone. *)
+include Stringable          with type t := t
 
 (** {5 values} *)
 
 (* midnight, Jan 1, 1970 in UTC *)
-
 val epoch : t
 
 (** {6 Basic operations on times} *)
@@ -97,20 +59,27 @@ val to_local_date_ofday : t -> Date.t * Ofday.t
 val to_local_date       : t -> Date.t
 val to_local_ofday      : t -> Ofday.t
 
-val convert :
-  from_tz:Zone.t
+val convert
+  :  from_tz:Zone.t
   -> to_tz:Zone.t
   -> Date.t
   -> Ofday.t
   -> (Date.t * Ofday.t)
 
+val utc_offset :
+  ?zone:Zone.t
+  -> t
+  -> Span.t
+
 (** Other string conversions  *)
+
 (** [to_filename_string t] converts [t] to string with format YYYY-MM-DD_HH-MM-SS.mmm
     which is suitable for using in filenames *)
 val to_filename_string : t -> string
-(** [of_filename_string s] converts [s] that has format YYYY-MM-DD_HH-MM-SS.mmm into time *)
-val of_filename_string : string -> t
 
+(** [of_filename_string s] converts [s] that has format YYYY-MM-DD_HH-MM-SS.mmm into
+    time *)
+val of_filename_string : string -> t
 
 val to_string_fix_proto : [`Utc | `Local] -> t -> string
 val of_string_fix_proto : [`Utc | `Local] -> string -> t
@@ -133,16 +102,25 @@ val of_localized_string : Zone.t -> string -> t
 (** [to_string_deprecated] returns a string in the old format *)
 val to_string_deprecated : t -> string
 
-(** [to_string_abs t] returns a string that represents an absolute time, rather than a
-    local time with an assumed time zone.  This string can be round-tripped, even on a
-    machine in a different time zone than the machine that wrote the string. *)
-val to_string_abs : t -> string
+(** [to_string_abs ?zone t] returns a string that represents an absolute time, rather than
+    a local time with an assumed time zone.  This string can be round-tripped, even on a
+    machine in a different time zone than the machine that wrote the string.
 
+    The string will display the date and of-day of [zone] together with [zone] as an
+    offset from UTC.  The [zone] argument defaults to the machine's timezone.
+*)
+val to_string_abs
+  :  ?zone:Zone.t
+  -> t
+  -> string
 
-val of_date_time_strings     : string -> string -> t
-val of_date_time_strings_utc : string -> string -> t
+(** [of_string_abs s] is like [of_string], but demands that [s] indicate the timezone the
+    time is expressed in. *)
+val of_string_abs : string -> t
 
-val pp : Format.formatter -> t -> unit
+(** [t_of_sexp_abs sexp] as [t_of_sexp], but demands that [sexp] indicate the timezone the
+    time is expressed in. *)
+val t_of_sexp_abs : Sexp.t -> t
 
 (** {6 Miscellaneous} *)
 
@@ -159,19 +137,19 @@ val interruptible_pause : Span.t -> [`Ok | `Remaining of Span.t]
 (** [pause_forever] sleeps indefinitely. *)
 val pause_forever : unit -> never_returns
 
+(** [occurrence side time ~ofday ~zone] returns a [Time.t] that is the occurrence of ofday
+    (in the given [zone]) that is the latest occurrence (<=) [time] or the earliest
+    occurrence (>=) [time], according to [side].
 
-
-(** [ ofday_occurrence ofday side now ] returns a Time.t that is the occurrence of ofday
-    (in local time) which is the latest occurrence before now or the earliest occurrence
-    after now, according to side.  NOTE: This function is a little bit wrong near daylight
-    savings time *)
-val ofday_occurrence : Ofday.t -> [ `right_after | `right_before ] -> t -> t
-
-(** [ofday_occurrence ofday side now] returns a Time.t that is the occurrence of ofday
-    (in UTC) which is the latest occurrence before now or the earliest occurrence after
-    now, according to side.  NOTE: This function is a little bit wrong near daylight
-    savings time *)
-val ofday_occurrence_utc : Ofday.t -> [ `right_after | `right_before ] -> t -> t
+    NOTE: If the given time converted to wall clock time in the given zone is equal to
+    ofday then the t returned will be equal to the t given.
+*)
+val occurrence
+  :  [ `First_after_or_at | `Last_before_or_at ]
+  -> t
+  -> ofday:Ofday.t
+  -> zone:Zone.t
+  -> t
 
 (** [format t fmt] formats the given time according to fmt, which follows the formatting
     rules given in 'man strftime'.  The time is output in the local timezone. *)
@@ -180,4 +158,16 @@ val format : t -> string -> string
 (** [to_epoch t] returns the number of seconds since Jan 1, 1970 00:00:00 in UTC *)
 val to_epoch : t -> float
 
+(* [next_multiple ~base ~after ~interval] returns the smallest [time] of the form:
 
+   time = base + k * interval
+
+   where [k >= 0] and [time > after].  It is an error if [interval <= 0].
+*)
+val next_multiple : base:t -> after:t -> interval:Span.t -> t
+
+module Stable : sig
+  module V1 : sig
+    type t with bin_io, sexp, compare
+  end with type t = t
+end

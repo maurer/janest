@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open OUnit;;
 open Core.Std
 
@@ -63,6 +39,18 @@ let test =
          | Some _, None -> true
          | _ -> false
         );
+      "add" >:: (fun () ->
+        "no_exception" @?
+        let our_hash = Hashtbl.copy test_hash in
+        let duplicate = Hashtbl.add our_hash ~key:"a" ~data:4 in
+        let no_duplicate = Hashtbl.add our_hash ~key:"d" ~data:5 in
+        assert (Hashtbl.find our_hash "a" = Some 1);
+        assert (Hashtbl.find our_hash "d" = Some 5);
+        Hashtbl.invariant our_hash;
+        match duplicate, no_duplicate with
+        | `Duplicate, `Ok -> true
+        | _ -> false
+      );
       "iter_vals" >::
         (fun () ->
           let predicted = List.sort ~cmp:Int.descending (
@@ -71,8 +59,8 @@ let test =
           let found = ref [] in
           Hashtbl.iter_vals test_hash ~f:(fun v -> found := v :: !found);
           (sprintf "all_vals: Expected: %s\nFound: %s"
-             (List.to_string Int.to_string predicted)
-             (List.to_string Int.to_string !found))
+             (List.to_string ~f:Int.to_string predicted)
+             (List.to_string ~f:Int.to_string !found))
           @? ( !found = predicted )
         );
       "of_alist" >::
@@ -84,8 +72,8 @@ let test =
           "right keys" @?
             (let predicted = List.map test_data ~f:(fun (k,_) -> k) in
              let found = Hashtbl.keys (Hashtbl.Poly.of_alist_exn test_data) in
-             let sp = List.sort ~cmp:ascending predicted in
-             let sf = List.sort ~cmp:ascending found in
+             let sp = List.sort ~cmp:Polymorphic_compare.ascending predicted in
+             let sf = List.sort ~cmp:Polymorphic_compare.ascending found in
              sp = sf)
         );
       "keys" >::
@@ -93,8 +81,8 @@ let test =
           "size and right keys" @?
             (let predicted = List.map test_data ~f:(fun (k,_) -> k) in
              let found = Hashtbl.keys test_hash in
-             let sp = List.sort ~cmp:ascending predicted in
-             let sf = List.sort ~cmp:ascending found in
+             let sp = List.sort ~cmp:Polymorphic_compare.ascending predicted in
+             let sf = List.sort ~cmp:Polymorphic_compare.ascending found in
              sp = sf)
         );
       "data" >::
@@ -102,18 +90,18 @@ let test =
           "size and right data" @?
             (let predicted = List.map test_data ~f:(fun (_,v) -> v) in
              let found = Hashtbl.data test_hash in
-             let sp = List.sort ~cmp:ascending predicted in
-             let sf = List.sort ~cmp:ascending found in
+             let sp = List.sort ~cmp:Polymorphic_compare.ascending predicted in
+             let sf = List.sort ~cmp:Polymorphic_compare.ascending found in
              sp = sf)
         );
 
       "map" >:: (fun () ->
         let add1 x = x + 1 in
         let predicted_data =
-          List.sort ~cmp:ascending (List.map test_data ~f:(fun (k,v) -> (k,add1 v)))
+          List.sort ~cmp:Polymorphic_compare.ascending (List.map test_data ~f:(fun (k,v) -> (k,add1 v)))
         in
         let found = Hashtbl.map test_hash ~f:add1 in
-        let found_alist = List.sort ~cmp:ascending (Hashtbl.to_alist found) in
+        let found_alist = List.sort ~cmp:Polymorphic_compare.ascending (Hashtbl.to_alist found) in
         "size" @? ( List.length test_data = Hashtbl.length found );
         let title =
           sprintf "right_data:\nExpected: %s\nFound: %s"
@@ -125,7 +113,7 @@ let test =
       "filter_map" >:: (fun () ->
         begin
           let to_string h = Sexp.to_string_hum (
-            Hashtbl.sexp_of_t String.sexp_of_t Int.sexp_of_t h)
+            Hashtbl.Poly.sexp_of_t String.sexp_of_t Int.sexp_of_t h)
           in
           let f x = Some x in
           let result = Hashtbl.filter_map test_hash ~f in
@@ -140,7 +128,9 @@ let test =
           if is_even v then Some (k, v+1) else None)
         in
         let found = Hashtbl.filter_map test_hash ~f:add1_to_even in
-        let found_alist = List.sort ~cmp:ascending (Hashtbl.to_alist found) in
+        let found_alist =
+          List.sort ~cmp:Polymorphic_compare.ascending (Hashtbl.to_alist found)
+        in
         "size and right data" @? (
           List.length predicted_data = Hashtbl.length found
           && predicted_data = found_alist));

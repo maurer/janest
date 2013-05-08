@@ -1,40 +1,11 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
-open OUnit;;
+open OUnit
 open Core.Std
-
-let init = Memo.unit (fun () ->
-  Random.init 9;
-  Zone.init ())
-
 
 let my_tz = Time.Zone.machine_zone ()
 
 (* We don't test Feb 29th because generating proper leap year dates is
   trickier.  Also, there are no time zone changes on leap dates. *)
-let month_limits = Map.of_alist_exn [
+let month_limits = Map.Poly.of_alist_exn [
     1, 31;
     2, 28;
     3, 31;
@@ -50,12 +21,9 @@ let month_limits = Map.of_alist_exn [
   ]
 
 let random_time () =
-  let year  =
-    1970 + Random.int 67
-    (* dpowers: if we go out much further then floating point errors at the microsecond
-       level start to creep in.  We can change this when Time.t = int64 *)
-    (*1970 + (Random.int (if Sys.word_size = 64 then 1000 else 67))*)
-  in
+  (* dpowers: if we go out much further then floating point errors at the microsecond
+     level start to creep in.  We can change this when Time.t = int64 *)
+  let year  = 1970 + Random.int 67 in
   let month = 1 + (Random.int 12) in
   let day   = 1 + (Random.int (Map.find_exn month_limits month)) in
   let hour  = Random.int 12 + 8 in
@@ -66,7 +34,6 @@ let random_time () =
   (year,month,day,hour,min,sec,ms,mic)
 ;;
 
-(* Round tripping microseconds isn't reliable *)
 let random_time_str () =
   let year,month,day,hour,min,sec,ms,_mic = random_time () in
   sprintf "%d-%0.2d-%0.2d %0.2d:%0.2d:%0.2d.%0.3d000" year month day hour min sec ms
@@ -90,7 +57,7 @@ let zone_tests = ref []
 let add name test = zone_tests := (name >:: test) :: !zone_tests
 
 let add_random_string_round_trip_tests () =
-  for i = 1 to 100 do
+  for _i = 1 to 100 do
     let s1 = random_time_str () in
     let pos_neg = if Random.bool () then "+" else "-" in
     let distance = Int.to_string (Random.int 10 + 1) in
@@ -109,12 +76,10 @@ let add_random_string_round_trip_tests () =
     )
   done
 
-let add_random_conversion_test (zone_name,(zone:Zone.t)) =
+let add_roundtrip_conversion_test (zone_name,(zone:Zone.t)) =
   add ("roundtrip conversion " ^ zone_name) (fun () ->
     let tm = random_tm () in
-    (* round trip to normalize the time *)
-    let tm = Unix.gmtime (Unix.timegm tm) in
-    let (unix_time,_) = Unix.mktime tm in
+    let unix_time = 1664476678.000 in
     let time = Time.of_float unix_time in
     let (zone_date, zone_ofday) =
       let date,ofday = Time.to_local_date_ofday time in
@@ -134,46 +99,86 @@ let add_random_conversion_test (zone_name,(zone:Zone.t)) =
       in
       Time.of_local_date_ofday round_date round_ofday
     in
-    match time = round_trip_time with
-    | true -> "time" @? (time = round_trip_time)
-    | false -> 
-      Printf.printf "\n";
-      Printf.printf "%s\n" (Sexp.to_string_hum (Unix.sexp_of_tm tm));
-      Printf.printf "%0.20f\n" unix_time;
-      Printf.printf "%0.20f\n" (Time.to_float time);
-      Printf.printf "%s, %s\n" (Date.to_string zone_date) (Ofday.to_string zone_ofday);
-      Printf.printf "%0.20f\n%!" (Time.to_float round_trip_time);
-      exit 7)
+    "time" @?
+      (if time = round_trip_time then true
+      else begin
+        failwith (String.concat [
+          sprintf "tm: %s\n" (Sexp.to_string_hum (Unix.sexp_of_tm tm));
+          sprintf "unix_time: %0.20f\n" unix_time;
+          sprintf "our_time: %0.20f\n" (Time.to_float time);
+          sprintf "date, ofday: %s, %s\n"
+            (Date.to_string zone_date) (Time.Ofday.to_string zone_ofday);
+          sprintf "round_trip: %0.20f\n" (Time.to_float round_trip_time)
+        ])
+      end))
 
-let add_localtime_tests () =
+module Localtime_test_data = struct
+  type t = {
+    zone_name              : string;
+    unix_time              : float;
+    localtime_date_string  : string;
+    localtime_ofday_string : string;
+    our_date_string        : string;
+    our_ofday_string       : string;
+  } with sexp
+end
+
+let add_random_localtime_tests () =
   List.iter (Zone.initialized_zones ()) ~f:(fun (zone_name, zone) ->
     add ("localtime " ^ zone_name) (fun () ->
-      let tm = random_tm () in
-      let tm = Unix.gmtime (Unix.timegm tm) in
+      let tm          = random_tm () in
+      let tm          = Unix.gmtime (Unix.timegm tm) in
+
+      (* goes through the dance of setting the env variable, then calling localtime, then
+        setting the TZ back.  We call localtime on 1000. each time to reset the internal
+        state of localtime, which matters when we convert indeterminate times. *)
       Unix.putenv ~key:"TZ" ~data:zone_name;
       ignore (Unix.localtime 1000.);
-      let unix_time,_            = Unix.mktime tm in
-      let localtime              = Unix.localtime unix_time in
-      let our_time               = Time.of_float unix_time in
+      let unix_time,_ = Unix.mktime tm in
+      let localtime = Unix.localtime unix_time in
       let localtime_date_string  = Unix.strftime localtime "%Y-%m-%d" in
-      let localtime_ofday_string = Unix.strftime localtime "%H:%M:%S" in
-      let date,ofday             = Time.to_date_ofday our_time zone in
-      if localtime_date_string <> (Date.to_string date) then ignore (exit 0);
+      let localtime_ofday_string = Unix.strftime localtime "%H:%M:%S.000000" in
       Unix.unsetenv ("TZ");
       ignore (Unix.localtime 1000.);
-      "date" @? (localtime_date_string = Date.to_string date);
-      "ofday" @? (localtime_ofday_string = Ofday.to_sec_string ofday)))
+
+      let our_date,our_ofday = Time.to_date_ofday (Time.of_float unix_time) zone in
+      let test_data          =
+        {Localtime_test_data.
+          zone_name;
+          unix_time;
+          our_date_string  = Date.to_string our_date;
+          our_ofday_string = Time.Ofday.to_string our_ofday;
+          localtime_date_string;
+          localtime_ofday_string;
+        }
+      in
+      "date" @?
+        (if Localtime_test_data.(
+          test_data.localtime_date_string = test_data.our_date_string)
+        then
+          true
+        else
+          failwith (Sexp.to_string (Localtime_test_data.sexp_of_t test_data)));
+      "ofday" @?
+        (if Localtime_test_data.(
+          test_data.localtime_ofday_string = test_data.our_ofday_string)
+        then
+          true
+        else
+          failwith (Sexp.to_string (Localtime_test_data.sexp_of_t test_data)))))
 ;;
 
-let add_random_conversion_tests () =
-  List.iter (Zone.initialized_zones ()) ~f:add_random_conversion_test
+let add_roundtrip_conversion_tests () =
+  List.iter (Zone.initialized_zones ()) ~f:add_roundtrip_conversion_test
 
 let add_random_tests () =
-  init ();
   add_random_string_round_trip_tests ();
-  add_random_conversion_tests ();
-  add_localtime_tests ()
+  add_random_localtime_tests ()
+;;
 
-let () = add_random_tests ()
+let () =
+  add_random_tests ();
+  add_roundtrip_conversion_tests ()
+;;
 
 let test = "zone" >::: !zone_tests

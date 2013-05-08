@@ -1,39 +1,22 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+(** Functors and signatures for dealing with modules for tuples.  *)
 
+(** Signature for a 2-tuple module *)
 module T2 : sig
-  type ('a, 'b) t = 'a * 'b
-
-  include Sexpable.S2 with type ('a, 'b) sexpable = ('a, 'b) t
+  type ('a, 'b) t = 'a * 'b with sexp
 
   val create : 'a -> 'b -> ('a, 'b) t
   val curry :  (('a, 'b) t -> 'c) -> 'a -> 'b -> 'c
   val uncurry : ('a -> 'b -> 'c) -> ('a, 'b) t -> 'c
-  val compare : cmp1: ('a -> 'a -> int) -> cmp2:('b -> 'b -> int)
+  val compare
+    :  cmp1:('a -> 'a -> int)
+    -> cmp2:('b -> 'b -> int)
     -> ('a, 'b) t
     -> ('a, 'b) t
     -> int
+  val equal
+    :  eq1:('a -> 'a -> bool)
+    -> eq2:('b -> 'b -> bool)
+    -> ('a, 'b) t -> ('a, 'b) t -> bool
 
   external get1 : ('a, _) t -> 'a = "%field0"
   external get2 : (_, 'a) t -> 'a = "%field1"
@@ -43,16 +26,20 @@ module T2 : sig
   val swap : ('a, 'b) t -> ('b, 'a) t
 end
 
+(** Signature for a 3-tuple module *)
 module T3 : sig
-  type ('a, 'b, 'c) t = 'a * 'b * 'c
-
-  include Sexpable.S3 with type ('a, 'b, 'c) sexpable = ('a, 'b, 'c) t
+  type ('a, 'b, 'c) t = 'a * 'b * 'c with sexp
 
   val create : 'a -> 'b -> 'c -> ('a, 'b, 'c) t
   val curry :  (('a, 'b, 'c) t -> 'd) -> 'a -> 'b -> 'c -> 'd
   val uncurry : ('a -> 'b -> 'c -> 'd) -> ('a, 'b, 'c) t -> 'd
-  val compare :
-    cmp1:('a -> 'a -> int)
+  val equal
+    :  eq1:('a -> 'a -> bool)
+    -> eq2:('b -> 'b -> bool)
+    -> eq3:('c -> 'c -> bool)
+    -> ('a, 'b, 'c) t -> ('a, 'b, 'c) t -> bool
+  val compare
+    :  cmp1:('a -> 'a -> int)
     -> cmp2:('b -> 'b -> int)
     -> cmp3:('c -> 'c -> int)
     -> ('a, 'b, 'c) t -> ('a, 'b, 'c) t -> int
@@ -64,35 +51,61 @@ module T3 : sig
   val map3 : f:('c -> 'd) -> ('a, 'b, 'c) t -> ('a, 'b, 'd) t
 end
 
-(* These functors allow users to write:
+(** These functors allow users to write:
+  {[
    module Foo = struct
-     type t = String.t * Int.t
-     include Tuple.T2.Comparable (String.t) (Int)
-     include Tuple.T2.Hashable (String.t) (Int)
+     include Tuple.Make       (String) (Int)
+     include Tuple.Comparable (String) (Int)
+     include Tuple.Hashable   (String) (Int)
    end
+  ]}
 *)
 
+module Make (T1 : sig type t end) (T2 : sig type t end) : sig type t = T1.t * T2.t end
+
 module type Comparable_sexpable = sig
-  include Comparable.S
-  include Sexpable.S with type sexpable = comparable
+  type t with sexp
+  include Comparable.S with type t := t
 end
 
 module Comparable (S1 : Comparable_sexpable) (S2 : Comparable_sexpable)
-  : Comparable.S with type comparable = S1.comparable * S2.comparable
+  : Comparable_sexpable with type t := Make (S1) (S2).t
 
 module type Hashable_sexpable = sig
-  type t
-  include Hashable.S with type hashable = t
-  val compare : t -> t -> int
-  include Sexpable.S with type sexpable = t
+  type t with sexp
+  include Hashable.S with type t := t
 end
 
+(** The difference between [Hashable] and [Hashable_t] functors is that the former's
+    result type doesn't contain type [t] and the latter does. Therefore, [Hashable] can't
+    be used to combine two pairs into 4-tuple. but [Hashable_t] can. On the other hand
+    result of [Hashable_t] cannot be combined with [Comparable].
 
+    example:
+    module Four_ints = Tuple.Hashable_t (Tuple.Hashable_t (Int)(Int))
+                                        (Tuple.Hashable_t (Int)(Int))
+
+    If instead we used [Hashable] compiler would complain that the input to outer functor
+    doesn't have type [t].
+
+    On the other hand:
+    module Foo = struct
+      type t = String.t * Int.t
+      include Tuple.Comparable (String.t) (Int)
+      include Tuple.Hashable (String.t) (Int)
+    end
+
+    If we used [Hashable_t] above, compiler would compile that we have two types [t]
+    defined.
+
+    Unfortunately, it is not possible to define just one functor that could be used in
+    both cases.
+*)
 module Hashable (S1 : Hashable_sexpable) (S2 : Hashable_sexpable)
-  : Hashable.S with type hashable = S1.hashable * S2.hashable
+  : Hashable_sexpable with type t := Make (S1) (S2).t
+
+module Hashable_t (S1 : Hashable_sexpable) (S2 : Hashable_sexpable)
+  : Hashable_sexpable with type t = Make (S1) (S2).t
 
 module Sexpable (S1 : Sexpable.S) (S2 : Sexpable.S)
-  : Sexpable.S with type sexpable = S1.sexpable * S2.sexpable
-
-module Hashable_sexpable (S1 : Hashable_sexpable) (S2 : Hashable_sexpable)
-  : Hashable_sexpable with type t = S1.t * S2.t
+  : Sexpable.S with type t := Make (S1) (S2).t

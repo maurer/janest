@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Core.Std
 (* open Core_extended.Std *)
 
@@ -92,7 +68,7 @@ module T = struct
 
   let create ?(params = X.default_params) hashable =
     let s = Int.min (Int.max 1 params.X.initial_size) Sys.max_array_length in
-    { table = Array.create s Bucket.empty;
+    { table = Array.create ~len:s Bucket.empty;
       array_length = s;
       length = 0;
       params = params;
@@ -118,7 +94,7 @@ module T = struct
     if new_size > t.array_length then begin
       let old_table = t.table in
       t.array_length <- new_size;
-      t.table <- Array.create t.array_length Bucket.empty;
+      t.table <- Array.create ~len:t.array_length Bucket.empty;
       let move ~key ~data ~hashv () =
         let i = hashv mod t.array_length in
         t.table.(i) <- Bucket.cons t.table.(i) key data hashv

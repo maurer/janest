@@ -1,31 +1,5 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (* Conversions between units of measure based on bytes. *)
 
-open Sexplib.Std
-open Bin_prot.Std
 open Std_internal
 
 let bytes_per_word =
@@ -33,12 +7,13 @@ let bytes_per_word =
   match W.word_size with
     | W.W32 -> 4.
     | W.W64 -> 8.
+;;
 
 let kbyte = 1024.
 let mbyte = kbyte *. kbyte
 let gbyte = kbyte *. mbyte
 
-(* External.t - used just for custom sexp convertors *)
+(* External.t - used just for custom sexp converters *)
 module External = struct
   type t =
     [
@@ -48,13 +23,12 @@ module External = struct
     | `Gigabytes of float
     | `Words of float
     ]
-  with bin_io, sexp
+  with sexp
 end
 
 module Measure = struct
-
   type t = [ `Bytes | `Kilobytes | `Megabytes | `Gigabytes | `Words ]
-  with bin_io
+  with sexp, bin_io
 
   let bytes = function
     | `Bytes -> 1.
@@ -62,31 +36,45 @@ module Measure = struct
     | `Megabytes -> mbyte
     | `Gigabytes -> gbyte
     | `Words -> bytes_per_word
-
+  ;;
 end
 
 module T = struct
+  type t = float with bin_io, compare
 
-  type t = {
-    preferred_measure : Measure.t; (* for printing/externalizing *)
-    bytes : float;
-  } with bin_io
+  let hash = Float.hash
 
-  let number_of_preferred_measures t = t.bytes /. Measure.bytes t.preferred_measure
+  let scale = Float.( * )
 
-  let create m n = {
-    preferred_measure = m;
-    bytes = (n *. Measure.bytes m);
-  }
+  module Infix = struct
+    open Float
+    let ( - )  = ( - )
+    let ( + )  = ( + )
+    let ( / )  = ( / )
+    let ( // ) = ( / )
+  end
+
+  let largest_measure t =
+    (* We never select words as the largest measure *)
+    if Float.( > ) t gbyte then `Gigabytes
+    else if Float.( > ) t mbyte then `Megabytes
+    else if Float.( > ) t kbyte then `Kilobytes
+    else `Bytes
+
+  let number_of_measures t measure = t /. Measure.bytes measure
+
+  let create m n = n *. Measure.bytes m
 
   let externalize t =
-    let n = number_of_preferred_measures t in
-    match t.preferred_measure with
+    let used_measure = largest_measure t in
+    let n = number_of_measures t used_measure in
+    match used_measure with
       | `Bytes      -> `Bytes n
       | `Kilobytes  -> `Kilobytes n
       | `Megabytes  -> `Megabytes n
       | `Gigabytes  -> `Gigabytes n
       | `Words      -> `Words n
+  ;;
 
   let internalize t =
     match t with
@@ -95,56 +83,112 @@ module T = struct
       | `Megabytes n -> create `Megabytes n
       | `Gigabytes n -> create `Gigabytes n
       | `Words     n -> create `Words n
+  ;;
 
-  let t_of_sexp sexp = internalize (External.t_of_sexp sexp)
-  let sexp_of_t t = External.sexp_of_t (externalize t)
-
-  let bytes t = t.bytes
-
-  type sexpable = t
-  type stringable = t
-  type binable = t
+  let bytes t = t
 
   let of_string s =
     let length = String.length s in
     if length < 2 then
       invalid_argf "'%s' passed to Byte_units.of_string - too short" s ();
+    let base_str = String.sub s ~pos:0 ~len:(length - 1) in
+    let ext_char = Char.lowercase s.[length - 1] in
     let base =
       try
-        Float.of_string (String.sub s ~pos:0 ~len:(length - 1))
+        Float.of_string base_str
       with
       | _ ->
-        invalid_argf "'%s' passed to Byte_units.of_string - first part cannot be \
-          converted to float " s ()
+        invalid_argf "'%s' passed to Byte_units.of_string - %s cannot be \
+          converted to float " s base_str ()
     in
-    match Char.lowercase s.[length - 1] with
-    | 'b' -> create `Bytes base
-    | 'k' -> create `Kilobytes base
-    | 'm' -> create `Megabytes base
-    | 'g' -> create `Gigabytes base
-    | 'w' -> create `Words base
-    | _   -> invalid_argf "'%s' passed to Byte_units.of_string - illegal extension" s ()
+    let measure =
+      match ext_char with
+      | 'b' -> `Bytes
+      | 'k' -> `Kilobytes
+      | 'm' -> `Megabytes
+      | 'g' -> `Gigabytes
+      | 'w' -> `Words
+      | ext ->
+        invalid_argf "'%s' passed to Byte_units.of_string - illegal \
+          extension %c" s ext ()
+    in
+    create measure base
+  ;;
 
-  let to_string t =
-    let fmt e = sprintf "%g%c" (number_of_preferred_measures t) e in
-    match t.preferred_measure with
-    | `Bytes -> fmt 'b'
-    | `Kilobytes -> fmt 'k'
-    | `Megabytes -> fmt 'm'
-    | `Gigabytes -> fmt 'g'
-    | `Words -> fmt 'w'
+  let t_of_sexp sexp =
+    match sexp with
+    | Sexp.Atom s ->
+      (try of_string s with Invalid_argument msg -> of_sexp_error msg sexp)
+    | Sexp.List _ ->
+      internalize (External.t_of_sexp sexp)
+  ;;
+
+  let sexp_of_t t = External.sexp_of_t (externalize t)
 
   let kilobytes t = bytes t /. kbyte
   let megabytes t = bytes t /. mbyte
   let gigabytes t = bytes t /. gbyte
-  let words t = bytes t /. bytes_per_word
+  let words     t = bytes t /. bytes_per_word
 
-  let compare t1 t2 = Float.compare (bytes t1) (bytes t2)
+  let to_string_with_measure measure t =
+    let ext =
+      match measure with
+      | `Bytes     -> 'b'
+      | `Kilobytes -> 'k'
+      | `Megabytes -> 'm'
+      | `Gigabytes -> 'g'
+      | `Words     -> 'w'
+    in
+    sprintf "%g%c" (number_of_measures t measure) ext
+  ;;
 
-  let equal t1 t2 = bytes t1 = bytes t2
-  let hash = Hashtbl.hash
+  let to_string_hum ?measure t =
+    let measure =
+      match measure with
+      | Some m -> m
+      | None   -> largest_measure t
+    in
+    to_string_with_measure measure t
+  ;;
+
+  let to_string t = to_string_hum t
 end
 
 include T
-include Comparable.Make(T)
-include Hashable.Make(T)
+include Comparable.Make (T)
+include Hashable.Make (T)
+
+TEST_MODULE "{of,to}_string" = struct
+
+  let f measure input expected_output =
+    let observed_output =
+      match measure with
+      | `Specific measure ->
+        to_string_hum ~measure (of_string input)
+      | `Largest ->
+        to_string_hum (of_string input)
+    in
+
+    let result = String.equal expected_output observed_output in
+    if not result then begin
+      let measure =
+        <:sexp_of<[ `Specific of Measure.t | `Largest ]>> measure
+        |! Sexp.to_string
+      in
+      eprintf "\n(%s) %s -> %s != %s\n%!" measure input expected_output observed_output
+    end;
+    result
+
+  TEST = f `Largest "3b" "3b"
+  TEST = f `Largest "3w" (sprintf "%gb" (3.0 *. bytes_per_word))
+  TEST = f `Largest "3k" "3k"
+  TEST = f `Largest "3m" "3m"
+  TEST = f `Largest "3g" "3g"
+
+  TEST = f (`Specific `Bytes)     "3k" "3072b"
+  TEST = f (`Specific `Kilobytes) "3k" "3k"
+  TEST = f (`Specific `Megabytes) "3k" "0.00292969m"
+  TEST = f (`Specific `Gigabytes) "3k" "2.86102e-06g"
+  TEST = f (`Specific `Words)     "3k" (sprintf "%gw" ((3.0 *. kbyte) /. bytes_per_word))
+
+end

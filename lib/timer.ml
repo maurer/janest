@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Std_internal
 
 module Mutex = Mutex0
@@ -205,7 +181,7 @@ let add t handler ?randomize ?interval span =
   check_span "add" span;
   add_abs t handler ?randomize ?interval time
 
-let remove { timer = timer; t_event_opt = t_event_opt } =
+let remove { timer; t_event_opt; time=_; interval=_; handler=_ } =
   match t_event_opt with
   | Some t_event ->
       wrap_update timer ~f:(fun () ->
@@ -214,8 +190,8 @@ let remove { timer = timer; t_event_opt = t_event_opt } =
         if Heap.heap_el_is_valid t_event then Heap.remove t_event)
   | None -> assert false  (* impossible *)
 
-let reschedule ({ timer = timer } as ev) ?randomize ?interval span =
-  match ev.t_event_opt with
+let reschedule ({ timer; t_event_opt; time=_; interval=_; handler=_; } as ev) ?randomize ?interval span =
+  match t_event_opt with
   | Some t_event ->
       let loc = "reschedule" in
       check_span loc span;

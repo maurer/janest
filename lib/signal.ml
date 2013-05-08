@@ -1,40 +1,18 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+open Sexplib.Std
 
+module Binable = Binable0
 module Int = Core_int
 module List = Core_list
 module Hashtbl = Core_hashtbl
+module String = Core_string
 
 let failwithf = Core_printf.failwithf
 
-type t = int
-
 include (Int : sig
-  include Comparable.S with type comparable = t
-  include Hashable.S with type hashable = t
-  
-  include Sexpable.S with type sexpable = t
+  type t = int with bin_io
+
+  include Comparable.S with type t := t
+  include Hashable  .S with type t := t
 end)
 
 external ml_caml_to_nonportable_signal_number : int -> int =
@@ -49,7 +27,13 @@ let to_system_int t = ml_caml_to_nonportable_signal_number t
 let of_caml_int t = t
 let to_caml_int t = t
 
-type sys_behavior = Continue | Dump_core | Ignore | Stop | Terminate with sexp
+type sys_behavior = [
+| `Continue (** Continue the process if it is currently stopped *)
+| `Dump_core (** Terminate the process and dump core *)
+| `Ignore (** Ignore the signal *)
+| `Stop  (** Stop the process *)
+| `Terminate  (** Terminate the process *)
+] with sexp
 
 let equal (t : t) t' = (t = t')
 
@@ -80,80 +64,111 @@ include struct
   let zero = 0
 end
 
-let to_string, default_sys_behavior =
+exception Invalid_signal_mnemonic_or_number of string with sexp
+
+let to_string, of_string, default_sys_behavior =
   let known =
     [
-      
-      ("abrt", abrt, Dump_core);
-      ("alrm", alrm, Terminate);
-      ("chld", chld, Ignore);
-      ("cont", cont, Continue);
-      ("fpe", fpe, Dump_core);
-      ("hup", hup, Terminate);
-      ("ill", ill, Dump_core);
-      ("int", int, Terminate);
-      ("kill", kill, Terminate);
-      ("pipe", pipe, Terminate);
-      ("prof", prof, Terminate);
-      ("quit", quit, Dump_core);
-      ("segv", segv, Dump_core);
-      ("stop", stop, Stop);
-      ("term", term, Terminate);
-      ("tstp", tstp, Stop);
-      ("ttin", ttin, Stop);
-      ("ttou", ttou, Stop);
-      ("usr1", usr1, Terminate);
-      ("usr2", usr2, Terminate);
-      ("vtalrm", vtalrm, Terminate);
-      ("<zero>", zero, Ignore);
+      ("sigabrt", abrt, `Dump_core);
+      ("sigalrm", alrm, `Terminate);
+      ("sigchld", chld, `Ignore);
+      ("sigcont", cont, `Continue);
+      ("sigfpe", fpe, `Dump_core);
+      ("sighup", hup, `Terminate);
+      ("sigill", ill, `Dump_core);
+      ("sigint", int, `Terminate);
+      ("sigkill", kill, `Terminate);
+      ("sigpipe", pipe, `Terminate);
+      ("sigprof", prof, `Terminate);
+      ("sigquit", quit, `Dump_core);
+      ("sigsegv", segv, `Dump_core);
+      ("sigstop", stop, `Stop);
+      ("sigterm", term, `Terminate);
+      ("sigtstp", tstp, `Stop);
+      ("sigttin", ttin, `Stop);
+      ("sigttou", ttou, `Stop);
+      ("sigusr1", usr1, `Terminate);
+      ("sigusr2", usr2, `Terminate);
+      ("sigvtalrm", vtalrm, `Terminate);
+      ("sigzero", zero, `Ignore);
     ]
   in
   let str_tbl = Int.Table.create ~size:1 () in
+  let int_tbl = Core_string.Table.create ~size:1 () in
   let behavior_tbl = Int.Table.create ~size:1 () in
   List.iter known ~f:(fun (name, s, behavior) ->
-    Hashtbl.replace str_tbl ~key:s ~data:("sig" ^ name);
+    Hashtbl.replace str_tbl ~key:s ~data:name;
+    Hashtbl.replace int_tbl ~key:name ~data:s;
     Hashtbl.replace behavior_tbl ~key:s ~data:behavior);
   (* For unknown signal numbers, [to_string] returns a meaningful
      string, while [default_sys_behavior] has to raise an exception
      because we don't know what the right answer is. *)
   let to_string s =
     match Hashtbl.find str_tbl s with
-    | None -> "<unknown signal>"
+    | None -> "<unknown signal " ^ Int.to_string s ^ ">"
     | Some string -> string
+  in
+  let of_string s =
+    let s = Core_string.lowercase (Core_string.strip s) in
+    match Hashtbl.find int_tbl s with
+    | Some sn -> sn
+    | None ->
+      if Core_string.is_prefix s ~prefix:"<unknown signal " then
+        try Int.of_string (Core_string.slice s 16 ~-1)
+        with _ -> raise (Invalid_signal_mnemonic_or_number s)
+      else raise (Invalid_signal_mnemonic_or_number s)
   in
   let default_sys_behavior s =
     match Hashtbl.find behavior_tbl s with
     | None ->
-        raise (Invalid_argument "Signal.default_sys_behavior: unknown signal")
+        raise (Invalid_argument ("Signal.default_sys_behavior: unknown signal " ^
+  Int.to_string s))
     | Some behavior -> behavior
   in
-  to_string, default_sys_behavior
+  to_string, of_string, default_sys_behavior
 ;;
 
-let send signal ~pid =
-  try
-    UnixLabels.kill ~pid ~signal;
-    `Ok
-  with
-  | Unix.Unix_error (Unix.ESRCH, _, _) -> `No_such_process
+exception Expected_atom of Sexplib.Sexp.t with sexp
+
+let sexp_of_t t = Sexplib.Sexp.Atom (to_string t)
+
+let t_of_sexp s =
+  match s with
+  | Sexplib.Sexp.Atom s -> of_string s
+  | _ -> raise (Expected_atom s)
 ;;
 
-let send_i t ~pid =
-  match send t ~pid with
+type pid_spec = [ `Pid of Pid.t | `My_group | `Group of Pid.t ] ;;
+
+let pid_spec_to_int = function
+  | `Pid pid -> Pid.to_int pid
+  | `My_group -> 0
+  | `Group pid -> ~- (Pid.to_int pid)
+;;
+
+let pid_spec_to_string p = Int.to_string (pid_spec_to_int p)
+
+let send signal pid_spec =
+  try UnixLabels.kill ~pid:(pid_spec_to_int pid_spec) ~signal; `Ok
+  with Unix.Unix_error (Unix.ESRCH, _, _) -> `No_such_process
+;;
+
+let send_i t pid_spec =
+  match send t pid_spec with
   | `Ok | `No_such_process -> ()
 ;;
 
-let send_exn t ~pid =
-  match send t ~pid with
+let send_exn t pid_spec =
+  match send t pid_spec with
   | `Ok -> ()
   | `No_such_process ->
-      failwithf "Signal.send_exn %s ~pid:%d" (to_string t) pid ()
+      failwithf "Signal.send_exn %s pid:%s" (to_string t)
+        (pid_spec_to_string pid_spec) ()
 ;;
 
 type behavior = [ `Default | `Ignore | `Handle of t -> unit ]
 
 module Behavior = struct
-  type t = behavior
 
   let of_caml = function
     | Sys.Signal_default -> `Default
@@ -190,3 +205,13 @@ let sigprocmask mode sigs =
 
 let sigpending = Unix.sigpending
 let sigsuspend = Unix.sigsuspend
+
+let can_send_to pid =
+  try
+    send_exn zero (`Pid pid);
+    true
+  with
+  | _ -> false
+;;
+
+

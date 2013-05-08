@@ -1,163 +1,193 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+open Sexplib.Conv
+module Sexp = Sexplib.Sexp
+module List = ListLabels
 
+include Comparable_intf
 
-module type Infix = sig
-  type comparable
-  val ( >= ) : comparable -> comparable -> bool
-  val ( <= ) : comparable -> comparable -> bool
-  val ( = ) : comparable -> comparable -> bool
-  val ( > ) : comparable -> comparable -> bool
-  val ( < ) : comparable -> comparable -> bool
-  val ( <> ) : comparable -> comparable -> bool
+let sprintf = Printf.sprintf
+
+module Validate
+         (T : sig type t with compare, sexp end) : Validate with type t := T.t =
+struct
+
+  module V = Validate
+
+  let to_string t = Sexp.to_string (T.sexp_of_t t)
+
+  let validate_lbound ~min t =
+    V.of_error_opt (
+      match min with
+      | Unbounded -> None
+      | Incl b ->
+        if T.compare t b >= 0
+        then None
+        else Some (sprintf "value %s < bound %s"  (to_string t) (to_string b))
+      | Excl b ->
+        if T.compare t b > 0
+        then None
+        else Some (sprintf "value %s <= bound %s" (to_string t) (to_string b))
+    )
+  ;;
+
+  let validate_ubound ~max t =
+    V.of_error_opt (
+      match max with
+      | Unbounded -> None
+      | Incl b ->
+        if T.compare t b <= 0
+        then None
+        else Some (sprintf "value %s > bound %s"  (to_string t) (to_string b))
+      | Excl b ->
+        if T.compare t b < 0
+        then None
+        else Some (sprintf "value %s >= bound %s" (to_string t) (to_string b))
+    )
+  ;;
+
+  let validate_bound ~min ~max = V.all [ validate_lbound ~min; validate_ubound ~max ]
 end
 
-module type S_common = sig
-  include Infix
-  
-  val equal : comparable -> comparable -> bool
-  val compare : comparable -> comparable -> int
-  val ascending : comparable -> comparable -> int
-  val descending : comparable -> comparable -> int
-  val min : comparable -> comparable -> comparable
-  val max : comparable -> comparable -> comparable
+module With_zero
+         (T : sig
+            type t with compare, sexp
+            val zero : t
+            include Validate with type t := t
+          end) = struct
+  open T
+  let validate_positive     t = validate_lbound ~min:(Excl zero) t
+  let validate_non_negative t = validate_lbound ~min:(Incl zero) t
+  let validate_negative     t = validate_ubound ~max:(Excl zero) t
+  let validate_non_positive t = validate_ubound ~max:(Incl zero) t
+  let is_positive     t = compare t zero >  0
+  let is_non_negative t = compare t zero >= 0
+  let is_negative     t = compare t zero <  0
+  let is_non_positive t = compare t zero <= 0
 end
 
-module type S = sig
-  include S_common
-
-  module Map : Core_map.S with type key = comparable
-  module Set : Core_set.S with type elt = comparable
+module Validate_with_zero
+         (T : sig
+            type t with compare, sexp
+            val zero : t
+          end) = struct
+  module V = Validate (T)
+  include V
+  include With_zero (struct include T include V end)
 end
 
-module type S_binable = sig
-  include S_common
-
-  module Map : Core_map.S_binable with type key = comparable
-  module Set : Core_set.S_binable with type elt = comparable
+module Map_and_set_binable (T : Comparator.Pre_binable)
+  : Map_and_set_binable with type t := T.t = struct
+  type t = T.t
+  module C = (Comparator.Make_binable (T) : Comparator.S_binable with type t = t)
+  include (C : Comparator.S_binable with type t := t with type comparator = C.comparator)
+  module Map = Core_map.Make_binable_using_comparator (C)
+  module Set = Core_set.Make_binable_using_comparator (C)
 end
 
-module Poly (T : sig
-  type t
-  include Sexpable.S with type sexpable = t
-end) : S with type comparable = T.t = struct
-  type comparable = T.t
-  include Pervasives                    (* for Infix *)
+module Poly (T : sig type t with sexp end) : S with type t := T.t = struct
+  module Replace_polymorphic_compare = struct
+    type t = T.t with sexp
+    include Polymorphic_compare
+    let _squelch_unused_module_warning_ = ()
+  end
+  include Replace_polymorphic_compare
   let ascending = compare
   let descending x y = compare y x
-  let equal = (=)
-  module C = struct
-    include T
-    let compare = compare
-  end
-  module Map = Core_map.Make (C)
-  module Set = Core_set.Make (C)
+  module C = (Comparator.Make (Replace_polymorphic_compare) : Comparator.S with type t = t)
+  let between t ~low ~high = low <= t && t <= high
+  type 'a t_ = T.t
+  include (C : Comparator.S1 with type 'a t := 'a t_ with type comparator = C.comparator)
+  module Map = Core_map.Make_using_comparator (C)
+  module Set = Core_set.Make_using_comparator (C)
+  include Validate (struct type nonrec t = t with compare, sexp end)
 end
 
 module Make_common (T : sig
-  type t
-  include Sexpable.S with type sexpable = t
-  val compare : t -> t -> int
+  type t with compare, sexp
 end) = struct
-  type comparable = T.t
-
-  let compare = T.compare
+  module Replace_polymorphic_compare = struct
+    module Without_squelch = struct
+      let compare = T.compare
+      let (>) a b = compare a b > 0
+      let (<) a b = compare a b < 0
+      let (>=) a b = compare a b >= 0
+      let (<=) a b = compare a b <= 0
+      let (=) a b = compare a b = 0
+      let (<>) a b = compare a b <> 0
+      let equal = (=)
+      let min t t' = if t <= t' then t else t'
+      let max t t' = if t >= t' then t else t'
+    end
+    include Without_squelch
+    let _squelch_unused_module_warning_ = ()
+  end
+  include Replace_polymorphic_compare.Without_squelch
   let ascending = compare
   let descending t t' = compare t' t
-
-  module Infix = struct
-    let (>) a b = compare a b > 0
-    let (<) a b = compare a b < 0
-    let (>=) a b = compare a b >= 0
-    let (<=) a b = compare a b <= 0
-    let (=) a b = compare a b = 0
-    let (<>) a b = compare a b <> 0
-  end
-  include Infix
-
-  let equal = (=)
-  let min t t' = if t <= t' then t else t'
-  let max t t' = if t >= t' then t else t'
+  let between t ~low ~high = low <= t && t <= high
+  include Validate (T)
 end
 
 module Make (T : sig
-  type t
-  include Sexpable.S with type sexpable = t
-  val compare : t -> t -> int
-end) : S with type comparable = T.t = struct
-  include Make_common (T)
-
-  module Map = Core_map.Make (T)
-  module Set = Core_set.Make (T)
+  type t with compare, sexp
+end) : S with type t := T.t = struct
+  module C = Comparator.Make (T)
+  include (C : Comparator.S
+             with type t := C.t
+             with type comparator = C.comparator)
+  include Make_common (C)
+  module Map = Core_map.Make_using_comparator (C)
+  module Set = Core_set.Make_using_comparator (C)
 end
 
 module Make_binable (T : sig
-  type t
-  include Sexpable.S with type sexpable = t
-  include Binable.S with type binable = t
-  val compare : t -> t -> int
-end) : S_binable with type comparable = T.t = struct
-  include Make_common (T)
-
-  module Map = Core_map.Make_binable (T)
-  module Set = Core_set.Make_binable (T)
+  type t with bin_io, compare, sexp
+end) : S_binable with type t := T.t = struct
+  module C = Comparator.Make_binable (T)
+  include (C : Comparator.S_binable
+                 with type t := C.t
+                 with type comparator = C.comparator)
+  include Make_common (C)
+  module Map = Core_map.Make_binable_using_comparator (C)
+  module Set = Core_set.Make_binable_using_comparator (C)
 end
 
-(** Inherit comparability from a component. *)
-module Inherit (C : S)
+module Inherit
+  (C : sig type t with compare end)
   (T : sig
-    type t
-    include Sexpable.S with type sexpable = t
-    val component : t -> C.comparable
-  end)
-  : S with type comparable = T.t = struct
+    type t with sexp
+    val component : t -> C.t
+  end) : S with type t = T.t = struct
 
-    type comparable = T.t
-    (* We write [binary] in this way for performance reasons.  It is always
-     * applied to one argument and builds a two-argument closure.
-     *)
-    let binary f = (); fun t t' -> f (T.component t) (T.component t')
-    let compare = binary C.compare
-    let (>=) = binary C.(>=)
-    let (<=) = binary C.(<=)
-    let (=) = binary C.(=)
-    let equal = (=)
-    let (>) = binary C.(>)
-    let (<) = binary C.(<)
-    let (<>) = binary C.(<>)
-    let ascending = binary C.ascending
-    let descending = binary C.descending
-    let min t t' = if t <= t' then t else t'
-    let max t t' = if t >= t' then t else t'
+    type t = T.t
 
-    module M = struct
-      include T
-      let compare = compare
-    end
+    include Make (struct
+      type t = T.t with sexp
+      let compare t t' = C.compare (T.component t) (T.component t')
+    end)
 
-    module Map = Core_map.Make (M)
-    module Set = Core_set.Make (M)
+  end
+
+module Check_sexp_conversion (M : sig
+  type t with sexp_of
+  include S with type t := t
+  val examples : t list
+end) : sig end = struct
+  open M
+
+  TEST_UNIT =
+    (* These tests all use single element sets and maps, and so do not depend on the
+       order in which elements appear in sexps. *)
+    List.iter examples ~f:(fun t ->
+      let set = Set.of_list [ t ] in
+      let set_sexp = Sexp.List [ sexp_of_t t ] in
+      assert (Pervasives.(=) set_sexp (<:sexp_of< Set.t >> set));
+      assert (Set.equal set (Set.t_of_sexp set_sexp));
+      let map = Map.of_alist_exn [ t, () ] in
+      let map_sexp = Sexp.List [ Sexp.List [ sexp_of_t t; Sexp.List [] ]] in
+      assert (Pervasives.(=) map_sexp (<:sexp_of< unit Map.t >> map));
+      assert (Map.equal (fun () () -> true)
+                map (Map.t_of_sexp <:of_sexp< unit >> map_sexp)));
+  ;;
 end
 
 (* compare [x] and [y] lexicographically using functions in the list [cmps] *)

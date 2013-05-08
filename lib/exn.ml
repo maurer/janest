@@ -1,31 +1,6 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 module Sexp = Sexplib.Sexp
 module Conv = Sexplib.Conv
 open Sexplib.Std
-open Bin_prot.Std
 
 let sexp_of_exn = Conv.sexp_of_exn
 let sexp_of_exn_opt = Conv.sexp_of_exn_opt
@@ -79,6 +54,7 @@ let () =
     ]
 
 let to_string exc = Sexp.to_string_hum ~indent:2 (sexp_of_exn exc)
+let to_string_mach exc = Sexp.to_string_mach (sexp_of_exn exc)
 
 let sexp_of_t = sexp_of_exn
 
@@ -91,35 +67,42 @@ let protectx ~f x ~(finally : _ -> unit) =
   in
   finally x;
   res
+;;
 
 let protect ~f ~finally = protectx ~f () ~finally
 
-let pp ppf t = Sexp.pp_hum ppf (sexp_of_exn t)
+include Pretty_printer.Register_pp (struct
+  type t = exn
+  let pp ppf t =
+    match sexp_of_exn_opt t with
+    | Some sexp -> Sexp.pp_hum ppf sexp
+    | None -> Format.pp_print_string ppf (Printexc.to_string t)
+  ;;
+  let module_name = "Core.Std.Exn"
+end)
 
 let backtrace = Printexc.get_backtrace
 
-let catch_and_print_backtrace ~exit f =
+let handle_uncaught_aux ~exit f =
   try f ()
   with exc ->
     let bt = backtrace () in
-    Format.eprintf "@[<2>Uncaught exception:@\n@\n@[%a@]@]@." pp exc;
+    Format.eprintf "@[<2>Uncaught exception:@\n@\n@[%a@]@]@\n@.%!" pp exc;
     if Printexc.backtrace_status () then prerr_string bt;
     exit 1
 
+let handle_uncaught_and_exit f = handle_uncaught_aux f ~exit
+
 let handle_uncaught ~exit:must_exit f =
-  catch_and_print_backtrace f ~exit:(
-    if must_exit
-    then exit
-    else ignore
-  )
+  handle_uncaught_aux f ~exit:(if must_exit then exit else ignore)
 
 let reraise_uncaught str func =
   try func () with
   | exn -> raise (Reraised (str, exn))
 
-let () = Pretty_printer.register "Core.Exn.pp"
-
 let () =
   Printexc.register_printer (fun exc ->
-    Option.map (sexp_of_exn_opt exc) ~f:(fun sexp ->
-      Sexp.to_string_hum ~indent:2 sexp))
+    match sexp_of_exn_opt exc with
+    | None -> None
+    | Some sexp ->
+      Some (Sexp.to_string_hum ~indent:2 sexp))

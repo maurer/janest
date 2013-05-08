@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Sexplib.Std
 open Bin_prot.Std
 open Common
@@ -29,23 +5,14 @@ open Common
 module T = struct
   type t = int with bin_io, sexp
 
-  type binable = t
-  type comparable = t
-  type floatable = t
-  type intable = t
-  type sexpable = t
-  type stringable = t
-
   (* According to estokes,
      if i = j then 0 else if i < j then -1 else 1
      is only slightly faster, so we've decided to stick with
-     Pervasives.compare
-  *)
+     Pervasives.compare *)
   let compare (x : t) y = compare x y
-  let equal (x : t) y = x = y
-  let hash (x : t) = Hashtbl.hash x
+  let hash (x : t) = if x >= 0 then x else ~-x
 
-  let of_string s = 
+  let of_string s =
     try
       int_of_string s
     with
@@ -58,28 +25,39 @@ include T
 
 let num_bits = Word_size.num_bits Word_size.word_size - 1
 
-let of_float = int_of_float
-let to_float = float_of_int
+let of_float = Float.to_int
+let to_float = Float.of_int
 
-let min (x : t) y = if x < y then x else y
-let max (x : t) y = if x > y then x else y
-let ascending = compare
-let descending x y = compare y x
-let equal (x : t) y = x = y
-let ( >= ) (x : t) y = x >= y
-let ( <= ) (x : t) y = x <= y
-let ( = ) (x : t) y = x = y
-let ( > ) (x : t) y = x > y
-let ( < ) (x : t) y = x < y
-let ( <> ) (x : t) y = x <> y
+module Replace_polymorphic_compare = struct
+  let min (x : t) y = if x < y then x else y
+  let max (x : t) y = if x > y then x else y
+  let compare = compare
+  let ascending = compare
+  let descending x y = compare y x
+  let equal (x : t) y = x = y
+  let ( >= ) (x : t) y = x >= y
+  let ( <= ) (x : t) y = x <= y
+  let ( =  ) (x : t) y = x =  y
+  let ( >  ) (x : t) y = x >  y
+  let ( <  ) (x : t) y = x <  y
+  let ( <> ) (x : t) y = x <> y
+  let between t ~low ~high = low <= t && t <= high
+  let _squelch_unused_module_warning_ = ()
+end
+
+include Replace_polymorphic_compare
 
 include Hashable.Make_binable (T)
-module Map = Core_map.Make (T)
-module Set = Core_set.Make (T)
+include Comparable.Map_and_set_binable (T)
 
 let zero = 0
 let one = 1
 let minus_one = -1
+
+include Comparable.Validate_with_zero (struct
+  include T
+  let zero = zero
+end)
 
 let pred i = i - 1
 let succ i = i + 1
@@ -89,8 +67,8 @@ let to_int_exn = to_int
 let of_int i = i
 let of_int_exn = of_int
 
-let max_value = max_int
-let min_value = min_int
+let max_value = Pervasives.max_int
+let min_value = Pervasives.min_int
 
 module Conv = Int_conversions
 let of_int32 = Conv.int32_to_int
@@ -138,7 +116,9 @@ end
 
 let neg x = -x
 
+TEST = (neg 5 + 5 = 0)
 
+(* note that rem is not same as % *)
 let rem a b = a mod b
 let incr = Pervasives.incr
 let decr = Pervasives.decr
@@ -150,3 +130,11 @@ let bit_not a = lnot a
 let bit_or a b = a lor b
 let bit_and a b = a land b
 let bit_xor a b = a lxor b
+
+include Int_math
+
+include Pretty_printer.Register (struct
+  type nonrec t = t
+  let to_string = to_string
+  let module_name = "Core.Std.Int"
+end)

@@ -1,41 +1,15 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Interfaces
 
 module type S = sig
-  type t
+  type t with bin_io, sexp
 
-  include Binable with type binable = t
-  include Comparable with type comparable = t
-  include Floatable with type floatable = t
-  include Hashable.S_binable with type hashable = t
-  include Sexpable with type sexpable = t
-  include Stringable with type stringable = t
-  include Intable with type intable = t
+  include Floatable            with type t := t
+  include Intable              with type t := t
+  include Identifiable         with type t := t
+  include Comparable.With_zero with type t := t
 
-  val to_string_hum : t -> string
+  (* [delimiter] is underscore by default *)
+  val to_string_hum : ?delimiter:char -> t -> string
 
   val num_bits : int
 
@@ -43,12 +17,10 @@ module type S = sig
   val one : t
   val minus_one : t
 
-  val (+) : t -> t -> t
-  val (-) : t -> t -> t
+  val (+)   : t -> t -> t
+  val (-)   : t -> t -> t
   val ( * ) : t -> t -> t
-  val (/) : t -> t -> t
-
-  
+  val (/)   : t -> t -> t
 
   val neg : t -> t
 
@@ -75,7 +47,6 @@ module type S = sig
   val decr : t ref -> unit
   val incr : t ref -> unit
 
-  
   val shift_left : t -> int -> t
   val shift_right : t -> int -> t
   val shift_right_logical : t -> int -> t
@@ -87,4 +58,6 @@ module type S = sig
 
   val of_nativeint_exn : nativeint -> t
   val to_nativeint_exn : t -> nativeint
+
+
 end

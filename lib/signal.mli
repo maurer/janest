@@ -1,67 +1,42 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+type t with bin_io, sexp
 
-type t
-
-include Comparable.S with type comparable = t
-include Hashable.S with type hashable = t
-include Sexpable.S with type sexpable = t
+include Comparable.S with type t := t
+include Hashable.S with type t := t
+include Stringable.S with type t := t
 
 val equal : t -> t -> bool
 
-(** [of_system_int] and [to_system_int] return and take respectively a signal
-    number corresponding to those in the system's
-    /usr/include/bits/signum.h (or equivalent).  It is not guaranteed
-    that these numbers are portable across any given pair of systems --
+(** [of_system_int] and [to_system_int] return and take respectively a signal number
+    corresponding to those in the system's /usr/include/bits/signum.h (or equivalent).  It
+    is not guaranteed that these numbers are portable across any given pair of systems --
     although some are defined as standard by POSIX. *)
 val of_system_int : int -> t
 val to_system_int : t -> int
 
-(** [of_caml_int] constructs a Signal.t given an O'Caml internal signal
-    number.  This is only for the use of the Core_unix module. *)
+(** [of_caml_int] constructs a Signal.t given an O'Caml internal signal number.  This is
+    only for the use of the Core_unix module. *)
 val of_caml_int : int -> t
 val to_caml_int : t -> int
 
 (** [to_string t] returns a human-readable name: "sigabrt", "sigalrm", ... *)
 val to_string : t -> string
 
-
-(** The default behaviour of the system if these signals trickle to the top
-    level of a program.  See include/linux/kernel.h in the Linux kernel
-    source tree (not the file /usr/include/linux/kernel.h). *)
-type sys_behavior =
-    | Continue (** Continue the process if it is currently stopped*)
-    | Dump_core (** Terminate the process and dump core *)
-    | Ignore (** Ignore the signal*)
-    | Stop  (** Stop the process *)
-    | Terminate  (** Terminate the process *)
+(** The default behaviour of the system if these signals trickle to the top level of a
+    program.  See include/linux/kernel.h in the Linux kernel source tree (not the file
+    /usr/include/linux/kernel.h). *)
+type sys_behavior = [
+| `Continue  (** Continue the process if it is currently stopped*)
+| `Dump_core (** Terminate the process and dump core *)
+| `Ignore    (** Ignore the signal*)
+| `Stop      (** Stop the process *)
+| `Terminate (** Terminate the process *)
+]
 with sexp
 
 type behavior = [
-  | `Default
-  | `Ignore
-  | `Handle of t -> unit
+| `Default
+| `Ignore
+| `Handle of t -> unit
 ]
 
 (** [default_sys_behavior t]
@@ -77,6 +52,7 @@ val default_sys_behavior : t -> sys_behavior
    exception is raised. *)
 val signal : t -> behavior -> behavior
 
+
 (** [set t b] is [ignore (signal t b)] *)
 val set : t -> behavior -> unit
 
@@ -89,19 +65,25 @@ val handle_default : t -> unit
 (** [ignore t] is [set t `Ignore]. *)
 val ignore : t -> unit
 
-(** [send signal ~pid] sends [signal] to the process whose process id is [pid]. *)
-val send : t -> pid:int -> [ `Ok | `No_such_process ]
+type pid_spec = [ `Pid of Pid.t | `My_group | `Group of Pid.t ] ;;
+
+(** [send signal pid] sends [signal] to the process whose process id is [pid]. *)
+val send : t -> pid_spec -> [ `Ok | `No_such_process ]
 
 (** [send_i signal ~pid] sends [signal] to the process whose process id is [pid].
  * No exception will be raised if [pid] is a zombie or nonexistent.
  *)
-val send_i : t -> pid:int -> unit
+val send_i : t -> pid_spec -> unit
 
 (** [send_exn signal ~pid] sends [signal] to the process whose process id is
  * [pid].  In Caml's standard library, this is called [Unix.kill].  Sending a
  * signal to a zombie and/or nonexistent process will raise an exception.
  *)
-val send_exn : t -> pid:int -> unit
+val send_exn : t -> pid_spec -> unit
+
+(** [can_send_to pid] returns true if [pid] is running and the current process has
+    permission to send it signals. *)
+val can_send_to : Pid.t -> bool
 
 type sigprocmask_command = [ `Set | `Block | `Unblock ]
 
@@ -127,28 +109,29 @@ val sigpending : unit -> t list
 val sigsuspend : t list -> unit
 
 
-(** Specific signals *)
+(** Specific signals, along with their default behavior and meaning. *)
 
-val abrt : t (** Abnormal termination *)
-val alrm : t (** Timeout *)
-val chld : t (** Child process terminated *)
-val cont : t (** Continue *)
-val fpe : t (** Arithmetic exception *)
-val hup : t (** Hangup on controlling terminal *)
-val ill : t (** Invalid hardware instruction *)
-val int : t (** Interactive interrupt (ctrl-C) *)
-val kill : t (** Termination (cannot be ignored) *)
-val pipe : t (** Broken pipe *)
-val prof : t (** Profiling interrupt *)
-val quit : t (** Interactive termination *)
-val segv : t (** Invalid memory reference *)
-val stop : t (** Stop *)
-val term : t (** Termination *)
-val tstp : t (** Interactive stop *)
-val ttin : t (** Terminal read from background process *)
-val ttou : t (** Terminal write from background process *)
-val usr1 : t (** Application-defined signal 1 *)
-val usr2 : t (** Application-defined signal 2 *)
-val vtalrm : t (** Timeout in virtual time *)
-val zero : t (** No-op; can be used to test whether the target process exists and the
-                current process has permission to signal it *)
+val abrt   : t  (** [Dump_core]  Abnormal termination                           *)
+val alrm   : t  (** [Terminate]  Timeout                                        *)
+val chld   : t  (** [Ignore]     Child process terminated                       *)
+val cont   : t  (** [Continue]   Continue                                       *)
+val fpe    : t  (** [Dump_core]  Arithmetic exception                           *)
+val hup    : t  (** [Terminate]  Hangup on controlling terminal                 *)
+val ill    : t  (** [Dump_core]  Invalid hardware instruction                   *)
+val int    : t  (** [Terminate]  Interactive interrupt (ctrl-C)                 *)
+val kill   : t  (** [Terminate]  Termination (cannot be ignored)                *)
+val pipe   : t  (** [Terminate]  Broken pipe                                    *)
+val prof   : t  (** [Terminate]  Profiling interrupt                            *)
+val quit   : t  (** [Dump_core]  Interactive termination                        *)
+val segv   : t  (** [Dump_core]  Invalid memory reference                       *)
+val stop   : t  (** [Stop]       Stop                                           *)
+val term   : t  (** [Terminate]  Termination                                    *)
+val tstp   : t  (** [Stop]       Interactive stop                               *)
+val ttin   : t  (** [Stop]       Terminal read from background process          *)
+val ttou   : t  (** [Stop]       Terminal write from background process         *)
+val usr1   : t  (** [Terminate]  Application-defined signal 1                   *)
+val usr2   : t  (** [Terminate]  Application-defined signal 2                   *)
+val vtalrm : t  (** [Terminate]  Timeout in virtual time                        *)
+val zero   : t  (** [Ignore]     No-op; can be used to test whether the target
+                                 process exists and the current process has
+                                 permission to signal it                        *)

@@ -1,66 +1,100 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Std_internal
 
-(** The type used to store function results for memoization. *)
-type 'a memo_store  = Rval of 'a | Expt of exn
+module Result = struct
 
-let do_memo_store = function
-  | Rval rval -> rval
-  | Expt e -> raise e
+  type 'a t = Rval of 'a | Expt of exn
 
-let capture_memo f x =
-  try Rval (f x) with
-  | Sys.Break as e -> raise e
-  | e -> Expt e
+  let return = function
+    | Rval v -> v
+    | Expt e -> raise e
 
-(* Note that using (=) instead of compare would be a minor bug -- nan <> nan. *)
-let ident ?(equal=(fun x y -> compare x y = 0)) f =
-  let store = ref None in
-  (fun arg ->
-    let memo_store = match !store with
-      | Some (oldarg, old_memo_store) when equal oldarg arg ->
-          old_memo_store
-      | _ ->
-          let memo_store = capture_memo f arg in
-          store := Some (arg, memo_store);
-          memo_store
-    in
-    do_memo_store memo_store
-  )
+  let capture f x =
+    try Rval (f x) with
+    | Sys.Break as e -> raise e
+    | e -> Expt e
+
+end
 
 let unit f =
   let l = Lazy.lazy_from_fun f in
   (fun () -> Lazy.force l)
 
-
-let general f =
-  let store = Hashtbl.Poly.create () ~size:0 in
-  (fun x ->
-    let memo_store = Hashtbl.find_or_add store x
-      ~default:(fun () -> capture_memo f x)
+let unbounded (type a) ?hashable f =
+  let cache =
+    let module A =
+      Hashable.Make (struct
+        type t = a
+        let {Hashtbl.Hashable.hash; compare; sexp_of_t} =
+          Option.value ~default:Hashtbl.Hashable.poly hashable
+        let t_of_sexp _ = assert false (* ditto the comment below in [lru] *)
+      end)
     in
-    do_memo_store memo_store
-  )
+    A.Table.create () ~size:0
+  in
+  (fun arg ->
+    Result.return begin
+      Hashtbl.find_or_add cache arg
+        ~default:(fun () -> Result.capture f arg)
+    end)
+
+(* the same but with a bound on cache size *)
+let lru (type a) ?hashable ~max_cache_size f =
+  let max_cache_size = Int.max 1 max_cache_size in
+  let module Cache =
+    Hash_queue.Make (struct
+      type t = a
+      let {Hashtbl.Hashable.hash; compare; sexp_of_t} =
+        Option.value ~default:Hashtbl.Hashable.poly hashable
+      (* this [assert false] is unreachable because the only use of [t_of_sexp] by
+         [Hash_queue.Make] is to define [t_of_sexp] on the returned hash queue type,
+         and we never call that function. *)
+      let t_of_sexp _ = assert false
+    end)
+  in
+  let cache = Cache.create () in
+  (fun arg ->
+    Result.return begin
+      match Cache.lookup cache arg with
+      | Some result ->
+        (* move to back of the queue *)
+        Cache.remove_exn cache arg;
+        Cache.enqueue_exn cache arg result;
+        result
+      | None ->
+        let result = Result.capture f arg in
+        Cache.enqueue_exn cache arg result;
+        (* eject least recently used cache entry *)
+        if Cache.length cache > max_cache_size then ignore (Cache.dequeue_exn cache);
+        result
+    end)
+
+let general ?hashable ?cache_size_bound f =
+  match cache_size_bound with
+  | None -> unbounded ?hashable f
+  | Some n -> lru ?hashable ~max_cache_size:n f
+
+TEST_MODULE "lru" = struct
+  let count = ref 0  (* number of times f underlying function is run *)
+  let f = lru ~max_cache_size:3 (fun i -> incr count; i)
+
+  TEST = f 0 = 0
+  TEST = !count = 1
+
+  TEST = f 1 = 1
+  TEST = !count = 2
+
+  TEST = f 0 = 0
+  TEST = !count = 2
+
+  TEST = f 3 = 3                       (* cache full *)
+  TEST = !count = 3
+
+  TEST = f 4 = 4                       (* evict 1 *)
+  TEST = !count = 4
+
+  TEST = f 0 = 0
+  TEST = !count = 4
+
+  TEST = f 1 = 1                       (* recompute 1 *)
+  TEST = !count = 5
+end

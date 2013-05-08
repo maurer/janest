@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (** A hash-heap is a combination of a heap and a hashtbl that supports
     constant time lookup, and log(n) time removal and replacement of
     elements in addition to the normal heap operations. *)
@@ -58,6 +34,7 @@ module type S = sig
   val find_pop_exn : 'a t -> Key.t -> 'a
   val iter : 'a t -> f:(key:Key.t -> data:'a -> unit) -> unit
   val iter_vals : 'a t -> f:('a -> unit) -> unit
+  val length : 'a t -> int
 end
 
 module Make (Key : Key) : S with module Key = Key = struct
@@ -79,12 +56,6 @@ module Make (Key : Key) : S with module Key = Key = struct
       tbl = Table.create ~size:initial_tbl_size ();
     }
 
-  let copy t =
-    {
-      heap = Heap.copy t.heap;
-      tbl = Hashtbl.copy t.tbl;
-    }
-
   let push t ~key ~data =
     match Hashtbl.find t.tbl key with
     | Some _ -> `Key_already_present
@@ -93,11 +64,12 @@ module Make (Key : Key) : S with module Key = Key = struct
         Hashtbl.replace t.tbl ~key ~data:el;
         `Ok
 
+  exception Key_already_present of Key.t with sexp
+
   let push_exn t ~key ~data =
     match push t ~key ~data with
     | `Ok -> ()
-    
-    | `Key_already_present -> failwith "Hash_heap: key already present"
+    | `Key_already_present -> raise (Key_already_present key)
 
   let replace t ~key ~data =
     match Hashtbl.find t.tbl key with
@@ -159,10 +131,12 @@ module Make (Key : Key) : S with module Key = Key = struct
     | None -> None
     | Some el -> Some (snd (Heap.heap_el_get_el el))
 
+  exception Key_not_found of Key.t with sexp
+
   let find_exn t key =
     match find t key with
     | Some el -> el
-    | None -> failwith "Hash_heap.find_exn"
+    | None -> raise (Key_not_found key)
 
   let find_pop t key =
     match Hashtbl.find t.tbl key with
@@ -176,8 +150,24 @@ module Make (Key : Key) : S with module Key = Key = struct
   let find_pop_exn t key =
     match find_pop t key with
     | Some el -> el
-    | None -> failwith "Hash_heap.find_pop_exn"
+    | None -> raise (Key_not_found key)
 
   let iter t ~f = Heap.iter t.heap ~f:(fun (k, v) -> f ~key:k ~data:v)
   let iter_vals t ~f = Heap.iter t.heap ~f:(fun (_k, v) -> f v)
+
+  let copy t =
+    (* Construct a new copy by constructing an empty hash heap pushing each
+       element onto the new hash heap. Copying the heap and tbl fields
+       individually would be incorrect because the heap elements in tbl would
+       belong to the wrong heap. *)
+    let result = {
+      heap = Heap.create (Heap.get_cmp t.heap);
+      tbl = Table.create ();
+    } in
+    iter t ~f:(fun ~key ~data -> push_exn result ~key ~data);
+    result
+
+  let length t =
+    assert (Hashtbl.length t.tbl = Heap.length t.heap);
+    Hashtbl.length t.tbl
 end

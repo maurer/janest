@@ -1,30 +1,3 @@
-/******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************/
-
-#include "config.h"
-#ifdef JSC_LINUX_EXT
-
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -39,7 +12,7 @@
 
 static inline char * get_bstr(value v_bstr, value v_pos)
 {
-  return (char *) Caml_ba_data_val(v_bstr) + Int_val(v_pos);
+  return (char *) Caml_ba_data_val(v_bstr) + Long_val(v_pos);
 }
 
 
@@ -52,7 +25,8 @@ CAMLprim value bigstring_marshal_blit_stub(
   value v, value v_pos, value v_len, value v_bstr, value v_flags)
 {
   char *bstr = get_bstr(v_bstr, v_pos);
-  return Val_int(caml_output_value_to_block(v, v_flags, bstr, Int_val(v_len)));
+  return
+    Val_long(caml_output_value_to_block(v, v_flags, bstr, Long_val(v_len)));
 }
 
 extern CAMLprim void
@@ -77,14 +51,12 @@ CAMLprim value bigstring_marshal_data_size_stub(value v_pos, value v_bstr)
   CAMLreturn(v_res);
 }
 
-extern CAMLprim value caml_input_value_from_block(char *buff, int len);
+extern CAMLprim value caml_input_value_from_block(char *buf, int len);
 
 CAMLprim value bigstring_unmarshal_stub(value v_pos, value v_len, value v_bstr)
 {
   CAMLparam1(v_bstr);
   char *bstr = get_bstr(v_bstr, v_pos);
-  value v_res = caml_input_value_from_block(bstr, Int_val(v_len));
+  value v_res = caml_input_value_from_block(bstr, Long_val(v_len));
   CAMLreturn(v_res);
 }
-
-#endif /* LINUX_EXT */

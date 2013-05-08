@@ -1,30 +1,7 @@
-/******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************/
-
 #ifndef OCAML_UTILS_H
 #define OCAML_UTILS_H
 
+#include "config.h"
 #include "jane_common.h"
 
 #include <caml/alloc.h>
@@ -34,14 +11,30 @@
 #include <caml/bigarray.h>
 #include <caml/callback.h>
 #include <caml/custom.h>
+#include <caml/unixsupport.h>
 
-#define Nothing ((value) 0)
 #define XSTR(S) STR(S)
 #define STR(S) #S
 
-extern void unix_error (int errcode, char *cmdname, value arg) Noreturn;
-extern value unix_error_of_code(int errcode);
-extern void uerror (char *cmdname, value arg) Noreturn;
+#ifdef JSC_ARCH_SIXTYFOUR
+#  define caml_alloc_int63(v) Val_long(v)
+#  define Int63_val(v) Long_val(v)
+#else
+#  define caml_alloc_int63(v) caml_copy_int64(v)
+#  define Int63_val(v) Int64_val(v)
+#endif
+
+typedef int64 int63;
+
+#define DEFINE_INT63_CONSTANT(name,z) \
+  CAMLprim value name(value __unused v_unit) { return caml_alloc_int63(z); }
+
+/* [strcmp] is defined as a macro in our current compilation environment.  We use
+   [strcmp_not_a_macro] instead so that the text of this macro does not overflow the
+   C89 limit on string literal length when used inside [assert]. */
+
+/* defined in ocaml_utils_stubs.c */
+extern int strcmp_not_a_macro(const char*, const char*);
 
 extern value getsockopt_int(int *tcpopt, value sock, int level, value option);
 
@@ -52,5 +45,14 @@ extern int caml_convert_signal_number(int signo);
 extern int caml_rev_convert_signal_number(int signo);
 
 extern void raise_with_two_args(value tag, value arg1, value arg2) Noreturn;
+
+extern value* named_value_exn(const char* n);
+extern void* malloc_exn(size_t size);
+
+extern const char* string_ocaml_to_c(value s_v);
+extern const char* string_of_ocaml_string_option(value v);
+extern int int_of_ocaml_int_option(value v, int* i);
+
+extern const char** array_map(value array, const char* (*f__must_not_allocate)(value));
 
 #endif /* OCAML_UTILS_H */

@@ -1,37 +1,18 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+open Std_internal
 
 (** Memoization code -- not re-entrant! *)
 
 
+(** Returns memoized version of any function with a single argument. The
+    default caching policy is to remember everything for the lifetime
+    of the returned closure, but one may specify an upper bound on
+    cache size.  Whenever a cache entry must be forgotten in order to
+    obey this bound, we pick the least-recently-used one. *)
+val general
+  :  ?hashable:'a Hashtbl.Hashable.t
+  -> ?cache_size_bound:int
+  -> ('a -> 'b)
+  -> ('a -> 'b)
 
-(** Returns memoized version of any function with a single argument. *)
-val general : ('a -> 'b) -> ('a -> 'b)
-
-(** Returns memoized version of any function where data is kept
-    until argument changes. *)
-val ident : ?equal:('a -> 'a -> bool) -> ('a -> 'b) -> ('a -> 'b)
-
-(** Returns memoized version of any function with argument unit. *)
+(** efficient special case for argument type [unit] *)
 val unit : (unit -> 'a) -> (unit -> 'a)

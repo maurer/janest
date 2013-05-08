@@ -1,28 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
-
 open Std_internal
 
 module Helpers = struct
@@ -66,14 +41,29 @@ end
    other floats.
 *)
 module T : sig
-  include Constrained_float.S
+  type t = private float with bin_io
+
+  include Comparable.S_common with type t := t
+  include Hashable_binable    with type t := t
+  include Robustly_comparable with type t := t
+  include Stringable          with type t := t
+  include Floatable           with type t := t
+
   val add : t -> Span.t -> t
   val sub : t -> Span.t -> t
   val diff : t -> t -> Span.t
   val abs_diff : t -> t -> Span.t
   val now : unit -> t
 end = struct
+  (* IF THIS REPRESENTATION EVER CHANGES, ENSURE THAT EITHER
+      (1) all values serialize the same way in both representations, or
+      (2) you add a new Time version to stable.ml *)
   include Float
+
+  (* due to precision limitations in float we can't expect better than microsecond
+     precision *)
+  include Float_robust_compare.Make(struct let epsilon = 1E-6 end)
+
   let diff t1 t2 = Span.of_sec (t1 - t2)
 
   let abs_diff t1 t2 = Span.abs (diff t1 t2)
@@ -81,15 +71,6 @@ end = struct
   let sub t span = t -. (Span.to_sec span)
   let now () = Unix.gettimeofday ()
 end
-
-(* due to precision limitations in float we can't expect better than microsecond
-    precision *)
-module Robust_compare : sig
-  include Float_robust_compare.S with type robustly_comparable := robustly_comparable
-end = struct
-  include Float_robust_compare.Make(struct let epsilon = 1E-6 end)
-end
-include Robust_compare
 
 let float_of_hh_mm_ss hh mm ss =
   if hh < 0 then

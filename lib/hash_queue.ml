@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (* A hash-queue is a combination of a queue and a hashtable that
  * supports constant-time lookup and removal of queue elements in addition to
  * the usual queue operations (enqueue, dequeue).  The queue elements are
@@ -48,7 +24,7 @@ module type S = sig
   (** a hash-queue, where the values are of type 'a *)
   type 'a t
 
-  include Container.S1 with type 'a container = 'a t
+  include Container.S1 with type 'a t := 'a t
 
   (** [invariant t] checks the invariants of the queue. *)
   val invariant : 'a t -> unit
@@ -78,10 +54,13 @@ module type S = sig
 
   val enqueue_exn : 'a t -> Key.t -> 'a -> unit
 
+  (** [first t] returns the front element of the queue, without removing it. *)
+  val first : 'a t -> 'a option
+
   (** [keys t] returns the keys in the order of the queue. *)
   val keys : 'a t -> Key.t list
 
-    (** [dequeue t] returns the front element of the queue. *)
+  (** [dequeue t] returns the front element of the queue. *)
   val dequeue : 'a t -> 'a option
 
   val dequeue_exn : 'a t -> 'a
@@ -125,7 +104,6 @@ module Make (Key : Key) : S with module Key = Key = struct
     end
     include T
 
-    let equal (t : 'a t) t' = t == t'
     let key t = t.key
     let value t = t.value
   end
@@ -192,8 +170,6 @@ module Make (Key : Key) : S with module Key = Key = struct
 
   let mem t k = Hashtbl.mem t.table k
 
-  type 'a container = 'a t
-
   (* Note that this is the tail-recursive Core_list.map *)
   let to_list t = List.map (Doubly_linked.to_list t.queue) ~f:Key_value.value
 
@@ -205,6 +181,10 @@ module Make (Key : Key) : S with module Key = Key = struct
 
   let exists t ~f =
     read t (fun () -> Doubly_linked.exists t.queue ~f:(fun kv -> f kv.value))
+
+  let find_map t ~f =
+    read t (fun () -> Doubly_linked.find_map t.queue ~f:(fun kv -> f kv.value))
+  ;;
 
   let find t ~f =
     read t (fun () ->
@@ -255,6 +235,12 @@ module Make (Key : Key) : S with module Key = Key = struct
     | Some (_, v) -> Some v
   ;;
 
+  let first t =
+    match Doubly_linked.first t.queue with
+    | None -> None
+    | Some kv -> Some kv.value
+  ;;
+
   exception Dequeue_empty with sexp
 
   let dequeue_exn t =
@@ -282,6 +268,8 @@ module Make (Key : Key) : S with module Key = Key = struct
   ;;
 
   let fold t ~init ~f = foldi t ~init ~f:(fun ac ~key:_ ~data -> f ac data)
+
+  let count t ~f = Container.fold_count fold t ~f
 
   let dequeue_all t ~f =
     let rec loop () =
@@ -327,16 +315,4 @@ module Make (Key : Key) : S with module Key = Key = struct
     | `No_such_key -> raise (Replace_unknown_key k)
     | `Ok -> ()
 
-  let container = {
-    Container.
-    length = length;
-    is_empty = is_empty;
-    iter = iter;
-    fold = fold;
-    exists = exists;
-    for_all = for_all;
-    find = find;
-    to_list = to_list;
-    to_array = to_array;
-  }
 end

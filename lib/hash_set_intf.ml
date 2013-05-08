@@ -1,49 +1,53 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+module Binable = Binable0
 
+module type Accessors = sig
+  include Container.Generic
 
+  val mem : 'a t -> 'a -> bool (* override [Container.Generic.mem] *)
+  val copy : 'a t -> 'a t                 (* preserves the equality function *)
+  val add               : 'a t -> 'a -> unit
+  val strict_add        : 'a t -> 'a -> unit Or_error.t
+  val strict_add_exn    : 'a t -> 'a -> unit
+  val remove            : 'a t -> 'a -> unit
+  val strict_remove     : 'a t -> 'a -> unit Or_error.t
+  val strict_remove_exn : 'a t -> 'a -> unit
+  val clear : 'a t -> unit
+  val equal : 'a t -> 'a t -> bool
+  val filter : 'a t -> f:('a -> bool) -> 'a t
+  val diff : 'a t -> 'a t -> 'a t
+  val of_hashtbl_keys : ('a, _) Core_hashtbl.t -> 'a t
+  val filter_inplace : 'a t -> f:('a -> bool) -> unit
+end
 
-(* These are just the creation functions for non-polymorphic Hash_sets.  Most of the
-   functions live directly in Hash_set.  E.g.
+type ('key, 'z) create_options_without_hashable =
+  ('key, 'z) Core_hashtbl_intf.create_options_without_hashable
 
-   let my_set = Int.Hash_set.create in
-   Hash_set.add my_set 3
-*)
+type ('key, 'z) create_options_with_hashable_required =
+  ('key, 'z) Core_hashtbl_intf.create_options_with_hashable
+
+module type Creators = sig
+  type 'a t
+  type 'a elt
+  type ('a, 'z) create_options
+
+  val create  : ('a, unit        -> 'a t) create_options
+  val of_list : ('a, 'a elt list -> 'a t) create_options
+end
 
 module type S = sig
-  type elem
-  type t = elem Hash_set.t
-  include Sexpable.S with type sexpable = t
-  val create : ?growth_allowed:bool -> ?size:int -> unit -> t
-  val of_list : elem list -> t
+  type elt
+  type 'a hash_set
+  type t = elt hash_set with sexp
+  type 'a t_ = t
+  type 'a elt_ = elt
+
+  include Creators
+    with type 'a t := 'a t_
+    with type 'a elt := 'a elt_
+    with type ('a, 'z) create_options := ('a, 'z) create_options_without_hashable
 end
 
 module type S_binable = sig
-  type elem
-  type t = elem Hash_set.t
-  include Sexpable.S with type sexpable = t
-  include Binable.S with type binable = t
-  val create : ?growth_allowed:bool -> ?size:int -> unit -> t
-  val of_list : elem list -> t
+  include S
+  include Binable.S with type t := t
 end

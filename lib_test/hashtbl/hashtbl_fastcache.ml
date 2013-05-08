@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Core.Std
 open Core_extended.Std
 
@@ -52,9 +28,8 @@ module T = struct
     hashable: 'k X.hashable;
   }
 
-  type ('k, 'v) sexpable = ('k, 'v) t
 
-  let mk_array size = Array.init size ~f:(fun _ -> Array.create 1 None)
+  let mk_array size = Array.init size ~f:(fun _ -> Array.create ~len:1 None)
     
   let create ?(params = X.default_params) hashable =
     let s = Int.min (Int.max 1 params.X.initial_size) Sys.max_array_length in
@@ -129,7 +104,7 @@ module T = struct
 
   let clear t =
     for i = 0 to t.array_length do
-      t.table.(i) <- Array.create 3 None
+      t.table.(i) <- Array.create ~len:3 None
     done
 
   let find_bucket t key =

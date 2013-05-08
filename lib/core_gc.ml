@@ -1,35 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This file is derived from source code of the Ocaml compiler.               *
- * which has additional copyrights:                                           *
- *                                                                            *
- *    Damien Doligez, projet Cristal, INRIA Rocquencourt                      *
- *                                                                            *
- *    Copyright 1996 Institut National de Recherche en Informatique et        *
- *    en Automatique.                                                         *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Sexplib.Std
 open Bin_prot.Std
 include Caml.Gc
@@ -43,7 +11,8 @@ let read_finaliser_queue, write_finaliser_queue =
 ;;
 
 let maybe_start_finaliser_thread =
-  let mutex = Core_mutex.create () in
+  let module M = Nano_mutex in
+  let mutex = M.create () in
   let started = ref false in
   let start_finaliser_thread () =
     ignore (Thread.create (fun () -> Fn.forever (fun () ->
@@ -53,19 +22,25 @@ let maybe_start_finaliser_thread =
   in
   (fun () ->
     if not !started then (* performance hack! *)
-      Core_mutex.critical_section mutex ~f:(fun () ->
+      M.critical_section mutex ~f:(fun () ->
         if not !started then
           (started := true; start_finaliser_thread ())))
 ;;
 
 (* Ocaml permits finalisers to be run in any thread and at any time after the object
- * becomes unreachable -- they are essentially concurrent.  This changes forces all
- * finaliser code to run sequentially and in a fixed thread. *)
-let finalise f x =
+   becomes unreachable -- they are essentially concurrent.  This changes forces all
+   finaliser code to run sequentially and in a fixed thread. *)
+let add_finalizer x f =
   maybe_start_finaliser_thread ();
   let finaliser v = write_finaliser_queue (fun () -> f v) in
-  Caml.Gc.finalise finaliser x
+  Caml.Gc.finalise finaliser x;
 ;;
+
+(* [add_finalizer_exn] is the same as [add_finalizer].  However, their types in
+   core_gc.mli are different, and the type of [add_finalizer] guarantees that it always
+   receives a heap block, which ensures that it will not raise, while [add_finalizer_exn]
+   accepts any type, and so may raise. *)
+let add_finalizer_exn = add_finalizer
 
 module Stat = struct
   type pretty_float = float with bin_io, sexp
@@ -88,9 +63,7 @@ module Stat = struct
     compactions : int;
     top_heap_words : int;
     stack_size : int
-  } with bin_io, sexp
-  type binable = t
-  type sexpable = t
+  } with bin_io, sexp, fields
 end
 
 module Control = struct
@@ -116,9 +89,7 @@ module Control = struct
     mutable max_overhead : int; (* Heap compaction is triggered when the estimated amount of "wasted" memory is more than max_overhead percent of the amount of live data. If max_overhead is set to 0, heap compaction is triggered at the end of each major GC cycle (this setting is intended for testing purposes only). If max_overhead >= 1000000, compaction is never triggered. Default: 500. *)
     mutable stack_limit : int; (* The maximum size of the stack (in words). This is only relevant to the byte-code runtime, as the native code runtime uses the operating system's stack. Default: 256k. *)
     mutable allocation_policy : int; (** The policy used for allocating in the heap.  Possible values are 0 and 1.  0 is the next-fit policy, which is quite fast but can result in fragmentation.  1 is the first-fit policy, which can be slower in some cases but can be better for programs with fragmentation problems.  Default: 0. *)
-  } with bin_io, sexp
-  type binable = t
-  type sexpable = t
+  } with bin_io, sexp, fields
 end
 
 let tune__field logger ?(fmt = ("%d" : (_, _, _) format)) name arg current =
@@ -130,7 +101,6 @@ let tune__field logger ?(fmt = ("%d" : (_, _, _) format)) name arg current =
               name fmt current fmt v);
       v
 ;;
-
 
 (*
   *\(.*\) -> \1 = f "\1" \1 c.\1;
@@ -150,4 +120,13 @@ let tune ?logger ?minor_heap_size ?major_heap_increment ?space_overhead
     allocation_policy = f "allocation_policy" allocation_policy
       c.allocation_policy
   }
+;;
+
+(* Reasonable defaults for the YEAR 2000! *)
+let () =
+  tune
+    ~minor_heap_size:1_000_000 (* 32K words -> 1M words *)
+    ~major_heap_increment:1_000_000 (* 32K words -> 1M words *)
+    ~space_overhead:100 (* 80 -> 100 (because we have sooo much memory) *)
+    ()
 ;;

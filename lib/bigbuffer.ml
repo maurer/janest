@@ -1,35 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This file is derived from source code of the Ocaml compiler.               *
- * which has additional copyrights:                                           *
- *                                                                            *
- *    Pierre Weis and Xavier Leroy, projet Cristal, INRIA Rocquencourt        *
- *                                                                            *
- *    Copyright 1999 Institut National de Recherche en Informatique et        *
- *    en Automatique.                                                         *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (* Some code taken from INRIA's buffer module. *)
 
 open Bigstring
@@ -42,9 +10,11 @@ type t =
     init : Bigstring.t;
   }
 
+(*
 let invariant t =
   assert (t.len == Bigstring.length t.bstr);
 ;;
+*)
 
 let create n =
   let n = max 1 n in
@@ -66,13 +36,15 @@ let sub buf pos len =
   if pos < 0 || len < 0 || pos > buf.pos - len
   then invalid_arg "Bigbuffer.sub"
   else Bigstring.to_string buf.bstr ~pos ~len
+;;
 
-let blit ~src ~src_pos ~dst ~dst_pos ~len =
-  if len < 0 || src_pos < 0 || src_pos > src.pos - len
-             || dst_pos < 0 || dst_pos > (String.length dst) - len
-  then invalid_arg "Bigbuffer.blit"
-  else
-    Bigstring.blit_bigstring_string ~src:src.bstr ~src_pos ~dst ~dst_pos ~len
+let blit ~src ?src_pos ?src_len ~dst ?dst_pos () =
+  let (pos, len) =
+    Ordered_collection_common.get_pos_len_exn
+      ?pos:src_pos ?len:src_len
+      ~length:src.pos
+  in
+  Bigstring.blit_bigstring_string ~src:src.bstr ~src_pos:pos ~src_len:len ~dst ?dst_pos ()
 ;;
 
 let nth buf pos =
@@ -86,51 +58,58 @@ let clear buf = buf.pos <- 0
 let reset buf =
   buf.pos <- 0;
   buf.bstr <- buf.init;
-  buf.len <- Bigstring.length buf.bstr
+  buf.len <- Bigstring.length buf.bstr;
+;;
 
 let resize buf more =
   let min_len = buf.len + more in
   let new_len = min_len + min_len in
   let new_buf = Bigstring.create new_len in
-  Bigstring.blit ~src:buf.bstr ~src_pos:0 ~dst:new_buf ~dst_pos:0 ~len:buf.pos;
+  Bigstring.blit ~src:buf.bstr ~src_len:buf.pos ~dst:new_buf ();
   buf.bstr <- new_buf;
-  buf.len <- new_len
+  buf.len <- new_len;
+;;
 
 let add_char buf c =
   let pos = buf.pos in
   if pos >= buf.len then resize buf 1;
   buf.bstr.{pos} <- c;
-  buf.pos <- pos + 1
+  buf.pos <- pos + 1;
+;;
 
 let add_substring buf src src_pos len =
   if src_pos < 0 || len < 0 || src_pos > String.length src - len
   then invalid_arg "Bigbuffer.add_substring";
   let new_pos = buf.pos + len in
   if new_pos > buf.len then resize buf len;
-  blit_string_bigstring ~src ~src_pos ~dst:buf.bstr ~dst_pos:buf.pos ~len;
-  buf.pos <- new_pos
+  blit_string_bigstring ~src ~src_pos ~src_len:len ~dst:buf.bstr ~dst_pos:buf.pos ();
+  buf.pos <- new_pos;
+;;
 
 let add_string buf src =
   let len = String.length src in
   let new_pos = buf.pos + len in
   if new_pos > buf.len then resize buf len;
-  blit_string_bigstring ~src ~src_pos:0 ~dst:buf.bstr ~dst_pos:buf.pos ~len;
-  buf.pos <- new_pos
+  blit_string_bigstring ~src ~src_len:len ~dst:buf.bstr ~dst_pos:buf.pos ();
+  buf.pos <- new_pos;
+;;
 
 let add_buffer buf_dst buf_src =
   let len = buf_src.pos in
   let dst_pos = buf_dst.pos in
   let new_pos = dst_pos + len in
   if new_pos > buf_dst.len then resize buf_dst len;
-  Bigstring.blit ~src:buf_src.bstr ~src_pos:0 ~dst:buf_dst.bstr ~dst_pos ~len;
-  buf_dst.pos <- new_pos
+  Bigstring.blit ~src:buf_src.bstr ~src_len:len ~dst:buf_dst.bstr ~dst_pos ();
+  buf_dst.pos <- new_pos;
+;;
 
 let add_channel buf ic len =
   if len < 0 then invalid_arg "Bigbuffer.add_channel";
   let pos = buf.pos in
   if pos + len > buf.len then resize buf len;
   Bigstring.really_input ic buf.bstr ~pos ~len;
-  buf.pos <- pos + len
+  buf.pos <- pos + len;
+;;
 
 let output_buffer oc buf = Bigstring.really_output oc buf.bstr ~len:buf.pos
 
@@ -197,7 +176,6 @@ let add_substitute buf f s =
          add_char buf current;
          subst current (i + 1)
       | '\\' as current ->
-         
          subst current (i + 1)
       | current ->
          add_char buf current;

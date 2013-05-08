@@ -1,35 +1,31 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
+module Stable = struct
+  module V1 = struct
+    type ('a, 'b) t =
+    | Ok of 'a
+    | Error of 'b
+    with sexp, bin_io, compare
+  end
 
-type ('a, 'b) t =
-  | Ok of 'a
-  | Error of 'b
-with sexp, bin_io
+  module V1_stable_unit_test = struct
+    open Sexplib.Std
+    open Bin_prot.Std
+
+    type t = (string, int) V1.t with sexp, bin_io, compare
+
+    let equal = (=)
+
+    let tests =
+      [ V1.Ok "foo", "(Ok foo)",  "\000\003foo"
+      ; V1.Error 7,  "(Error 7)", "\001\007"
+      ]
+  end
+end
+
+include Stable.V1
 
 type ('a, 'b) _t = ('a, 'b) t
 
-include Monad.Make2
+include (Monad.Make2
 (struct
    type ('a, 'b) t = ('a,'b) _t
 
@@ -38,10 +34,7 @@ include Monad.Make2
      | Ok x -> f x
 
    let return x = Ok x
- end)
-
-type ('a, 'b) sexpable = ('a, 'b) t
-type ('a, 'b) binable = ('a, 'b) t
+ end): Monad.S2 with type ('a,'b) t := ('a,'b) t)
 
 let fail x = Error x;;
 let failf format = Printf.ksprintf fail format
@@ -81,6 +74,10 @@ let iter v ~f = match v with
   | Ok x -> f x
   | Error _ -> ()
 
+let iter_error v ~f = match v with
+  | Ok _ -> ()
+  | Error x -> f x
+
 let call ~f x =
   match f with
   | Ok g -> g x
@@ -104,20 +101,15 @@ let try_with f =
   try Ok (f ())
   with exn -> Error exn
 
-let ok_exn ?fail = function
-  | Ok x -> x
-  | Error _ ->
-    match fail with
-    | None -> failwith "Result.ok_exn"
-    | Some exn -> raise exn
-;;
-
 let ok_unit = Ok ()
 
-let raise_error = function
+let ok_exn = function
   | Ok x -> x
   | Error exn -> raise exn
-;;
+
+let ok_or_failwith = function
+  | Ok x -> x
+  | Error str -> failwith str
 
 module Export = struct
   type ('ok, 'err) _result =
@@ -132,3 +124,5 @@ let combine t1 t2 ~ok ~err =
   | Ok    ok1 , Ok    ok2  -> Ok    (ok  ok1  ok2 )
   | Error err1, Error err2 -> Error (err err1 err2)
 ;;
+
+

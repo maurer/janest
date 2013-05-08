@@ -1,27 +1,3 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 open Sexplib.Std
 open Bin_prot.Std
 open Int64
@@ -29,13 +5,6 @@ open Int64
 module T = struct
   type t = int64 with sexp, bin_io
 
-  type binable = t
-  type floatable = t
-  type intable = t
-  type sexpable = t
-  type stringable = t
-
-  
   let compare (x : t) y = compare x y
   let equal (x : t) y = x = y
   let hash (x : t) = Hashtbl.hash x
@@ -71,21 +40,32 @@ let compare = compare
 let to_float = to_float
 let of_float = of_float
 
-type comparable = t
-let ascending = compare
-let descending x y = compare y x
-let min (x : t) y = if x < y then x else y
-let max (x : t) y = if x > y then x else y
-let ( >= ) (x : t) y = x >= y
-let ( <= ) (x : t) y = x <= y
-let ( = ) (x : t) y = x = y
-let ( > ) (x : t) y = x > y
-let ( < ) (x : t) y = x < y
-let ( <> ) (x : t) y = x <> y
+include Comparable.Validate_with_zero (struct
+  include T
+  let zero = zero
+end)
+
+module Replace_polymorphic_compare = struct
+  let equal = equal
+  let compare = compare
+  let ascending = compare
+  let descending x y = compare y x
+  let min (x : t) y = if x < y then x else y
+  let max (x : t) y = if x > y then x else y
+  let ( >= ) (x : t) y = x >= y
+  let ( <= ) (x : t) y = x <= y
+  let ( = ) (x : t) y = x = y
+  let ( > ) (x : t) y = x > y
+  let ( < ) (x : t) y = x < y
+  let ( <> ) (x : t) y = x <> y
+  let between t ~low ~high = low <= t && t <= high
+  let _squelch_unused_module_warning_ = ()
+end
+
+include Replace_polymorphic_compare
 
 include Hashable.Make_binable (T)
-module Map = Core_map.Make (T)
-module Set = Core_set.Make (T)
+include Comparable.Map_and_set_binable (T)
 
 let ( / ) = div
 let ( * ) = mul
@@ -114,3 +94,9 @@ let to_nativeint = Conv.int64_to_nativeint
 let to_nativeint_exn = Conv.int64_to_nativeint_exn
 
 include Conv.Make (T)
+
+include Pretty_printer.Register (struct
+  type nonrec t = t
+  let to_string = to_string
+  let module_name = "Core.Std.Int64"
+end)

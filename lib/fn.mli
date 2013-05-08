@@ -1,31 +1,10 @@
-(******************************************************************************
- *                             Core                                           *
- *                                                                            *
- * Copyright (C) 2008- Jane Street Holding, LLC                               *
- *    Contact: opensource@janestreet.com                                      *
- *    WWW: http://www.janestreet.com/ocaml                                    *
- *                                                                            *
- *                                                                            *
- * This library is free software; you can redistribute it and/or              *
- * modify it under the terms of the GNU Lesser General Public                 *
- * License as published by the Free Software Foundation; either               *
- * version 2 of the License, or (at your option) any later version.           *
- *                                                                            *
- * This library is distributed in the hope that it will be useful,            *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of             *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU          *
- * Lesser General Public License for more details.                            *
- *                                                                            *
- * You should have received a copy of the GNU Lesser General Public           *
- * License along with this library; if not, write to the Free Software        *
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA  *
- *                                                                            *
- ******************************************************************************)
-
 (** various combinators for functions *)
 
-(** A 'pipe' operator. *)
-val ( |! ) : 'a -> ( 'a -> 'b) -> 'b
+(** A 'pipe' operator. Deprecated. *)
+external ( |! ) : 'a -> ( 'a -> 'b) -> 'b = "%revapply"
+
+(** A pipe operator, equivalent to |!, but this notation is more broadly accepted *)
+external ( |> ) : 'a -> ( 'a -> 'b) -> 'b = "%revapply"
 
 (** produces a function that just returns its first argument *)
 val const : 'a -> _ -> 'a
@@ -42,6 +21,9 @@ val non : ('a -> bool) -> 'a -> bool
 (** [forever f] runs [f ()] until it throws an exception and returns the
     exception. This function is useful for read_line loops, etc. *)
 val forever : (unit -> unit) -> exn
+
+(** [apply_n_times ~n f x] is the [n]-fold application of [f] to [x]. *)
+val apply_n_times : n:int -> ('a -> 'a) -> ('a -> 'a)
 
 (** The identity function*)
 external id : 'a -> 'a = "%identity"
