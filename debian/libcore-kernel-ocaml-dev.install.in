@@ -1,0 +1,10 @@
+@OCamlStdlibDir@/core_kernel/META
+@OCamlStdlibDir@/core_kernel/*.a
+@OCamlStdlibDir@/core_kernel/*.cmx
+@OCamlStdlibDir@/core_kernel/*.cma
+@OCamlStdlibDir@/core_kernel/*.cmi
+@OCamlStdlibDir@/core_kernel/*.ml
+@OCamlStdlibDir@/core_kernel/*.mli
+@OCamlStdlibDir@/core_kernel/*.h            /usr/include
+OPT: @OCamlStdlibDir@/core_kernel/*.cmxa
+DYN: @OCamlStdlibDir@/core_kernel/*.cmxs

@@ -1,0 +1,12 @@
+Package: libpa-test-camlp4-dev
+Architecture: any
+Depends:
+ ${ocaml:Depends},
+ ocaml-findlib,
+ camlp4,
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: OCaml syntax extension for writing inline testing
+ pa-test
+

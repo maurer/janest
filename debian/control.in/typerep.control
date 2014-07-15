@@ -1,0 +1,11 @@
+Package: libtyperep-ocaml-dev
+Architecture: any
+Depends:
+ ${ocaml:Depends},
+ ocaml-findlib,
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: typerep
+ typerep
+

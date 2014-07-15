@@ -1,0 +1,15 @@
+Package: libcustom-printf-camlp4-dev
+Architecture: any
+Depends:
+ ${ocaml:Depends},
+ ocaml-findlib,
+ camlp4,
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: OCaml syntax extension for printf format strings
+ custom-printf is an OCaml syntax extension that can be used to printf
+ format strings.
+ .
+ custom-printf is built on top of CamlP4.
+

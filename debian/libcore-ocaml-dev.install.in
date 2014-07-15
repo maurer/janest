@@ -2,4 +2,10 @@
 @OCamlStdlibDir@/core/*.a
 @OCamlStdlibDir@/core/*.cma
 @OCamlStdlibDir@/core/*.cmi
+@OCamlStdlibDir@/core/*.cmx
+@OCamlStdlibDir@/core/*.ml
+@OCamlStdlibDir@/core/*.mli
 OPT: @OCamlStdlibDir@/core/*.cmxa
+OPT: @OCamlStdlibDir@/core/*.cmxs
+@OCamlStdlibDir@/core/*.h /usr/include
+usr/bin/corebuild

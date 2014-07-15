@@ -1,0 +1,12 @@
+Package: libtextutils-ocaml-dev
+Architecture: any
+Depends:
+ ${ocaml:Depends},
+ ocaml-findlib,
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: Text output utilities
+ textutils is a OCaml library to create ASCII table and print a list
+ in a columnize way.
+

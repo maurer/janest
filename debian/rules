@@ -1,40 +1,84 @@
 #!/usr/bin/make -f
 
-DESTDIR=$(CURDIR)/debian/tmp
+export DESTDIR=$(CURDIR)/debian/tmp
 
 include /usr/share/ocaml/ocamlvars.mk
 
 export OCAML_DLL_DIR
 export OCAML_HAVE_OCAMLOPT
 export OCAMLFIND_DESTDIR=$(DESTDIR)/$(OCAML_STDLIB_DIR)
+export OCAMLFIND_LDCONF=ignore
+export OCAMLPATH=$(OCAMLFIND_DESTDIR)
+
+# building order.
+PKGLIST = enumerate typerep comparelib herelib pa_ounit pa_bench pipebang variantslib \
+	  pa_test core_kernel core custom_printf async_kernel async_unix async_extra async \
+	  textutils re2 core_extended core_bench
 
 %:
 	dh $@ --with ocaml
 
-.PHONY: override_dh_auto_configure
-override_dh_auto_configure:
-	ocaml setup.ml -configure --prefix /usr --destdir '$(DESTDIR)' --docdir /usr/share/doc/libcore-ocaml-doc/html/api
+# Syntax extensions.
+enumerate comparelib herelib pa_ounit pa_test pa_bench pipebang custom_printf variantslib:
+	$(MAKE) -C $@ -f $(CURDIR)/debian/Makefile DOCPKG=lib$(subst _,-,$(subst lib,,$@))-camlp4-dev
 
-.PHONY: override_dh_auto_build
-override_dh_auto_build:
-	ocaml setup.ml -build
-	ocaml setup.ml -doc
+# Libraries with single package.
+typerep re2 textutils core_bench:
+	$(MAKE) -C $@ -f $(CURDIR)/debian/Makefile DOCPKG=lib$(subst _,-,$@)-ocaml-dev
 
-.PHONY: override_dh_auto_test
-override_dh_auto_test:
-	ocaml setup.ml -test
+# Libraries with separate doc package.
+async_kernel async_unix async_extra:
+	$(MAKE) -C $@ -f $(CURDIR)/debian/Makefile DOCPKG=lib$(subst _,-,$@)-ocaml-doc
 
-.PHONY: override_dh_auto_install
-override_dh_auto_install:
-	mkdir -p '$(OCAMLFIND_DESTDIR)'
-	mkdir -p '$(DESTDIR)$(OCAML_DLL_DIR)'
-	ocaml setup.ml -install
-	rm -f '$(DESTDIR)$(OCAML_DLL_DIR)'/*.so.owner
+# FIXME: fail to pass tests. (exception to the above rule.)
+core core_kernel core_extended:
+	$(MAKE) -C $@ -f $(CURDIR)/debian/Makefile DOCPKG=lib$(subst _,-,$@)-ocaml-doc TEST=n
 
-.PHONY: override_dh_auto_clean
-override_dh_auto_clean:
-	ocaml setup.ml -distclean
+async:
+	$(MAKE) -C $@ -f $(CURDIR)/debian/Makefile DOCPKG=lib$(subst _,-,$@)-ocaml-dev TEST=n
 
-.PHONY: override_dh_install
-override_dh_install:
+build: $(PKGLIST)
+	dh_ocamlinit
+	mkdir -p debian/tmp/usr/bin
+	cp -a debian/corebuild debian/tmp/usr/bin/
+
+binary:
+	dh_testroot
+	dh_testdir
 	dh_install --fail-missing
+	dh_ocamldoc
+	dh_installdocs
+	dh_installchangelogs
+	dh_installexamples
+	dh_perl
+	dh_link
+	dh_compress
+	dh_fixperms
+	dh_strip
+	dh_makeshlibs
+	dh_shlibdeps
+	dh_installdeb
+	dh_ocaml
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+clean:
+	dh_testdir
+	dh_auto_clean
+	dh_clean
+	@for pkg in $(PKGLIST); do \
+		$(MAKE) -C $$pkg -f $(CURDIR)/debian/Makefile clean; \
+	done
+
+# It's convenient to disable some packages in PKGLIST to test
+# other packages.
+debian/control:
+	@test -d debian
+	@cat debian/control.in/base.control > $@
+	@for pkg in $(PKGLIST); do \
+		cat debian/control.in/$$pkg.control >> $@; \
+	done
+	@echo '$@ generated.'
+
+.PHONY: build binary clean $(PKGLIST)

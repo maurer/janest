@@ -1,0 +1,2 @@
+@OCamlDllDir@/dllcore_kernel_stubs.so
+@OCamlDllDir@/dllcheck_caml_modify_stubs.so

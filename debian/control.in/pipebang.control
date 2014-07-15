@@ -1,0 +1,15 @@
+Package: libpipebang-camlp4-dev
+Architecture: any
+Depends:
+ ${ocaml:Depends},
+ ocaml-findlib,
+ camlp4,
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: OCaml syntax extension to transform x|! f into f x
+ pipebang is an OCaml syntax extension that can be used to
+ transform x|! f into f x.
+ .
+ pipebang is built on top of CamlP4.
+

@@ -1,0 +1,3 @@
+@OCamlStdlibDir@/typerep_lib
+@OCamlStdlibDir@/typerep_extended
+@OCamlStdlibDir@/typerep_generics_sexprep

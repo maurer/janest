@@ -1,1 +1,1 @@
-@OCamlDllDir@/*.so
+@OCamlDllDir@/dllcore_stubs.so

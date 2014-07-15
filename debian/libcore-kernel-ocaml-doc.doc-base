@@ -1,0 +1,9 @@
+Document: libcore-kernel-ocaml-doc-apiref
+Title: Documentation of Jane Street's Core-kernel library
+Author: Jane Street
+Abstract: Documentation of Jane Street's Core-kernel library
+Section: Programming/OCaml
+
+Format: HTML
+Index: /usr/share/doc/libcore-kernel-ocaml-doc/html/api/index.html
+Files: /usr/share/doc/libcore-kernel-ocaml-doc/html/api/*.html

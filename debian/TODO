@@ -1,0 +1,5 @@
+* improve package descriptions.
+* bundle Async-related and other packages.
+* per-package docs.
+* bundle bin-prot, sexplib310, type-conv and fieldslib.
+* install doc for async-related packages.

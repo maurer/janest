@@ -1,0 +1,9 @@
+Document: libcore-extended-ocaml-doc-apiref
+Title: Documentation of Jane Street's Core-extended library
+Author: Jane Street
+Abstract: Documentation of Jane Street's Core-extended library
+Section: Programming/OCaml
+
+Format: HTML
+Index: /usr/share/doc/libcore-extended-ocaml-doc/html/api/index.html
+Files: /usr/share/doc/libcore-extended-ocaml-doc/html/api/*.html

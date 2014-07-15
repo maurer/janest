@@ -1,8 +1,18 @@
-janest-core (107.01-6) UNRELEASED; urgency=low
+janest-core (111.21.00-1) unstable; urgency=medium
 
-  * Add bc to Build-Depends (thanks to Thorsten Glaser)
+  * New upstream release.
+  * Bundle Jane Street's syntax extensions: comparelib, custom_printf,
+    herelib, pa_ounit, pipebang and variantslib.
+    (Closes: #717751, #717814, #717758, #717759, #717752, #717755)
+  * Bundle libraries: core_kernel, core_extended and textutils.
+    (Closes: #717760, #718236, #717815)
+  * New patch:
+    - fix-time-test.patch.
+    - fix-documentation.patch.
+  * Add myself to Uploaders.
+  * Bump Standards-Version to 3.9.5.
 
- -- Stéphane Glondu <glondu@debian.org>  Mon, 22 Apr 2013 11:10:15 +0200
+ -- Lifeng Sun <lifongsun@gmail.com>  Tue, 15 Jul 2014 12:48:52 +0800
 
 janest-core (107.01-5) unstable; urgency=low
 

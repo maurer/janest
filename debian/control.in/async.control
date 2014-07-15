@@ -1,0 +1,26 @@
+Package: libasync-ocaml-dev
+Architecture: any
+Depends:
+ ocaml-findlib,
+ ${ocaml:Depends},
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: Asynchronous programming library for OCaml
+ Async uses non-preemptive user-level threads and first-class blocking
+ operations with blocking expressed in the type system to implement
+ asynchronous programming. The benefits of the approach are:
+ .
+  * Non-preemptive threading is simpler to reason about than pre-emptive
+    threading. For the bulk of one's program, one doesn't have to think
+    about race conditions, mutexes, etc. One can also use existing
+    non-thread-safe code without worries.
+  * User level threads are much cheaper than threads provided by the
+    operating system, both in creation and context switching.
+  * Users can control the scheduler for threads, which makes it possible
+    to do a better job for the application at hand.
+  * Writing low latency applications is easier -- it's harder to have an
+    application block indefinitely by mistake.
+ .
+ This package provides Async development stuffs.
+
