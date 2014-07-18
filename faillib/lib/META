@@ -1,0 +1,21 @@
+# OASIS_START
+# DO NOT EDIT (digest: 248f05be2f8ba9819dfc5b28c2ef5757)
+version = "111.17.00"
+description = "Syntax extension for inserting the current location."
+archive(byte) = "faillib.cma"
+archive(byte, plugin) = "faillib.cma"
+archive(native) = "faillib.cmxa"
+archive(native, plugin) = "faillib.cmxs"
+exists_if = "faillib.cma"
+package "syntax" (
+ version = "111.17.00"
+ description = "Syntax extension for \"failwithp\""
+ requires = "camlp4 herelib.syntax"
+ archive(syntax, preprocessor) = "faillib_syntax.cma"
+ archive(syntax, toploop) = "faillib_syntax.cma"
+ archive(syntax, preprocessor, native) = "faillib_syntax.cmxa"
+ archive(syntax, preprocessor, native, plugin) = "faillib_syntax.cmxs"
+ exists_if = "faillib_syntax.cma"
+)
+# OASIS_STOP
+

@@ -1,3 +1,0 @@
-linux_possible="true"
-posix_timers_possible="true"
-rt_possible="true"

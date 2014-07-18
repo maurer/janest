@@ -1,0 +1,9 @@
+_build/
+/setup.data
+/setup.log
+/*.exe
+/*.docdir
+/*.native
+/*.byte
+/lib/core_config.h
+/lib/core_config.mlh

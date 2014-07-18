@@ -1,0 +1,21 @@
+# OASIS_START
+# DO NOT EDIT (digest: 2e8909824dd71a1f5cc65d3ab7cf868f)
+version = "109.15.00"
+description = "OCaml variants as first class values."
+archive(byte) = "variantslib.cma"
+archive(byte, plugin) = "variantslib.cma"
+archive(native) = "variantslib.cmxa"
+archive(native, plugin) = "variantslib.cmxs"
+exists_if = "variantslib.cma"
+package "syntax" (
+ version = "109.15.00"
+ description = "Syntax extension for Variantslib"
+ requires = "camlp4 type_conv variantslib"
+ archive(syntax, preprocessor) = "pa_variants_conv.cma"
+ archive(syntax, toploop) = "pa_variants_conv.cma"
+ archive(syntax, preprocessor, native) = "pa_variants_conv.cmxa"
+ archive(syntax, preprocessor, native, plugin) = "pa_variants_conv.cmxs"
+ exists_if = "pa_variants_conv.cma"
+)
+# OASIS_STOP
+
