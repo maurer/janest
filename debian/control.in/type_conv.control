@@ -1,0 +1,16 @@
+Package: libtype-conv-camlp4-dev
+Architecture: any
+Depends:
+ ocaml-findlib,
+ ${ocaml:Depends},
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: support library for OCaml preprocessor type conversions
+ The type-conv library factors out functionality needed by different
+ CamlP4 extensions that generate code from type specifications.
+ .
+ CamlP4 extensions adding support for some trailing "with foo" (e.g.
+ "with sexplib" provided by sexplib, and "with bin_io" provided by
+ bin-prot) after type declaration can rely on type-conv.
+

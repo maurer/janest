@@ -1,0 +1,22 @@
+Package: libbin-prot-camlp4-dev
+Architecture: any
+Depends:
+ ${ocaml:Depends},
+ ocaml-findlib,
+ camlp4,
+ libtype-conv-camlp4-dev,
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: type-safe binary serialization for OCaml values
+ bin-prot provides functionalities for reading and writing OCaml-values
+ in a type-safe binary protocol.
+ .
+ These functions provide a safe way of performing I/O on any
+ extensionally defined data type. Functions, objects, and values whose
+ type is bound through a polymorphic record field are not supported, but
+ everything else is.
+ .
+ There is no support for cyclic or shared values and only little endian
+ computer architectures are supported.
+

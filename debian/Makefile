@@ -19,6 +19,8 @@ configure: clean
 	ocaml setup.ml -configure $(CONF)
 
 build: configure
+	echo $(OCAML_DLL_DIR)
+	echo $(OCAML_LD_LIBRARY_PATH)
 	ocaml setup.ml -build
 	ocaml setup.ml -doc
 

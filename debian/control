@@ -1,4 +1,4 @@
-Source: janest-core
+Source: janest
 Section: ocaml
 Priority: optional
 Maintainer: Debian OCaml Maintainers <debian-ocaml-maint@lists.debian.org>
@@ -9,6 +9,7 @@ Uploaders:
 Build-Depends:
  debhelper (>= 9),
  bc,
+ rsync,
  dh-ocaml (>= 0.9~),
  ocaml-nox (>= 4.00.1),
  ocaml-findlib (>= 1.4),
@@ -17,14 +18,95 @@ Build-Depends:
  libres-ocaml-dev (>= 4.0.2),
  libpcre-ocaml-dev,
  libounit-ocaml-dev,
- libbin-prot-camlp4-dev,
- libsexplib-camlp4-dev,
- libtype-conv-camlp4-dev (>= 3.0.5),
- libfields-camlp4-dev
 Standards-Version: 3.9.5
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=pkg-ocaml-maint/packages/janest-core.git
 Vcs-Git: git://anonscm.debian.org/pkg-ocaml-maint/packages/janest-core.git
 Homepage: http://janestreet.github.io/
+
+Package: libtype-conv-camlp4-dev
+Architecture: any
+Depends:
+ ocaml-findlib,
+ ${ocaml:Depends},
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: support library for OCaml preprocessor type conversions
+ The type-conv library factors out functionality needed by different
+ CamlP4 extensions that generate code from type specifications.
+ .
+ CamlP4 extensions adding support for some trailing "with foo" (e.g.
+ "with sexplib" provided by sexplib, and "with bin_io" provided by
+ bin-prot) after type declaration can rely on type-conv.
+
+Package: libbin-prot-camlp4-dev
+Architecture: any
+Depends:
+ ${ocaml:Depends},
+ ocaml-findlib,
+ camlp4,
+ libtype-conv-camlp4-dev,
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: type-safe binary serialization for OCaml values
+ bin-prot provides functionalities for reading and writing OCaml-values
+ in a type-safe binary protocol.
+ .
+ These functions provide a safe way of performing I/O on any
+ extensionally defined data type. Functions, objects, and values whose
+ type is bound through a polymorphic record field are not supported, but
+ everything else is.
+ .
+ There is no support for cyclic or shared values and only little endian
+ computer architectures are supported.
+
+Package: libsexplib-camlp4-dev
+Provides:
+ libsexplib-ocaml-dev,
+ ${ocaml:Provides}
+Architecture: any
+Depends:
+ ocaml-findlib,
+ camlp4,
+ ${ocaml:Depends},
+ ${shlibs:Depends},
+ ${misc:Depends}
+Description: automated conversions between OCaml-values and S-expressions
+ Sexplib library contains functionality for parsing and pretty-printing
+ S-expressions.
+ .
+ Sexplib also contains a preprocessing module for Camlp4, which can be
+ used to automatically generate code from type definitions for
+ efficiently converting OCaml-values to S-expressions and vice versa.
+ In combination with the parsing and pretty-printing functionality this
+ frees users from having to write their own I/O-routines for the
+ datastructures they define.  Possible errors during automatic
+ conversions from S-expressions to OCaml-values are reported in a very
+ human-readable way.
+ .
+ Another module contained in Sexplib you to extract and replace
+ sub-expressions in S-expressions.
+
+Package: libfields-camlp4-dev
+Architecture: any
+Depends:
+ ocaml-findlib,
+ camlp4,
+ ${ocaml:Depends},
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: OCaml syntax extension that enables folding over record fields
+ fieldslib is an OCaml syntax extension that can be used to define
+ first class values representing record fields. On top of those
+ values additional routines can then be automatically defined to:
+ .
+  - get and set record fields
+  - iterate and fold over fields
+  - create new record values
+ .
+ fieldslib is built on top of CamlP4.
 
 Package: libenumerate-camlp4-dev
 Architecture: any
@@ -91,7 +173,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends}
 Provides: ${ocaml:Provides}
-Description: OCaml syntax extension for writing inline testing
+Description: OCaml syntax extension for writing inline unit tests
  pa-ounit is an OCaml syntax extension that can be used to write inline
  testing.
  .
@@ -145,6 +227,18 @@ Description: OCaml syntax extension to support variants as first class values
   - iterate, fold and map over variants
  .
  variantslib is built on top of CamlP4.
+
+Package: libpa-test-camlp4-dev
+Architecture: any
+Depends:
+ ${ocaml:Depends},
+ ocaml-findlib,
+ camlp4,
+ ${shlibs:Depends},
+ ${misc:Depends}
+Provides: ${ocaml:Provides}
+Description: OCaml syntax extension for writing inline tests
+ pa-test
 
 Package: libcore-kernel-ocaml-dev
 Architecture: any
@@ -216,18 +310,6 @@ Description: Jane Street's standard library for OCaml - kernel (runtime)
  .
  This package contains the runtime stuff you need to run programs using
  Core-kernel.
-
-Package: libpa-test-camlp4-dev
-Architecture: any
-Depends:
- ${ocaml:Depends},
- ocaml-findlib,
- camlp4,
- ${shlibs:Depends},
- ${misc:Depends}
-Provides: ${ocaml:Provides}
-Description: OCaml syntax extension for writing inline testing
- pa-test
 
 Package: libcore-ocaml-dev
 Architecture: any

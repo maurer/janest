@@ -6,12 +6,14 @@ include /usr/share/ocaml/ocamlvars.mk
 
 export OCAML_DLL_DIR
 export OCAML_HAVE_OCAMLOPT
-export OCAMLFIND_DESTDIR=$(DESTDIR)/$(OCAML_STDLIB_DIR)
+export OCAMLFIND_DESTDIR=$(DESTDIR)$(OCAML_STDLIB_DIR)
+export LD_LIBRARY_PATH:=$(LD_LIBRARY_PATH):$(DESTDIR)$(OCAML_DLL_DIR)
 export OCAMLFIND_LDCONF=ignore
 export OCAMLPATH=$(OCAMLFIND_DESTDIR)
 
 # building order.
-PKGLIST = enumerate typerep comparelib herelib pa_ounit pa_bench pipebang variantslib \
+PKGLIST = type_conv bin_prot sexplib fieldslib \
+          enumerate typerep comparelib herelib pa_ounit pa_bench pipebang variantslib \
 	  pa_test core_kernel core custom_printf async_kernel async_unix async_extra async \
 	  textutils re2 core_extended core_bench
 
@@ -19,7 +21,7 @@ PKGLIST = enumerate typerep comparelib herelib pa_ounit pa_bench pipebang varian
 	dh $@ --with ocaml
 
 # Syntax extensions.
-enumerate comparelib herelib pa_ounit pa_test pa_bench pipebang custom_printf variantslib:
+type_conv bin_prot sexplib fieldslib enumerate comparelib herelib pa_ounit pa_test pa_bench pipebang custom_printf variantslib:
 	$(MAKE) -C $@ -f $(CURDIR)/debian/Makefile DOCPKG=lib$(subst _,-,$(subst lib,,$@))-camlp4-dev
 
 # Libraries with single package.
@@ -73,7 +75,7 @@ clean:
 
 # It's convenient to disable some packages in PKGLIST to test
 # other packages.
-debian/control:
+debian/control: debian/control.in/*
 	@test -d debian
 	@cat debian/control.in/base.control > $@
 	@for pkg in $(PKGLIST); do \

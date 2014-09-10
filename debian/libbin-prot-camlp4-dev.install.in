@@ -1,0 +1,2 @@
+@OCamlDllDir@/dllbin_prot_stubs.so
+@OCamlStdlibDir@/bin_prot

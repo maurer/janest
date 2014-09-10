@@ -7,6 +7,6 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends}
 Provides: ${ocaml:Provides}
-Description: OCaml syntax extension for writing inline testing
+Description: OCaml syntax extension for writing inline tests
  pa-test
 

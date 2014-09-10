@@ -1,3 +1,7 @@
+Description: Fixes a fail-to-parse error in documentation
+ { and } need to be escaped in the comments to parse correctly in doc gen
+ This patch escapes them.
+Origin: vendor
 --- a/core/lib/interval_intf.ml
 +++ b/core/lib/interval_intf.ml
 @@ -59,8 +59,8 @@

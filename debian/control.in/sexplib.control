@@ -1,0 +1,27 @@
+Package: libsexplib-camlp4-dev
+Provides:
+ libsexplib-ocaml-dev,
+ ${ocaml:Provides}
+Architecture: any
+Depends:
+ ocaml-findlib,
+ camlp4,
+ ${ocaml:Depends},
+ ${shlibs:Depends},
+ ${misc:Depends}
+Description: automated conversions between OCaml-values and S-expressions
+ Sexplib library contains functionality for parsing and pretty-printing
+ S-expressions.
+ .
+ Sexplib also contains a preprocessing module for Camlp4, which can be
+ used to automatically generate code from type definitions for
+ efficiently converting OCaml-values to S-expressions and vice versa.
+ In combination with the parsing and pretty-printing functionality this
+ frees users from having to write their own I/O-routines for the
+ datastructures they define.  Possible errors during automatic
+ conversions from S-expressions to OCaml-values are reported in a very
+ human-readable way.
+ .
+ Another module contained in Sexplib you to extract and replace
+ sub-expressions in S-expressions.
+

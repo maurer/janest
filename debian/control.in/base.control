@@ -1,4 +1,4 @@
-Source: janest-core
+Source: janest
 Section: ocaml
 Priority: optional
 Maintainer: Debian OCaml Maintainers <debian-ocaml-maint@lists.debian.org>
@@ -9,6 +9,7 @@ Uploaders:
 Build-Depends:
  debhelper (>= 9),
  bc,
+ rsync,
  dh-ocaml (>= 0.9~),
  ocaml-nox (>= 4.00.1),
  ocaml-findlib (>= 1.4),
@@ -17,10 +18,6 @@ Build-Depends:
  libres-ocaml-dev (>= 4.0.2),
  libpcre-ocaml-dev,
  libounit-ocaml-dev,
- libbin-prot-camlp4-dev,
- libsexplib-camlp4-dev,
- libtype-conv-camlp4-dev (>= 3.0.5),
- libfields-camlp4-dev
 Standards-Version: 3.9.5
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=pkg-ocaml-maint/packages/janest-core.git
 Vcs-Git: git://anonscm.debian.org/pkg-ocaml-maint/packages/janest-core.git

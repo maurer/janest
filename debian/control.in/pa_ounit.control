@@ -7,7 +7,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends}
 Provides: ${ocaml:Provides}
-Description: OCaml syntax extension for writing inline testing
+Description: OCaml syntax extension for writing inline unit tests
  pa-ounit is an OCaml syntax extension that can be used to write inline
  testing.
  .

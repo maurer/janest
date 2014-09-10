@@ -1,3 +1,13 @@
+janest (111.21.00-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Rename package to not conflict with previous orig tarballs.
+  * Add rsync build dep
+  * Add LD_LIBRARY_PATH to deal with fake-installed native camlp4 libs
+  * Make debian/control actually dependent on debian/control.in/*
+
+ -- Matthew Maurer <maurer@matthewmaurer.org>  Wed, 10 Sep 2014 04:18:35 +0000
+
 janest-core (111.21.00-1) unstable; urgency=medium
 
   * New upstream release.

@@ -1,0 +1,4 @@
+@OCamlStdlibDir@/sexplib_unix
+@OCamlStdlibDir@/sexplib_num
+@OCamlStdlibDir@/sexplib
+sexplib/lib/sexp_intf.ml	@OCamlStdlibDir@/sexplib/
