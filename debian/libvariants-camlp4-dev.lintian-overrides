@@ -1,0 +1,2 @@
+# This cmi is generated from a .mlpack file, which is not useful to install
+libvariants-camlp4-dev binary: ocaml-dangling-cmi usr/lib/ocaml/variantslib/variantslib.cmi

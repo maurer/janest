@@ -1,0 +1,4 @@
+# These cmis are generated from .mlpack files, which are not useful to install
+libsexplib-camlp4-dev binary: ocaml-dangling-cmi usr/lib/ocaml/sexplib/sexplib.cmi
+libsexplib-camlp4-dev binary: ocaml-dangling-cmi usr/lib/ocaml/sexplib_num/sexplib_num.cmi
+libsexplib-camlp4-dev binary: ocaml-dangling-cmi usr/lib/ocaml/sexplib_unix/sexplib_unix.cmi

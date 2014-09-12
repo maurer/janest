@@ -1,0 +1,2 @@
+# This cmi is generated from a .mlpack file, which is not useful to install
+libcore-ocaml-dev binary: ocaml-dangling-cmi usr/lib/ocaml/core/core.cmi

@@ -1,0 +1,4 @@
+# These cmis are generated from .mlpack files, which are not useful to install
+libtyperep-ocaml-dev binary: ocaml-dangling-cmi usr/lib/ocaml/typerep_generics_sexprep/typerep_generics_sexprep.cmi
+libtyperep-ocaml-dev binary: ocaml-dangling-cmi usr/lib/ocaml/typerep_lib/typerep_lib.cmi
+libtyperep-ocaml-dev binary: ocaml-dangling-cmi usr/lib/ocaml/typerep_extended/typerep_extended.cmi

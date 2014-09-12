@@ -5,6 +5,10 @@ janest (111.21.00-1.1) unstable; urgency=medium
   * Add rsync build dep
   * Add LD_LIBRARY_PATH to deal with fake-installed native camlp4 libs
   * Make debian/control actually dependent on debian/control.in/*
+  * Added lintian-overrides for cmis built from mlpacks
+  * Added header information for the fix-documentation.patch tweak
+  * Altered descriptions to become lintian clean
+  * Added simple manpage for corebuild
 
  -- Matthew Maurer <maurer@matthewmaurer.org>  Wed, 10 Sep 2014 04:18:35 +0000
 

@@ -1,0 +1,3 @@
+# These cmis are generated from .mlpack files, which are not useful to install
+libcore-bench-ocaml-dev binary: ocaml-dangling-cmi usr/lib/ocaml/core_bench/core_bench.cmi
+libcore-bench-ocaml-dev binary: ocaml-dangling-cmi usr/lib/ocaml/core_bench/inline_benchmarks.cmi

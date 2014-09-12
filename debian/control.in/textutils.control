@@ -8,5 +8,8 @@ Depends:
 Provides: ${ocaml:Provides}
 Description: Text output utilities
  textutils is a OCaml library to create ASCII table and print a list
- in a columnize way.
+ in a columnized way.
+ .
+ Additionally, it can do this in a console-size-aware fashion if connected
+ to a tty, allowing for better user-facing output.
 

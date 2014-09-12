@@ -8,5 +8,7 @@ Depends:
  ${misc:Depends}
 Provides: ${ocaml:Provides}
 Description: OCaml syntax extension for enumerate
- TODO
+ Allows the deriving of enumeration functions for OCaml defined types
+ This may be useful to deal with any many-armed type where you would otherwise
+ write increment, decrement, and to/from int functions.
 

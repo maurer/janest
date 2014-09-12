@@ -1,0 +1,4 @@
+# These cmis are generated from .mlpack files, which are not useful to install
+libcore-kernel-ocaml-dev binary: ocaml-dangling-cmi usr/lib/ocaml/core_kernel/check_caml_modify.cmi
+libcore-kernel-ocaml-dev binary: ocaml-dangling-cmi usr/lib/ocaml/core_kernel/core_kernel.cmi 
+libcore-kernel-ocaml-dev binary: ocaml-dangling-cmi usr/lib/ocaml/core_kernel/raise_without_backtrace.cmi 

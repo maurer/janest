@@ -118,7 +118,9 @@ Depends:
  ${misc:Depends}
 Provides: ${ocaml:Provides}
 Description: OCaml syntax extension for enumerate
- TODO
+ Allows the deriving of enumeration functions for OCaml defined types
+ This may be useful to deal with any many-armed type where you would otherwise
+ write increment, decrement, and to/from int functions.
 
 Package: libtyperep-ocaml-dev
 Architecture: any
@@ -128,8 +130,12 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends}
 Provides: ${ocaml:Provides}
-Description: typerep
- typerep
+Description: Type Representation for Generic programming
+ This package provides the ability to introspect on the shape of types,
+ allowing for more fully featured generic programming.
+ .
+ You will generally want to use the camlp4 syntax also contained here to make
+ it more usable.
 
 Package: libcompare-camlp4-dev
 Architecture: any
@@ -238,7 +244,11 @@ Depends:
  ${misc:Depends}
 Provides: ${ocaml:Provides}
 Description: OCaml syntax extension for writing inline tests
- pa-test
+ pa-test provides a quotation expander for assertions
+ .
+ Essentially, pa-test provides the ability to write a number of simple forms
+ of assertions which will actually be able to display line numbers and similar
+ information to the user when they fail.
 
 Package: libcore-kernel-ocaml-dev
 Architecture: any
@@ -503,7 +513,10 @@ Depends:
 Provides: ${ocaml:Provides}
 Description: Text output utilities
  textutils is a OCaml library to create ASCII table and print a list
- in a columnize way.
+ in a columnized way.
+ .
+ Additionally, it can do this in a console-size-aware fashion if connected
+ to a tty, allowing for better user-facing output.
 
 Package: libre2-ocaml
 Architecture: any

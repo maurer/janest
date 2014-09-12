@@ -6,6 +6,10 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends}
 Provides: ${ocaml:Provides}
-Description: typerep
- typerep
+Description: Type Representation for Generic programming
+ This package provides the ability to introspect on the shape of types,
+ allowing for more fully featured generic programming.
+ .
+ You will generally want to use the camlp4 syntax also contained here to make
+ it more usable.
 

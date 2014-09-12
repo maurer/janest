@@ -8,5 +8,9 @@ Depends:
  ${misc:Depends}
 Provides: ${ocaml:Provides}
 Description: OCaml syntax extension for writing inline tests
- pa-test
+ pa-test provides a quotation expander for assertions
+ .
+ Essentially, pa-test provides the ability to write a number of simple forms
+ of assertions which will actually be able to display line numbers and similar
+ information to the user when they fail.
 
