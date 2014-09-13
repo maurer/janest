@@ -1,0 +1,932 @@
+Description: Remove false dependency on enumerate.
+ dh_ocaml does not detect any dependency on enumerate in the core_kernel lib.
+ While it is needed during building for access to the camlp4 parser, it is not
+ actually required at runtime. To this end, _oasis has been edited to not
+ require enumerate in the META file, Makefile generation disabled in the _oasis
+ file to reflect the custom makefile, and oasis re-run. 
+ .
+ janest (111.21.00-1.1) unstable; urgency=medium
+ .
+   * Non-maintainer upload.
+   * Rename package to not conflict with previous orig tarballs.
+   * Add rsync build dep
+   * Add LD_LIBRARY_PATH to deal with fake-installed native camlp4 libs
+   * Make debian/control actually dependent on debian/control.in/*
+   * Added lintian-overrides for cmis built from mlpacks
+   * Added header information for the fix-documentation.patch tweak
+   * Altered descriptions to become lintian clean
+   * Added simple manpage for corebuild
+Author: Matthew Maurer <maurer@matthewmaurer.org>
+
+Origin: other
+Forwarded: not-needed
+
+--- janest-111.21.00.orig/core_kernel/_oasis
++++ janest-111.21.00/core_kernel/_oasis
+@@ -13,6 +13,7 @@ Homepage:         https://github.com/jan
+ Plugins:          StdFiles (0.3), DevFiles (0.3), META (0.3)
+ XStdFilesAUTHORS: false
+ XStdFilesREADME:  false
++XDevFilesEnableMakefile: false
+ BuildTools:       ocamlbuild, camlp4o
+ Description:
+   The Core suite of libraries is an industrial strength alternative to
+@@ -251,7 +252,6 @@ Library core_kernel
+   XMETARequires:      bin_prot,
+                       variantslib,
+                       sexplib,
+-                      enumerate,
+                       fieldslib,
+                       bigarray,
+                       pa_bench,
+--- janest-111.21.00.orig/core_kernel/lib/META
++++ janest-111.21.00/core_kernel/lib/META
+@@ -1,9 +1,9 @@
+ # OASIS_START
+-# DO NOT EDIT (digest: 44ba1a78d5f536faaf065369ae1008b6)
++# DO NOT EDIT (digest: 099bfbd6c5ec8ad36c00db95105f10fe)
+ version = "111.21.00"
+ description = "Jane Street Capital's standard library overlay"
+ requires =
+-"bin_prot variantslib sexplib enumerate fieldslib bigarray pa_bench pa_ounit pa_test typerep_lib unix core_kernel.raise_without_backtrace"
++"bin_prot variantslib sexplib fieldslib bigarray pa_bench pa_ounit pa_test typerep_lib unix core_kernel.raise_without_backtrace"
+ archive(byte) = "core_kernel.cma"
+ archive(byte, plugin) = "core_kernel.cma"
+ archive(native) = "core_kernel.cmxa"
+--- janest-111.21.00.orig/core_kernel/myocamlbuild.ml
++++ janest-111.21.00/core_kernel/myocamlbuild.ml
+@@ -1,7 +1,7 @@
+ (* OASIS_START *)
+-(* DO NOT EDIT (digest: b970e98c8621a862701d5899e9512978) *)
++(* DO NOT EDIT (digest: 7edae74f6a3956a7988ab24db60b009c) *)
+ module OASISGettext = struct
+-(* # 22 "src/oasis/OASISGettext.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISGettext.ml" *)
+ 
+ 
+   let ns_ str =
+@@ -30,7 +30,7 @@ module OASISGettext = struct
+ end
+ 
+ module OASISExpr = struct
+-(* # 22 "src/oasis/OASISExpr.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISExpr.ml" *)
+ 
+ 
+ 
+@@ -39,10 +39,10 @@ module OASISExpr = struct
+   open OASISGettext
+ 
+ 
+-  type test = string
++  type test = string 
+ 
+ 
+-  type flag = string
++  type flag = string 
+ 
+ 
+   type t =
+@@ -52,10 +52,10 @@ module OASISExpr = struct
+     | EOr of t * t
+     | EFlag of flag
+     | ETest of test * string
++    
+ 
+ 
+-
+-  type 'a choices = (t * 'a) list
++  type 'a choices = (t * 'a) list 
+ 
+ 
+   let eval var_get t =
+@@ -131,7 +131,7 @@ end
+ 
+ # 132 "myocamlbuild.ml"
+ module BaseEnvLight = struct
+-(* # 22 "src/base/BaseEnvLight.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseEnvLight.ml" *)
+ 
+ 
+   module MapString = Map.Make(String)
+@@ -236,7 +236,7 @@ end
+ 
+ # 237 "myocamlbuild.ml"
+ module MyOCamlbuildFindlib = struct
+-(* # 22 "src/plugins/ocamlbuild/MyOCamlbuildFindlib.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/plugins/ocamlbuild/MyOCamlbuildFindlib.ml" *)
+ 
+ 
+   (** OCamlbuild extension, copied from
+@@ -415,7 +415,7 @@ module MyOCamlbuildFindlib = struct
+ end
+ 
+ module MyOCamlbuildBase = struct
+-(* # 22 "src/plugins/ocamlbuild/MyOCamlbuildBase.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/plugins/ocamlbuild/MyOCamlbuildBase.ml" *)
+ 
+ 
+   (** Base functions for writing myocamlbuild.ml
+@@ -430,13 +430,13 @@ module MyOCamlbuildBase = struct
+   module OC = Ocamlbuild_pack.Ocaml_compiler
+ 
+ 
+-  type dir = string
+-  type file = string
+-  type name = string
+-  type tag = string
++  type dir = string 
++  type file = string 
++  type name = string 
++  type tag = string 
+ 
+ 
+-(* # 62 "src/plugins/ocamlbuild/MyOCamlbuildBase.ml" *)
++(* # 62 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/plugins/ocamlbuild/MyOCamlbuildBase.ml" *)
+ 
+ 
+   type t =
+@@ -448,7 +448,7 @@ module MyOCamlbuildBase = struct
+          * directory.
+          *)
+         includes:  (dir * dir list) list;
+-      }
++      } 
+ 
+ 
+   let env_filename =
+--- janest-111.21.00.orig/core_kernel/setup.ml
++++ janest-111.21.00/core_kernel/setup.ml
+@@ -1,12 +1,12 @@
+ (* OASIS_START *)
+-(* DO NOT EDIT (digest: 1b0b1cad757f2b4492a55f1856eed928) *)
++(* DO NOT EDIT (digest: 4d19588fdce7abc15fdd3c739e12451c) *)
+ (*
+    Regenerated by OASIS v0.4.4
+    Visit http://oasis.forge.ocamlcore.org for more information and
+    documentation about functions used in this file.
+ *)
+ module OASISGettext = struct
+-(* # 22 "src/oasis/OASISGettext.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISGettext.ml" *)
+ 
+ 
+   let ns_ str =
+@@ -35,7 +35,7 @@ module OASISGettext = struct
+ end
+ 
+ module OASISContext = struct
+-(* # 22 "src/oasis/OASISContext.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISContext.ml" *)
+ 
+ 
+   open OASISGettext
+@@ -115,7 +115,7 @@ module OASISContext = struct
+ end
+ 
+ module OASISString = struct
+-(* # 22 "src/oasis/OASISString.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISString.ml" *)
+ 
+ 
+   (** Various string utilities.
+@@ -250,7 +250,7 @@ module OASISString = struct
+ end
+ 
+ module OASISUtils = struct
+-(* # 22 "src/oasis/OASISUtils.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISUtils.ml" *)
+ 
+ 
+   open OASISGettext
+@@ -396,7 +396,7 @@ module OASISUtils = struct
+ end
+ 
+ module PropList = struct
+-(* # 22 "src/oasis/PropList.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/PropList.ml" *)
+ 
+ 
+   open OASISGettext
+@@ -442,7 +442,7 @@ module PropList = struct
+       Hashtbl.clear t
+ 
+ 
+-(* # 78 "src/oasis/PropList.ml" *)
++(* # 78 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/PropList.ml" *)
+   end
+ 
+ 
+@@ -681,7 +681,7 @@ module PropList = struct
+ end
+ 
+ module OASISMessage = struct
+-(* # 22 "src/oasis/OASISMessage.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISMessage.ml" *)
+ 
+ 
+   open OASISGettext
+@@ -725,7 +725,7 @@ module OASISMessage = struct
+ end
+ 
+ module OASISVersion = struct
+-(* # 22 "src/oasis/OASISVersion.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISVersion.ml" *)
+ 
+ 
+   open OASISGettext
+@@ -737,7 +737,7 @@ module OASISVersion = struct
+   type s = string
+ 
+ 
+-  type t = string
++  type t = string 
+ 
+ 
+   type comparator =
+@@ -748,7 +748,7 @@ module OASISVersion = struct
+     | VLesserEqual of t
+     | VOr of  comparator * comparator
+     | VAnd of comparator * comparator
+-
++    
+ 
+ 
+   (* Range of allowed characters *)
+@@ -932,7 +932,7 @@ module OASISVersion = struct
+ end
+ 
+ module OASISLicense = struct
+-(* # 22 "src/oasis/OASISLicense.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISLicense.ml" *)
+ 
+ 
+   (** License for _oasis fields
+@@ -943,17 +943,17 @@ module OASISLicense = struct
+ 
+ 
+ 
+-  type license = string
++  type license = string 
+ 
+ 
+-  type license_exception = string
++  type license_exception = string 
+ 
+ 
+   type license_version =
+     | Version of OASISVersion.t
+     | VersionOrLater of OASISVersion.t
+     | NoVersion
+-
++    
+ 
+ 
+   type license_dep_5_unit =
+@@ -962,25 +962,25 @@ module OASISLicense = struct
+       excption:  license_exception option;
+       version:   license_version;
+     }
+-
++    
+ 
+ 
+   type license_dep_5 =
+     | DEP5Unit of license_dep_5_unit
+     | DEP5Or of license_dep_5 list
+     | DEP5And of license_dep_5 list
+-
++    
+ 
+   type t =
+     | DEP5License of license_dep_5
+     | OtherLicense of string (* URL *)
+-
++    
+ 
+ 
+ end
+ 
+ module OASISExpr = struct
+-(* # 22 "src/oasis/OASISExpr.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISExpr.ml" *)
+ 
+ 
+ 
+@@ -989,10 +989,10 @@ module OASISExpr = struct
+   open OASISGettext
+ 
+ 
+-  type test = string
++  type test = string 
+ 
+ 
+-  type flag = string
++  type flag = string 
+ 
+ 
+   type t =
+@@ -1002,10 +1002,10 @@ module OASISExpr = struct
+     | EOr of t * t
+     | EFlag of flag
+     | ETest of test * string
++    
+ 
+ 
+-
+-  type 'a choices = (t * 'a) list
++  type 'a choices = (t * 'a) list 
+ 
+ 
+   let eval var_get t =
+@@ -1079,7 +1079,7 @@ module OASISExpr = struct
+ end
+ 
+ module OASISText = struct
+-(* # 22 "src/oasis/OASISText.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISText.ml" *)
+ 
+ 
+ 
+@@ -1087,53 +1087,53 @@ module OASISText = struct
+     | Para of string
+     | Verbatim of string
+     | BlankLine
++    
+ 
+-
+-  type t = elt list
++  type t = elt list 
+ 
+ end
+ 
+ module OASISTypes = struct
+-(* # 22 "src/oasis/OASISTypes.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISTypes.ml" *)
+ 
+ 
+ 
+ 
+ 
+-  type name          = string
+-  type package_name  = string
+-  type url           = string
+-  type unix_dirname  = string
+-  type unix_filename = string
+-  type host_dirname  = string
+-  type host_filename = string
+-  type prog          = string
+-  type arg           = string
+-  type args          = string list
+-  type command_line  = (prog * arg list)
++  type name          = string 
++  type package_name  = string 
++  type url           = string 
++  type unix_dirname  = string 
++  type unix_filename = string 
++  type host_dirname  = string 
++  type host_filename = string 
++  type prog          = string 
++  type arg           = string 
++  type args          = string list 
++  type command_line  = (prog * arg list) 
+ 
+ 
+-  type findlib_name = string
+-  type findlib_full = string
++  type findlib_name = string 
++  type findlib_full = string 
+ 
+ 
+   type compiled_object =
+     | Byte
+     | Native
+     | Best
+-
++    
+ 
+ 
+   type dependency =
+     | FindlibPackage of findlib_full * OASISVersion.comparator option
+     | InternalLibrary of name
+-
++    
+ 
+ 
+   type tool =
+     | ExternalTool of name
+     | InternalExecutable of name
+-
++    
+ 
+ 
+   type vcs =
+@@ -1146,7 +1146,7 @@ module OASISTypes = struct
+     | Arch
+     | Monotone
+     | OtherVCS of url
+-
++    
+ 
+ 
+   type plugin_kind =
+@@ -1174,7 +1174,7 @@ module OASISTypes = struct
+       ]
+ 
+ 
+-  type 'a plugin = 'a * name * OASISVersion.t option
++  type 'a plugin = 'a * name * OASISVersion.t option 
+ 
+ 
+   type all_plugin = plugin_kind plugin
+@@ -1183,10 +1183,10 @@ module OASISTypes = struct
+   type plugin_data = (all_plugin * plugin_data_purpose * (unit -> unit)) list
+ 
+ 
+-(* # 115 "src/oasis/OASISTypes.ml" *)
++(* # 115 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISTypes.ml" *)
+ 
+ 
+-  type 'a conditional = 'a OASISExpr.choices
++  type 'a conditional = 'a OASISExpr.choices 
+ 
+ 
+   type custom =
+@@ -1194,7 +1194,7 @@ module OASISTypes = struct
+         pre_command:  (command_line option) conditional;
+         post_command: (command_line option) conditional;
+       }
+-
++      
+ 
+ 
+   type common_section =
+@@ -1203,7 +1203,7 @@ module OASISTypes = struct
+         cs_data: PropList.Data.t;
+         cs_plugin_data: plugin_data;
+       }
+-
++      
+ 
+ 
+   type build_section =
+@@ -1223,7 +1223,7 @@ module OASISTypes = struct
+         bs_byteopt:         args conditional;
+         bs_nativeopt:       args conditional;
+       }
+-
++      
+ 
+ 
+   type library =
+@@ -1234,28 +1234,28 @@ module OASISTypes = struct
+         lib_findlib_parent:     findlib_name option;
+         lib_findlib_name:       findlib_name option;
+         lib_findlib_containers: findlib_name list;
+-      }
++      } 
+ 
+ 
+   type object_ =
+       {
+         obj_modules:            string list;
+         obj_findlib_fullname:   findlib_name list option;
+-      }
++      } 
+ 
+ 
+   type executable =
+       {
+         exec_custom:          bool;
+         exec_main_is:         unix_filename;
+-      }
++      } 
+ 
+ 
+   type flag =
+       {
+         flag_description:  string option;
+         flag_default:      bool conditional;
+-      }
++      } 
+ 
+ 
+   type source_repository =
+@@ -1267,7 +1267,7 @@ module OASISTypes = struct
+         src_repo_branch:      string option;
+         src_repo_tag:         string option;
+         src_repo_subdir:      unix_filename option;
+-      }
++      } 
+ 
+ 
+   type test =
+@@ -1278,7 +1278,7 @@ module OASISTypes = struct
+         test_working_directory:  unix_filename option;
+         test_run:                bool conditional;
+         test_tools:              tool list;
+-      }
++      } 
+ 
+ 
+   type doc_format =
+@@ -1289,7 +1289,7 @@ module OASISTypes = struct
+     | Info of unix_filename
+     | DVI
+     | OtherDoc
+-
++    
+ 
+ 
+   type doc =
+@@ -1305,7 +1305,7 @@ module OASISTypes = struct
+         doc_format:      doc_format;
+         doc_data_files:  (unix_filename * unix_filename option) list;
+         doc_build_tools: tool list;
+-      }
++      } 
+ 
+ 
+   type section =
+@@ -1316,7 +1316,7 @@ module OASISTypes = struct
+     | SrcRepo    of common_section * source_repository
+     | Test       of common_section * test
+     | Doc        of common_section * doc
+-
++    
+ 
+ 
+   type section_kind =
+@@ -1361,13 +1361,13 @@ module OASISTypes = struct
+         disable_oasis_section:  unix_filename list;
+         schema_data:            PropList.Data.t;
+         plugin_data:            plugin_data;
+-      }
++      } 
+ 
+ 
+ end
+ 
+ module OASISFeatures = struct
+-(* # 22 "src/oasis/OASISFeatures.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISFeatures.ml" *)
+ 
+   open OASISTypes
+   open OASISUtils
+@@ -1730,7 +1730,7 @@ module OASISFeatures = struct
+ end
+ 
+ module OASISUnixPath = struct
+-(* # 22 "src/oasis/OASISUnixPath.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISUnixPath.ml" *)
+ 
+ 
+   type unix_filename = string
+@@ -1827,7 +1827,7 @@ module OASISUnixPath = struct
+ end
+ 
+ module OASISHostPath = struct
+-(* # 22 "src/oasis/OASISHostPath.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISHostPath.ml" *)
+ 
+ 
+   open Filename
+@@ -1863,7 +1863,7 @@ module OASISHostPath = struct
+ end
+ 
+ module OASISSection = struct
+-(* # 22 "src/oasis/OASISSection.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISSection.ml" *)
+ 
+ 
+   open OASISTypes
+@@ -1956,13 +1956,13 @@ module OASISSection = struct
+ end
+ 
+ module OASISBuildSection = struct
+-(* # 22 "src/oasis/OASISBuildSection.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISBuildSection.ml" *)
+ 
+ 
+ end
+ 
+ module OASISExecutable = struct
+-(* # 22 "src/oasis/OASISExecutable.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISExecutable.ml" *)
+ 
+ 
+   open OASISTypes
+@@ -1996,7 +1996,7 @@ module OASISExecutable = struct
+ end
+ 
+ module OASISLibrary = struct
+-(* # 22 "src/oasis/OASISLibrary.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISLibrary.ml" *)
+ 
+ 
+   open OASISTypes
+@@ -2188,7 +2188,7 @@ module OASISLibrary = struct
+ end
+ 
+ module OASISObject = struct
+-(* # 22 "src/oasis/OASISObject.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISObject.ml" *)
+ 
+ 
+   open OASISTypes
+@@ -2256,7 +2256,7 @@ module OASISObject = struct
+ end
+ 
+ module OASISFindlib = struct
+-(* # 22 "src/oasis/OASISFindlib.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISFindlib.ml" *)
+ 
+ 
+   open OASISTypes
+@@ -2551,37 +2551,37 @@ module OASISFindlib = struct
+ end
+ 
+ module OASISFlag = struct
+-(* # 22 "src/oasis/OASISFlag.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISFlag.ml" *)
+ 
+ 
+ end
+ 
+ module OASISPackage = struct
+-(* # 22 "src/oasis/OASISPackage.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISPackage.ml" *)
+ 
+ 
+ end
+ 
+ module OASISSourceRepository = struct
+-(* # 22 "src/oasis/OASISSourceRepository.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISSourceRepository.ml" *)
+ 
+ 
+ end
+ 
+ module OASISTest = struct
+-(* # 22 "src/oasis/OASISTest.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISTest.ml" *)
+ 
+ 
+ end
+ 
+ module OASISDocument = struct
+-(* # 22 "src/oasis/OASISDocument.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISDocument.ml" *)
+ 
+ 
+ end
+ 
+ module OASISExec = struct
+-(* # 22 "src/oasis/OASISExec.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISExec.ml" *)
+ 
+ 
+   open OASISGettext
+@@ -2663,7 +2663,7 @@ module OASISExec = struct
+ end
+ 
+ module OASISFileUtil = struct
+-(* # 22 "src/oasis/OASISFileUtil.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/oasis/OASISFileUtil.ml" *)
+ 
+ 
+   open OASISGettext
+@@ -2875,7 +2875,7 @@ end
+ 
+ # 2878 "setup.ml"
+ module BaseEnvLight = struct
+-(* # 22 "src/base/BaseEnvLight.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseEnvLight.ml" *)
+ 
+ 
+   module MapString = Map.Make(String)
+@@ -2980,7 +2980,7 @@ end
+ 
+ # 2983 "setup.ml"
+ module BaseContext = struct
+-(* # 22 "src/base/BaseContext.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseContext.ml" *)
+ 
+   (* TODO: get rid of this module. *)
+   open OASISContext
+@@ -2994,7 +2994,7 @@ module BaseContext = struct
+ end
+ 
+ module BaseMessage = struct
+-(* # 22 "src/base/BaseMessage.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseMessage.ml" *)
+ 
+ 
+   (** Message to user, overrid for Base
+@@ -3018,7 +3018,7 @@ module BaseMessage = struct
+ end
+ 
+ module BaseEnv = struct
+-(* # 22 "src/base/BaseEnv.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseEnv.ml" *)
+ 
+   open OASISGettext
+   open OASISUtils
+@@ -3500,7 +3500,7 @@ module BaseEnv = struct
+ end
+ 
+ module BaseArgExt = struct
+-(* # 22 "src/base/BaseArgExt.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseArgExt.ml" *)
+ 
+ 
+   open OASISUtils
+@@ -3530,7 +3530,7 @@ module BaseArgExt = struct
+ end
+ 
+ module BaseCheck = struct
+-(* # 22 "src/base/BaseCheck.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseCheck.ml" *)
+ 
+ 
+   open BaseEnv
+@@ -3664,7 +3664,7 @@ module BaseCheck = struct
+ end
+ 
+ module BaseOCamlcConfig = struct
+-(* # 22 "src/base/BaseOCamlcConfig.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseOCamlcConfig.ml" *)
+ 
+ 
+   open BaseEnv
+@@ -3784,7 +3784,7 @@ module BaseOCamlcConfig = struct
+ end
+ 
+ module BaseStandardVar = struct
+-(* # 22 "src/base/BaseStandardVar.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseStandardVar.ml" *)
+ 
+ 
+   open OASISGettext
+@@ -4194,7 +4194,7 @@ module BaseStandardVar = struct
+ end
+ 
+ module BaseFileAB = struct
+-(* # 22 "src/base/BaseFileAB.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseFileAB.ml" *)
+ 
+ 
+   open BaseEnv
+@@ -4245,7 +4245,7 @@ module BaseFileAB = struct
+ end
+ 
+ module BaseLog = struct
+-(* # 22 "src/base/BaseLog.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseLog.ml" *)
+ 
+ 
+   open OASISUtils
+@@ -4372,7 +4372,7 @@ module BaseLog = struct
+ end
+ 
+ module BaseBuilt = struct
+-(* # 22 "src/base/BaseBuilt.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseBuilt.ml" *)
+ 
+ 
+   open OASISTypes
+@@ -4550,7 +4550,7 @@ module BaseBuilt = struct
+ end
+ 
+ module BaseCustom = struct
+-(* # 22 "src/base/BaseCustom.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseCustom.ml" *)
+ 
+ 
+   open BaseEnv
+@@ -4603,7 +4603,7 @@ module BaseCustom = struct
+ end
+ 
+ module BaseDynVar = struct
+-(* # 22 "src/base/BaseDynVar.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseDynVar.ml" *)
+ 
+ 
+   open OASISTypes
+@@ -4651,7 +4651,7 @@ module BaseDynVar = struct
+ end
+ 
+ module BaseTest = struct
+-(* # 22 "src/base/BaseTest.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseTest.ml" *)
+ 
+ 
+   open BaseEnv
+@@ -4743,7 +4743,7 @@ module BaseTest = struct
+ end
+ 
+ module BaseDoc = struct
+-(* # 22 "src/base/BaseDoc.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseDoc.ml" *)
+ 
+ 
+   open BaseEnv
+@@ -4780,7 +4780,7 @@ module BaseDoc = struct
+ end
+ 
+ module BaseSetup = struct
+-(* # 22 "src/base/BaseSetup.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/base/BaseSetup.ml" *)
+ 
+   open BaseEnv
+   open BaseMessage
+@@ -5391,7 +5391,7 @@ end
+ 
+ # 5394 "setup.ml"
+ module InternalConfigurePlugin = struct
+-(* # 22 "src/plugins/internal/InternalConfigurePlugin.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/plugins/internal/InternalConfigurePlugin.ml" *)
+ 
+ 
+   (** Configure using internal scheme
+@@ -5640,7 +5640,7 @@ module InternalConfigurePlugin = struct
+ end
+ 
+ module InternalInstallPlugin = struct
+-(* # 22 "src/plugins/internal/InternalInstallPlugin.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/plugins/internal/InternalInstallPlugin.ml" *)
+ 
+ 
+   (** Install using internal scheme
+@@ -6240,7 +6240,7 @@ end
+ 
+ # 6243 "setup.ml"
+ module OCamlbuildCommon = struct
+-(* # 22 "src/plugins/ocamlbuild/OCamlbuildCommon.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/plugins/ocamlbuild/OCamlbuildCommon.ml" *)
+ 
+ 
+   (** Functions common to OCamlbuild build and doc plugin
+@@ -6255,7 +6255,7 @@ module OCamlbuildCommon = struct
+ 
+ 
+ 
+-  type extra_args = string list
++  type extra_args = string list 
+ 
+ 
+   let ocamlbuild_clean_ev = "ocamlbuild-clean"
+@@ -6356,7 +6356,7 @@ module OCamlbuildCommon = struct
+ end
+ 
+ module OCamlbuildPlugin = struct
+-(* # 22 "src/plugins/ocamlbuild/OCamlbuildPlugin.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/plugins/ocamlbuild/OCamlbuildPlugin.ml" *)
+ 
+ 
+   (** Build using ocamlbuild
+@@ -6551,7 +6551,7 @@ module OCamlbuildPlugin = struct
+ end
+ 
+ module OCamlbuildDocPlugin = struct
+-(* # 22 "src/plugins/ocamlbuild/OCamlbuildDocPlugin.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/plugins/ocamlbuild/OCamlbuildDocPlugin.ml" *)
+ 
+ 
+   (* Create documentation using ocamlbuild .odocl files
+@@ -6572,7 +6572,7 @@ module OCamlbuildDocPlugin = struct
+     {
+       extra_args: string list;
+       run_path: unix_filename;
+-    }
++    } 
+ 
+ 
+   let doc_build run pkg (cs, doc) argv =
+@@ -6613,7 +6613,7 @@ end
+ 
+ # 6616 "setup.ml"
+ module CustomPlugin = struct
+-(* # 22 "src/plugins/custom/CustomPlugin.ml" *)
++(* # 22 "/var/tmp/portage/dev-ml/oasis-0.4.4/work/oasis-0.4.4/src/plugins/custom/CustomPlugin.ml" *)
+ 
+ 
+   (** Generate custom configure/build/doc/test/install system
+@@ -6634,7 +6634,7 @@ module CustomPlugin = struct
+         cmd_main:      command_line conditional;
+         cmd_clean:     (command_line option) conditional;
+         cmd_distclean: (command_line option) conditional;
+-      }
++      } 
+ 
+ 
+   let run  = BaseCustom.run
+@@ -7316,7 +7316,7 @@ let setup_t =
+        };
+      oasis_fn = Some "_oasis";
+      oasis_version = "0.4.4";
+-     oasis_digest = Some "\203,\146\190ibd+\139|h\215\236\220\241*";
++     oasis_digest = Some "\140$\171\237R_3\238\245\208\135\031pZ\244\210";
+      oasis_exec = None;
+      oasis_setup_args = [];
+      setup_update = false
